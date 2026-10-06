@@ -1,0 +1,21 @@
+node_modules/
+.next/
+out/
+coverage/
+.vercel/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Never commit uploaded documents or local fixture exports.
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.tif
+*.tiff
+.vercel
+.env*
+.DS_Store
