@@ -11,7 +11,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "NEXT_DIST_DIR=.next-e2e TAXMON_DEMO_MODE=true TAXMON_DATA_MODE=sanitized npm run dev -- --hostname 127.0.0.1 --port 3110",
+    command: "NEXT_DIST_DIR=.next-e2e TAXMON_DEMO_MODE=true TAXMON_CALIBRATION_EDIT_MODE=true TAXMON_DATA_MODE=sanitized npm run dev -- --hostname 127.0.0.1 --port 3110",
     url: "http://127.0.0.1:3110/app/control-tower",
     reuseExistingServer: true,
     timeout: 120_000,

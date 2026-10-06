@@ -10,10 +10,10 @@ import { AntMark } from "../brand/ant-mark";
 import { BrandLockup } from "../brand/brand-lockup";
 import { Icon } from "../ui/icon";
 
-type AppShellProps = { children: React.ReactNode; email: string; demoMode?: boolean };
+type AppShellProps = { children: React.ReactNode; email: string; demoMode?: boolean; calibrationEditMode?: boolean; persona?: string };
 const sidebarStorageKey = "taxmonweb.sidebar.collapsed";
 
-export function AppShell({ children, email, demoMode = false }: AppShellProps) {
+export function AppShell({ children, email, demoMode = false, calibrationEditMode = false, persona }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(() => typeof window !== "undefined" && window.localStorage.getItem(sidebarStorageKey) === "true");
@@ -59,7 +59,7 @@ export function AppShell({ children, email, demoMode = false }: AppShellProps) {
     router.refresh();
   }
 
-  const context = pathname.startsWith("/app/clients") ? "Clients" : pathname.startsWith("/app/my-work") ? "My Work" : pathname.startsWith("/app/team") ? "Team" : "Control Tower";
+  const context = pathname.startsWith("/app/clients") ? "Clients" : pathname.startsWith("/app/my-work") ? "My Work" : pathname.startsWith("/app/team") ? "Team" : pathname.startsWith("/app/bir-center") ? "BIR Center" : "Control Tower";
 
   return (
     <div className="app-frame">
@@ -83,6 +83,7 @@ export function AppShell({ children, email, demoMode = false }: AppShellProps) {
           <div className="app-main-header__brand"><BrandLockup compact /></div>
           <span className="app-main-header__context">{context}</span>
           {demoMode ? <span className="prototype-mark">Prototype · Sanitized data</span> : <span className="app-main-header__user">{email}</span>}
+          {persona && <span aria-label="Current access persona" className="app-main-header__persona">{persona}{calibrationEditMode ? " · Module 01 edit" : ""}</span>}
         </header>
         <main className="app-content" id="main-content" tabIndex={-1}>{children}</main>
       </div>

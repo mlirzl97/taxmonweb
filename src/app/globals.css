@@ -28,6 +28,11 @@
   --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
+/* Work Register keeps the Due Register scan order: target, client, return, period, status, owner, attention. */
+.work-register__header, .work-register__row { grid-template-columns: 80px minmax(145px, 1.15fr) minmax(135px, 1fr) 105px minmax(145px, 1.1fr) 100px minmax(120px, 1fr); min-width: 920px; }
+.work-register__period { color: var(--ink-soft); font-size: 11px; }
+.work-register__attention { color: var(--ink-soft); font-size: 10px; font-weight: 750; }
+
 * { box-sizing: border-box; }
 html { background: var(--page); }
 body { margin: 0; background: var(--page); color: var(--ink); font-family: var(--font-sans); font-size: 14px; line-height: 1.45; text-rendering: optimizeLegibility; }
@@ -837,9 +842,17 @@ body { font-size: 13px; }
   .registry-panel .taxpayer-table td:nth-child(6) .table-value strong { overflow-wrap: anywhere; white-space: normal; }
 }
 
+/* The desktop rail must actually resize when the navigation is collapsed. */
+@media (min-width: 781px) {
+  .app-sidebar { transition: flex-basis 160ms ease, width 160ms ease; }
+  .app-sidebar.app-sidebar--collapsed { flex-basis: 68px; padding-left: 10px; padding-right: 10px; width: 68px; }
+}
+
 /* BIR Center: a compact read-only reference surface, not an admin console. */
 .bir-center-header { align-items: flex-end; }
 .bir-center-header .eyebrow { margin-bottom: 6px; }
+.bir-center-purpose { color: var(--slate); font-size: 12px; margin: 8px 0 0; max-width: 760px; }
+.bir-center-tabs--primary { border-bottom: 1px solid var(--border); margin-bottom: 14px; }
 .bir-center-toolbar { align-items: center; border-bottom: 1px solid var(--border); display: flex; gap: 16px; justify-content: space-between; margin-bottom: 18px; padding-bottom: 12px; }
 .bir-center-tabs { display: flex; flex-wrap: wrap; gap: 2px; }
 .bir-center-tab { background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--slate); font-size: 12px; padding: 7px 9px; }
@@ -848,6 +861,48 @@ body { font-size: 13px; }
 .bir-center-search input { min-width: min(300px, 32vw); }
 .bir-center-panel { margin-bottom: 14px; position: relative; }
 .bir-center-count { color: var(--muted); display: block; font-size: 11px; margin: -7px 0 10px; }
+.bir-center-section-note { color: var(--slate); font-size: 12px; margin: 0 0 12px; }
+.bir-center-cross-category { border-top: 1px solid var(--border); color: var(--slate); font-size: 11px; margin: 12px 0 0; padding-top: 10px; }
+.bir-center-section-head { align-items: end; display: flex; gap: 18px; justify-content: space-between; margin-bottom: 12px; }
+.bir-center-section-head .section-heading { margin-bottom: 4px; }
+.bir-tax-map__header, .bir-tax-map__row summary { align-items: center; display: grid; gap: 14px; grid-template-columns: minmax(160px, 1.1fr) minmax(180px, 1.4fr) minmax(125px, .8fr); }
+.bir-tax-map__header { border-bottom: 1px solid var(--border); color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .08em; padding: 8px 2px; text-transform: uppercase; }
+.bir-tax-map__row { border-bottom: 1px solid var(--border); }
+.bir-tax-map__row summary { cursor: pointer; list-style: none; padding: 11px 2px; }
+.bir-tax-map__row summary::-webkit-details-marker { display: none; }
+.bir-tax-map__row summary::after { color: var(--muted); content: "+"; font-size: 16px; justify-self: end; }
+.bir-tax-map__row[open] summary::after { content: "−"; }
+.bir-tax-map__tax { display: grid; gap: 2px; min-width: 0; }
+.bir-tax-map__tax strong { font-size: 12px; }
+.bir-tax-map__tax small, .bir-tax-map__row summary > span:not(.bir-tax-map__tax) { color: var(--slate); font-size: 11px; }
+.bir-tax-map__forms { color: var(--ink-soft); font-size: 12px; overflow-wrap: anywhere; }
+.bir-tax-map__detail { border-top: 1px solid var(--border); color: var(--slate); display: grid; font-size: 11px; gap: 8px; padding: 11px 2px 13px; }
+.bir-directory__layout { display: grid; gap: 18px; grid-template-columns: minmax(250px, .75fr) minmax(0, 1.25fr); }
+.bir-directory__list { border-top: 1px solid var(--border); max-height: 600px; overflow: auto; }
+.bir-directory__office { background: transparent; border: 0; border-bottom: 1px solid var(--border); color: var(--ink); cursor: pointer; display: grid; gap: 3px; padding: 10px 8px; text-align: left; width: 100%; }
+.bir-directory__office:hover, .bir-directory__office:focus-visible { background: var(--surface-soft); }
+.bir-directory__office.is-selected { background: #fff5f5; box-shadow: inset 2px 0 0 var(--brand-red); }
+.bir-directory__office strong { font-size: 12px; font-variant-numeric: tabular-nums; }
+.bir-directory__office span { font-size: 12px; }
+.bir-directory__office small { color: var(--slate); font-size: 10px; }
+.bir-directory__detail { border-left: 1px solid var(--border); min-width: 0; padding-left: 18px; }
+.bir-directory__detail-head { align-items: start; display: flex; gap: 12px; justify-content: space-between; }
+.bir-directory__detail-head h2 { font-size: 18px; margin: 4px 0 0; }
+.bir-directory__facts { border-bottom: 1px solid var(--border); border-top: 1px solid var(--border); display: grid; gap: 10px; margin: 16px 0; padding: 12px 0; }
+.bir-directory__facts div { display: grid; gap: 3px; grid-template-columns: 100px minmax(0, 1fr); }
+.bir-directory__facts dt { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.bir-directory__facts dd { font-size: 12px; margin: 0; overflow-wrap: anywhere; }
+.bir-directory__facts a { color: var(--brand-red-dark); font-weight: 750; }
+.bir-directory__block { border-top: 1px solid var(--border); display: grid; gap: 6px; margin-top: 14px; padding-top: 12px; }
+.bir-directory__block .section-heading { margin-bottom: 2px; }
+.bir-directory__block p { color: var(--slate); font-size: 11px; margin: 0; }
+.bir-directory__client-count { font-size: 26px; line-height: 1; }
+.bir-directory__block > span { color: var(--slate); font-size: 11px; }
+.bir-directory__clients { border-top: 1px solid var(--border); list-style: none; margin: 6px 0 0; padding: 0; }
+.bir-directory__clients li { border-bottom: 1px solid var(--border); display: grid; gap: 2px; padding: 8px 0; }
+.bir-directory__clients strong { font-size: 12px; }
+.bir-directory__clients small { color: var(--slate); font-size: 10px; }
+.bir-directory__note { color: var(--muted); font-size: 10px; line-height: 1.4; margin: 16px 0 0; }
 .bir-reference-list { border-top: 1px solid var(--border); }
 .bir-reference-row { border-bottom: 1px solid var(--border); }
 .bir-reference-row summary { align-items: center; cursor: pointer; display: flex; gap: 14px; justify-content: space-between; list-style: none; padding: 10px 2px; }
@@ -865,6 +920,10 @@ body { font-size: 13px; }
 .bir-reference-detail { border-top: 1px solid var(--border); color: var(--slate); display: grid; font-size: 11px; gap: 6px; padding: 10px 2px 12px; }
 .bir-reference-detail p { margin: 0; max-width: 880px; }
 .bir-reference-detail a { color: var(--brand-red-dark); font-weight: 750; width: fit-content; }
+.bir-linked-forms { border-top: 1px solid var(--border); display: grid; gap: 0; list-style: none; margin: 0; padding: 0; }
+.bir-linked-forms li { align-items: baseline; border-bottom: 1px solid var(--border); display: flex; gap: 10px; justify-content: space-between; padding: 8px 0; }
+.bir-linked-forms li span { color: var(--ink-soft); min-width: 0; }
+.bir-linked-forms li b { color: var(--ink); font-variant-numeric: tabular-nums; }
 .bir-office-list { border-top: 1px solid var(--border); overflow-x: auto; }
 .bir-office-row { align-items: center; border-bottom: 1px solid var(--border); display: grid; gap: 14px; grid-template-columns: 110px minmax(220px, 1.4fr) minmax(180px, 1fr); min-width: 620px; padding: 9px 2px; }
 .bir-office-row--header { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
@@ -877,6 +936,15 @@ body { font-size: 13px; }
   .bir-center-tabs { overflow-x: auto; flex-wrap: nowrap; }
   .bir-center-tab { white-space: nowrap; }
   .bir-center-search input { min-width: 0; width: 100%; }
+  .bir-center-section-head { align-items: stretch; display: grid; }
+  .bir-tax-map__header { display: none; }
+  .bir-tax-map__row summary { grid-template-columns: minmax(0, 1fr) 96px 15px; }
+  .bir-tax-map__row summary > span:nth-child(2) { grid-column: 2; grid-row: 1; }
+  .bir-tax-map__row summary > span:nth-child(3) { display: none; }
+  .bir-directory__layout { grid-template-columns: 1fr; }
+  .bir-directory__list { max-height: 280px; }
+  .bir-directory__detail { border-left: 0; border-top: 1px solid var(--border); padding-left: 0; padding-top: 16px; }
+  .bir-directory__detail-head h2 { font-size: 16px; }
 }
 
 /* Team workload boundary: one canonical workspace, model-specific measures. */

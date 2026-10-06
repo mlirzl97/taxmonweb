@@ -147,6 +147,14 @@ Provides global/elevated portfolio visibility and approved intervention authorit
 
 HOD access is broad but still subject to action-specific authority, auditability, and segregation-of-duties safeguards.
 
+#### 3.6.1 HOD Master Admin mode
+
+For the current calibration and eventual governed HOD capability bundle, HOD is the TaxMonWeb Master Admin for tax-control governance: global visibility, client/profile maintenance, reassignment, approved lifecycle intervention, governed configuration, and Elevated Override authority where separately recorded.
+
+Master Admin is not a seventh hierarchy level and does not mean unrestricted System Administration. User, authentication, and technical organization administration remain separate capabilities. Master Admin cannot fabricate filing, payment, acceptance, applicability, or evidence facts, and cannot erase actual-actor segregation-of-duties history.
+
+During the explicit sanitized prototype calibration mode, all prototype users may edit Module 01 fixture/profile context so the HOD can test the operating loop without a permission dead end. This is temporary demo behavior, browser-persisted for fixture data, and must be disabled before real client data or production authority is introduced.
+
 ## 4. Cross-functional and administrative modes
 
 ### 4.1 Tax Team / Tax Control

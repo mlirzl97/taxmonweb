@@ -30,6 +30,17 @@ describe("client portfolio pressure-test fixture", () => {
     expect(superLight.filter((client) => client.entities[0]?.profile.sourceFinalWeight === 0)).toHaveLength(3);
   });
 
+  it("marks every client with an explicit recurring or ad hoc service type", () => {
+    const counts = fixtureClients.reduce<Record<"Engagement" | "Tax Ad Hoc", number>>((result, client) => {
+      result[client.serviceType] += 1;
+      return result;
+    }, { Engagement: 0, "Tax Ad Hoc": 0 });
+
+    expect(counts.Engagement).toBeGreaterThan(0);
+    expect(counts["Tax Ad Hoc"]).toBeGreaterThan(0);
+    expect(counts.Engagement + counts["Tax Ad Hoc"]).toBe(112);
+  });
+
   it("produces a deterministic assignment reconciliation with controlled gaps", () => {
     const first = reconcileAssignments(fixtureClients, fixtureOrgDirectoryMembers);
     const second = reconcileAssignments(fixtureClients, fixtureOrgDirectoryMembers);

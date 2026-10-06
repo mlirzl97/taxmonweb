@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { AppShell } from "@/components/app/app-shell";
-import { isPrototypeDemoMode } from "@/lib/supabase/config";
+import { isCalibrationOpenEditMode, isPrototypeDemoMode } from "@/lib/supabase/config";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 
 export default async function ProtectedAppLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -12,5 +12,5 @@ export default async function ProtectedAppLayout({ children }: Readonly<{ childr
     redirect("/login");
   }
 
-  return <AppShell demoMode={demoMode} email={user?.email ?? "HOD demo persona"}>{children}</AppShell>;
+  return <AppShell calibrationEditMode={isCalibrationOpenEditMode()} demoMode={demoMode} email={user?.email ?? "Master Admin"} persona={demoMode ? "Master Admin" : undefined}>{children}</AppShell>;
 }

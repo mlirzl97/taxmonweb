@@ -83,6 +83,8 @@ Never rely on UI visibility for security. Enforce authentication, RLS, organizat
 
 System Administration does not automatically grant tax-control authority. Never expose a Supabase service-role credential to the browser.
 
+Current calibration exception: the sanitized prototype may present HOD as `Master Admin` and enable an explicit open-edit mode for Module 01 fixture/profile context. This mode is temporary, browser-persisted, and must never be treated as production authorization or used with real client data. Master Admin still cannot fabricate external facts, bypass validation truth, or erase actor/SoD history.
+
 ## 7. Data safety
 
 Until explicitly approved otherwise:

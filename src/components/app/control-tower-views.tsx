@@ -116,18 +116,20 @@ export function WorkRegisterView({ scope }: { scope: ScopeFilter }) {
         <span className="due-controls__count">{records.length} work items</span>
       </div>
       <section aria-labelledby="work-register-title" className="panel panel--table due-register-panel work-register-panel">
-        <div className="section-heading section-heading--queue"><div><h2 id="work-register-title">Work register</h2><p>One row per generated work item; milestones remain available in the detail.</p></div><span className="section-heading__note">{counts.all} in scope</span></div>
+          <div className="section-heading section-heading--queue"><div><h2 id="work-register-title">Work register</h2><p>One row per generated work item; milestones remain available in the detail.</p></div><span className="section-heading__note">{counts.all} in scope</span></div>
         <FilterTabs label="Work Register filters" onChange={setQueue} options={[{ id: "all", label: "All work", count: counts.all }, { id: "today", label: "Do today", count: counts.today }, { id: "waiting", label: "Waiting", count: counts.waiting }, { id: "returned", label: "Returned", count: counts.returned }, { id: "attention", label: "Needs attention", count: counts.attention }]} value={queue} />
         <div className="work-register" aria-label="Work register">
-          <div className="work-register__header"><span>Target</span><span>Work / obligation</span><span>Current step</span><span>Owner</span><span>Control signal</span></div>
+          <div className="work-register__header"><span>Target</span><span>Client</span><span>Return / submission</span><span>Period</span><span>Stage / status</span><span>Owner</span><span>Attention</span></div>
           {records.length === 0 ? <div className="inline-empty">No work matches these filters.</div> : records.map(({ calendar: item, work }) => {
             const currentStep = work.steps.find((step) => step.state === "current" || step.state === "blocked" || step.state === "waiting") ?? work.steps[work.steps.length - 1];
             return <button className="work-register__row" key={work.id} onClick={() => setSelectedWorkId(work.id)} type="button">
               <span className={`work-register__date work-register__date--${work.status.toLowerCase()}`}><strong>{item.calendarDate.slice(-2)}</strong><small>{item.internalDeadline.replace(/^.*?·\s*/, "")}</small></span>
-              <span><strong>{work.title}</strong><small>{work.client} · {item.returnLabel.replace(" · ", " ")}</small><small>{work.registrationUnit} · {work.period}</small></span>
-              <span><strong>{currentStep?.label}</strong><small>{stepCount(work)}</small></span>
+              <span><strong>{item.client}</strong><small>{work.registrationUnit} · {work.scope}</small></span>
+              <span><strong>{item.returnLabel.replace(" · ", " ")}</strong><small>{item.milestone}</small></span>
+              <span className="work-register__period">{item.period}</span>
+              <span><span className={`rag-text rag-text--${work.status.toLowerCase()}`}>{work.status}</span><strong>{currentStep?.label}</strong><small>{stepCount(work)}</small></span>
               <span><strong>{work.owner}</strong><small>{work.scope}</small></span>
-              <span><span className={`rag-text rag-text--${work.status.toLowerCase()}`}>{work.status}</span><small>{work.blocker?.category ?? work.components.find((component) => component.state.includes("Needs") || component.state.includes("unverified"))?.state ?? "No blocker"}</small></span>
+              <span className="work-register__attention"><strong>{work.blocker?.category ?? "Next action"}</strong><small>{work.blocker?.reason ?? work.nextAction}</small></span>
             </button>;
           })}
         </div>

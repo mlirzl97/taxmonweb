@@ -29,6 +29,7 @@ export interface FilingChannelSeed {
 export interface FormSeed {
   formNumber: string;
   title: string;
+  taxTypeCodes: string[];
   verificationStatus: VerificationStatus;
   sourceCode: string;
   note: string;
@@ -214,10 +215,17 @@ export const filingChannels: FilingChannelSeed[] = [
 ];
 
 export const forms: FormSeed[] = [
-  { formNumber: '0605', title: 'BIR Form 0605', verificationStatus: 'partially_verified', sourceCode: 'BIR-EFPS-JOBAIDS', note: 'Form number is exposed by the official eFPS job-aids page; title/revision and requirement mapping remain under reconciliation.' },
-  { formNumber: '1600', title: 'BIR Form 1600', verificationStatus: 'partially_verified', sourceCode: 'BIR-EFPS-JOBAIDS', note: 'Form number is exposed by the official eFPS job-aids page; title/revision and requirement mapping remain under reconciliation.' },
-  { formNumber: '1600WP', title: 'BIR Form 1600WP', verificationStatus: 'partially_verified', sourceCode: 'BIR-EFPS-JOBAIDS', note: 'Form number is exposed by the official eFPS job-aids page; title/revision and requirement mapping remain under reconciliation.' },
-  { formNumber: '1601C', title: 'BIR Form 1601C', verificationStatus: 'partially_verified', sourceCode: 'BIR-EFPS-JOBAIDS', note: 'Form number is exposed by the official eFPS job-aids page; title/revision and requirement mapping remain under reconciliation.' },
+  { formNumber: '0605', title: 'Payment Form', taxTypeCodes: [], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Cross-category payment form; it is not assigned to one operating tax type.' },
+  { formNumber: '0619-E', title: 'Monthly Remittance Form of Creditable Income Taxes Withheld (Expanded)', taxTypeCodes: ['WHT'], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; applicability and deadline rules remain governed by the Requirement Master.' },
+  { formNumber: '0619-F', title: 'Monthly Remittance Form of Final Income Taxes Withheld', taxTypeCodes: ['WHT'], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; applicability and deadline rules remain governed by the Requirement Master.' },
+  { formNumber: '1600', title: 'Monthly Remittance Return of VAT and Other Percentage Taxes Withheld', taxTypeCodes: ['WHT'], verificationStatus: 'partially_verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form listing; current requirement relationship and scope remain under reconciliation.' },
+  { formNumber: '1600WP', title: 'Remittance Return of Percentage Tax on Winnings and Prizes Withheld', taxTypeCodes: ['WHT'], verificationStatus: 'partially_verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form listing; current requirement relationship and scope remain under reconciliation.' },
+  { formNumber: '1601-C', title: 'Monthly Remittance Return of Income Taxes Withheld on Compensation', taxTypeCodes: ['WHT'], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; applicability and deadline rules remain governed by the Requirement Master.' },
+  { formNumber: '1601-EQ', title: 'Quarterly Remittance Return of Creditable Income Taxes Withheld (Expanded)', taxTypeCodes: ['WHT'], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; applicability and deadline rules remain governed by the Requirement Master.' },
+  { formNumber: '1702-RT', title: 'Annual Income Tax Return for Corporation, Partnership and Other Non-Individual Taxpayer Subject Only to Regular Income Tax Rate', taxTypeCodes: ['CIT'], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; applicability and deadline rules remain governed by the Requirement Master.' },
+  { formNumber: '2550Q', title: 'Quarterly Value-Added Tax (VAT) Return', taxTypeCodes: ['VAT'], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; applicability and deadline rules remain governed by the Requirement Master.' },
+  { formNumber: '2551M', title: 'Monthly Percentage Tax Return', taxTypeCodes: ['PERCENTAGE_TAX'], verificationStatus: 'partially_verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form listing; current requirement relationship and scope remain under reconciliation.' },
+  { formNumber: '2551Q', title: 'Quarterly Percentage Tax Return', taxTypeCodes: ['PERCENTAGE_TAX'], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; applicability and deadline rules remain governed by the Requirement Master.' },
 ];
 
 export const unresolvedResearchItems = [

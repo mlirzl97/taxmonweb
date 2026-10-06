@@ -16,6 +16,8 @@ export type FixtureStatus = "GREEN" | "AMBER" | "RED" | "UNRESOLVED";
 export type FixtureSourceWeightClassification = "Extremely Heavy" | "Heavy" | "Moderate" | "Light" | "Super Light";
 export type FixtureSource = "source_weighted_portfolio" | "synthetic_portfolio_test";
 export type FixtureOperatingModel = "DELIVERY" | "SPECIALIST_CASE";
+/** Sanitized commercial scope used to distinguish recurring engagements from ad hoc tax work. */
+export type FixtureServiceType = "Engagement" | "Tax Ad Hoc";
 export type FixtureWorkStepState = "complete" | "current" | "waiting" | "blocked" | "not-started" | "unresolved";
 
 export type FixtureWorkStep = {
@@ -327,6 +329,7 @@ export type FixtureClient = {
   entitySummary: string;
   profileSummary: string;
   clientGroup?: string;
+  serviceType: FixtureServiceType;
   scope: FixtureScope;
   assignment: FixtureAssignment;
   entities: FixtureTaxpayerEntity[];
@@ -380,6 +383,7 @@ export const fixtureClients: FixtureClient[] = [
     entitySummary: "1 taxpayer entity · 1 head office",
     profileSummary: "Active profile · 2303 structure reviewed",
     clientGroup: "Lakeshore Holdings (synthetic)",
+    serviceType: "Engagement",
     scope: "Tower North",
     assignment: { preparer: fixtureTeamMemberName("org-c1-team-lead"), checker: fixtureTeamMemberName("org-c1-junior-associate"), reviewer: fixtureTeamMemberName("org-c1-leader"), tower: "Tower North", cluster: "Barangay Atilano", effectiveFrom: "Current assignment" },
     entities: [{
@@ -396,6 +400,7 @@ export const fixtureClients: FixtureClient[] = [
     entitySummary: "1 taxpayer entity · 1 head office",
     profileSummary: "Active profile · open audit context",
     clientGroup: "Northstar Group (synthetic)",
+    serviceType: "Engagement",
     scope: "Tower North",
     assignment: { preparer: fixtureTeamMemberName("org-c1-senior-associate"), checker: fixtureTeamMemberName("org-c1-junior-associate"), reviewer: fixtureTeamMemberName("org-c1-leader"), tower: "Tower North", cluster: "Barangay Atilano", effectiveFrom: "Current assignment" },
     entities: [{
@@ -410,6 +415,7 @@ export const fixtureClients: FixtureClient[] = [
     name: "Harborline Services (synthetic)",
     entitySummary: "1 taxpayer entity · 1 head office",
     profileSummary: "Ready for validation · attention required",
+    serviceType: "Tax Ad Hoc",
     scope: "Tower Central",
     assignment: { preparer: fixtureTeamMemberName("org-c2-senior-associate"), checker: fixtureTeamMemberName("org-c2-junior-associate"), reviewer: fixtureTeamMemberName("org-c2-leader"), tower: "Tower Central", cluster: "Barangay Beato", effectiveFrom: "Current assignment" },
     entities: [{
@@ -424,6 +430,7 @@ export const fixtureClients: FixtureClient[] = [
     name: "Cedarfield Holdings (synthetic)",
     entitySummary: "1 taxpayer entity · 2 registration units",
     profileSummary: "Active profile · multiple-unit edge case",
+    serviceType: "Engagement",
     scope: "Tower South",
     assignment: { preparer: fixtureTeamMemberName("org-c3-senior-associate"), checker: fixtureTeamMemberName("org-c3-junior-associate"), reviewer: fixtureTeamMemberName("org-c3-leader"), tower: "Tower South", cluster: "Barangay de Vera", effectiveFrom: "Current assignment" },
     entities: [{
@@ -439,6 +446,7 @@ export const fixtureClients: FixtureClient[] = [
     entitySummary: "1 taxpayer entity · 1 head office",
     profileSummary: "Active profile · sister company",
     clientGroup: "Northstar Group (synthetic)",
+    serviceType: "Tax Ad Hoc",
     scope: "Tower Central",
     assignment: { preparer: fixtureTeamMemberName("org-c2-team-lead"), checker: fixtureTeamMemberName("org-c2-junior-associate"), reviewer: fixtureTeamMemberName("org-c2-leader"), tower: "Tower Central", cluster: "Barangay Beato", effectiveFrom: "Current assignment" },
     entities: [{
@@ -454,6 +462,7 @@ export const fixtureClients: FixtureClient[] = [
     entitySummary: "1 taxpayer entity · 1 head office",
     profileSummary: "Setup incomplete · assignment conflict",
     clientGroup: "Cedarfield Group (synthetic)",
+    serviceType: "Tax Ad Hoc",
     scope: "Tower South",
     assignment: { preparer: "Unassigned", checker: fixtureTeamMemberName("org-c3-senior-supervisor"), reviewer: fixtureTeamMemberName("org-c3-senior-supervisor"), tower: "Tower South", cluster: "Barangay de Vera", effectiveFrom: "Pending setup" },
     entities: [{
@@ -661,6 +670,7 @@ function generatedPortfolioClient(clientIndex: number, plan?: { classification: 
     entitySummary: `1 taxpayer entity · ${units.length} ${units.length === 1 ? "head office" : "registration units"}`,
     profileSummary: profile.profileState === "Active" ? "Active profile · sanitized portfolio test" : `${profile.profileState} · attention required`,
     clientGroup: generatedPortfolioGroups[clientIndex % generatedPortfolioGroups.length],
+    serviceType: plan ? (clientIndex % 6 === 0 || clientIndex % 11 === 0 ? "Tax Ad Hoc" : "Engagement") : clientIndex === 1001 ? "Tax Ad Hoc" : "Engagement",
     scope,
     assignment: { preparer: "Unassigned", checker: "Unassigned", reviewer: "Unassigned", tower: scope, cluster: portfolioClusters[scope], effectiveFrom: "Current assignment" },
     entities: [{ name: registeredName, profile, units }],

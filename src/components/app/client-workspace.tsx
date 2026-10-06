@@ -10,20 +10,22 @@ import {
   type FixtureClient,
   type FixtureTaxProfile,
 } from "@/lib/fixtures";
-import { applyPersistedTaxProfileSnapshot, buildTaxProfilePersistencePayload, profileActivationGaps } from "@/lib/domain/client-profile-persistence";
+import { fixtureClock } from "@/lib/fixtures";
+import { applyPersistedTaxProfileSnapshot, buildTaxProfilePersistencePayload, profileActivationGaps, type PersistedTaxProfileSnapshot } from "@/lib/domain/client-profile-persistence";
+import { hasCalibrationEditAccess } from "@/lib/domain/access";
 import { DetailDrawer, SectionHeading } from "./workspace-components";
 import { Temporary2303Upload } from "./temporary-2303-upload";
 
 type DrawerMode = "identity" | "setup" | "authority" | "source" | "upload" | null;
 
-export function ClientWorkspace({ client, dataMode = "sanitized", demoMode = false }: { client: FixtureClient; dataMode?: string; demoMode?: boolean }) {
+export function ClientWorkspace({ client, dataMode = "sanitized", demoMode = false, calibrationEditMode: calibrationEditModeEnabled = false }: { client: FixtureClient; dataMode?: string; demoMode?: boolean; calibrationEditMode?: boolean }) {
   const [selectedUnitIndex, setSelectedUnitIndex] = useState(0);
   const [drawer, setDrawer] = useState<DrawerMode>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [profile, setProfile] = useState<FixtureTaxProfile>(() => cloneProfile(client.entities[0].profile));
   const [assignment, setAssignment] = useState(client.assignment);
   const [isSaving, setIsSaving] = useState(false);
-  const [persistenceState, setPersistenceState] = useState<"checking" | "available" | "unavailable">(() => demoMode ? "unavailable" : "checking");
+  const [persistenceState, setPersistenceState] = useState<"checking" | "available" | "unavailable">(() => demoMode ? "available" : "checking");
   const initialProfileRef = useRef(profile);
   const initialAssignmentRef = useRef(assignment);
 
@@ -35,7 +37,20 @@ export function ClientWorkspace({ client, dataMode = "sanitized", demoMode = fal
   const profileHistory = fixtureHistory.filter((item) => item.clientId === client.id);
 
   useEffect(() => {
-    if (demoMode) return;
+    if (demoMode) {
+      const stored = window.localStorage.getItem(demoProfileStorageKey(client.id));
+      if (!stored) return;
+      try {
+        const snapshot = JSON.parse(stored) as PersistedTaxProfileSnapshot;
+        const restored = applyPersistedTaxProfileSnapshot(initialProfileRef.current, initialAssignmentRef.current, snapshot);
+        setProfile(restored.profile);
+        setAssignment(restored.assignment);
+        setSavedMessage("Saved calibration version loaded.");
+      } catch {
+        window.localStorage.removeItem(demoProfileStorageKey(client.id));
+      }
+      return;
+    }
     let cancelled = false;
     async function loadSavedProfile() {
       try {
@@ -59,19 +74,15 @@ export function ClientWorkspace({ client, dataMode = "sanitized", demoMode = fal
     return () => { cancelled = true; };
   }, [client.id, demoMode]);
 
-  const editDisabled = demoMode || persistenceState !== "available";
-  const editTitle = demoMode ? "Sign in to save profile changes" : persistenceState === "checking" ? "Checking the saved profile" : persistenceState === "unavailable" ? "This fixture is read-only until it is linked to the client repository" : undefined;
+  const calibrationEditMode = hasCalibrationEditAccess(demoMode, calibrationEditModeEnabled);
+  const editDisabled = (!calibrationEditMode && persistenceState !== "available");
+  const editTitle = persistenceState === "checking" ? "Checking the saved profile" : persistenceState === "unavailable" ? "This profile is read-only until it is linked to the client repository" : undefined;
 
   function closeDrawer() {
     setDrawer(null);
-    setSavedMessage(null);
   }
 
   async function persistProfile(next: FixtureTaxProfile, nextAssignment: FixtureClient["assignment"], reason: string, message: string, action: "save" | "save-and-validate" = "save") {
-    if (demoMode) {
-      setSavedMessage("Sign in to save profile changes. Prototype data is read-only.");
-      return false;
-    }
     if (persistenceState !== "available") {
       setSavedMessage("This fixture is read-only until it is linked to the client repository.");
       return false;
@@ -81,6 +92,22 @@ export function ClientWorkspace({ client, dataMode = "sanitized", demoMode = fal
       setSavedMessage(`Cannot validate yet: ${gaps.join(", ")}.`);
       return false;
     }
+
+    if (calibrationEditMode) {
+      const payload = buildTaxProfilePersistencePayload(next, nextAssignment, selectedUnit, reason, fixtureClock.today);
+      const snapshot: PersistedTaxProfileSnapshot = {
+        state: action === "save-and-validate" ? "active" : "ready_for_validation",
+        effectiveFrom: fixtureClock.today,
+        profile: payload.profile,
+        assignment: payload.assignment,
+      };
+      window.localStorage.setItem(demoProfileStorageKey(client.id), JSON.stringify(snapshot));
+      setAssignment(nextAssignment);
+      setProfile(next);
+      setSavedMessage(`${message} Saved for this sanitized calibration browser.`);
+      return true;
+    }
+
     setIsSaving(true);
     try {
       const response = await fetch(`/api/clients/${client.id}/profile`, {
@@ -110,13 +137,13 @@ export function ClientWorkspace({ client, dataMode = "sanitized", demoMode = fal
     <>
       <div className="client-context-bar">
         <div><Link className="breadcrumb-link" href="/app/clients">All Clients</Link><span aria-hidden="true"> / </span><strong>{profile.registeredTaxpayerName}</strong></div>
-        <div className="client-context-bar__right">{client.clientGroup && <span className="context-group">{client.clientGroup}</span>}</div>
+        <div className="client-context-bar__right"><span className="context-group">{client.serviceType}</span>{client.clientGroup && <span className="context-group">{client.clientGroup}</span>}</div>
       </div>
 
       <header className="dossier-header">
         <div>
           <h1>{profile.registeredTaxpayerName}</h1>
-          <p className="dossier-header__meta"><strong>{profile.tinDisplay}</strong><span>·</span>{selectedUnit.name}<span>·</span>{client.assignment.tower} / {client.assignment.cluster}</p>
+          <p className="dossier-header__meta"><strong>{profile.tinDisplay}</strong><span>·</span>{client.serviceType}<span>·</span>{selectedUnit.name}<span>·</span>{client.assignment.tower} / {client.assignment.cluster}</p>
         </div>
         <div className="dossier-header__actions">
           <span className={profile.profileState === "Active" ? "profile-state profile-state--active" : "profile-state profile-state--review"}>{profile.profileState}</span>
@@ -172,6 +199,7 @@ export function ClientWorkspace({ client, dataMode = "sanitized", demoMode = fal
             <Fact label="Effective from" value={assignment.effectiveFrom} />
           </div>
           <div className="setup-summary">
+            <Fact label="Service type" value={client.serviceType} />
             <Fact label="Client Weight" value={profile.sourceFinalWeight === null ? "Excluded from source reconciliation" : `${profile.sourceFinalWeight} · ${profile.sourceWeightClassification ?? profile.weightLabel}`} />
             <Fact label="eNATE Setup" value={profile.enateSetup} />
             <Fact label="Payment Route" value={profile.paymentRoute} />
@@ -221,6 +249,10 @@ export function ClientWorkspace({ client, dataMode = "sanitized", demoMode = fal
       {drawer === "source" && <SourceDrawer isSaving={isSaving} profile={profile} onClose={closeDrawer} onSave={(next, reason) => { void persistProfile({ ...next, profileState: "Active", lastValidated: "Current review", validator: "Authenticated validator" }, assignment, reason, "Tax Profile validated and activated.", "save-and-validate").then((saved) => { if (saved) closeDrawer(); }); }} />}
     </>
   );
+}
+
+function demoProfileStorageKey(clientId: string) {
+  return `taxmonweb.calibration.tax-profile.${clientId}`;
 }
 
 function cloneProfile(profile: FixtureTaxProfile): FixtureTaxProfile {

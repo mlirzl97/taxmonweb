@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { fixtureClients, getClientWorkloadWeight, type FixtureClient, type FixtureSourceWeightClassification } from "@/lib/fixtures";
+import { fixtureClients, getClientWorkloadWeight, type FixtureClient, type FixtureServiceType, type FixtureSourceWeightClassification } from "@/lib/fixtures";
 import { FixturePageFrame, isInScope, ScopeSwitcher, SectionHeading, type ScopeFilter } from "@/components/app/workspace-components";
 
 type AttentionFilter = "all" | "attention" | "clear";
@@ -11,6 +11,7 @@ type AuditFilter = "all" | "open" | "clear";
 type SortKey = "taxpayer" | "weight" | "attention" | "team" | "audit";
 
 const sourceWeightClassOptions: readonly FixtureSourceWeightClassification[] = ["Extremely Heavy", "Heavy", "Moderate", "Light", "Super Light"];
+const serviceTypeOptions: readonly FixtureServiceType[] = ["Engagement", "Tax Ad Hoc"];
 const scopeFilterOptions = ["all", "north", "central", "south"] as const;
 const attentionFilterOptions = ["all", "attention", "clear"] as const;
 const auditFilterOptions = ["all", "open", "clear"] as const;
@@ -23,6 +24,7 @@ export default function ClientsPage() {
   const [rdo, setRdo] = useState(() => readStringParam("rdo"));
   const [owner, setOwner] = useState(() => readStringParam("owner"));
   const [group, setGroup] = useState(() => readStringParam("group"));
+  const [serviceType, setServiceType] = useState(() => readStringParam("serviceType"));
   const [weightClass, setWeightClass] = useState(() => readStringParam("weight"));
   const [filingChannel, setFilingChannel] = useState(() => readStringParam("filing"));
   const [paymentRoute, setPaymentRoute] = useState(() => readStringParam("payment"));
@@ -39,6 +41,7 @@ export default function ClientsPage() {
     if (rdo !== "all") params.set("rdo", rdo);
     if (owner !== "all") params.set("owner", owner);
     if (group !== "all") params.set("group", group);
+    if (serviceType !== "all") params.set("serviceType", serviceType);
     if (weightClass !== "all") params.set("weight", weightClass);
     if (filingChannel !== "all") params.set("filing", filingChannel);
     if (paymentRoute !== "all") params.set("payment", paymentRoute);
@@ -48,13 +51,13 @@ export default function ClientsPage() {
     if (sort !== "taxpayer") params.set("sort", sort);
     const queryString = params.toString();
     window.history.replaceState(window.history.state, "", `${window.location.pathname}${queryString ? `?${queryString}` : ""}`);
-  }, [attention, audit, filingChannel, group, owner, paymentRoute, query, rdo, scope, setupState, sort, tower, weightClass]);
+  }, [attention, audit, filingChannel, group, owner, paymentRoute, query, rdo, scope, serviceType, setupState, sort, tower, weightClass]);
 
   const visibleClients = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     const filtered = fixtureClients.filter((client) => {
       const profile = client.entities[0]?.profile;
-      const searchable = [client.name, profile?.registeredTaxpayerName, profile?.tinDisplay, client.clientGroup, profile?.rdoOrLts]
+      const searchable = [client.name, profile?.registeredTaxpayerName, profile?.tinDisplay, client.clientGroup, client.serviceType, profile?.rdoOrLts]
         .filter(Boolean)
         .map((value) => value!.toLowerCase());
       const hasClientAttention = hasAttention(client);
@@ -67,6 +70,7 @@ export default function ClientsPage() {
         && (rdo === "all" || profile?.rdoOrLts === rdo)
         && (owner === "all" || [client.assignment.preparer, client.assignment.checker, client.assignment.reviewer].includes(owner))
         && (group === "all" || client.clientGroup === group)
+        && (serviceType === "all" || client.serviceType === serviceType)
         && (weightClass === "all" || clientWeightClass === weightClass)
         && (filingChannel === "all" || profile?.filingChannel === filingChannel)
         && (paymentRoute === "all" || profile?.paymentRoute === paymentRoute)
@@ -76,7 +80,7 @@ export default function ClientsPage() {
     });
 
     return [...filtered].sort((left, right) => compareClients(left, right, sort));
-  }, [attention, audit, filingChannel, group, owner, paymentRoute, query, rdo, scope, setupState, sort, tower, weightClass]);
+  }, [attention, audit, filingChannel, group, owner, paymentRoute, query, rdo, scope, serviceType, setupState, sort, tower, weightClass]);
 
   const towers = unique(fixtureClients.map((client) => client.assignment.tower));
   const rdos = unique(fixtureClients.map((client) => client.entities[0]?.profile.rdoOrLts));
@@ -114,6 +118,7 @@ export default function ClientsPage() {
               <FilterSelect label="RDO / LTS" onChange={setRdo} options={rdos} value={rdo} />
               <FilterSelect label="Team member" onChange={setOwner} options={owners} value={owner} />
               <FilterSelect label="Client Group" onChange={setGroup} options={groups} value={group} />
+              <FilterSelect label="Service type" onChange={setServiceType} options={serviceTypeOptions} value={serviceType} />
               <FilterSelect label="Sort by" onChange={(value) => setSort(value as SortKey)} options={["taxpayer", "weight", "attention", "team", "audit"]} value={sort} />
             </div>
           </details>
@@ -177,7 +182,7 @@ function TaxpayerRow({ client }: { client: FixtureClient }) {
 
   return (
     <tr>
-      <td data-label="Taxpayer"><Link className="taxpayer-link" href={`/app/clients/${client.id}`}><span className="client-avatar" aria-hidden="true">{profile.registeredTaxpayerName.charAt(0)}</span><span><strong>{profile.registeredTaxpayerName}</strong><small>{client.clientGroup ?? "Independent client relationship"} · {client.entities[0].units.length} unit{client.entities[0].units.length === 1 ? "" : "s"}</small></span></Link></td>
+      <td data-label="Taxpayer"><Link className="taxpayer-link" href={`/app/clients/${client.id}`}><span className="client-avatar" aria-hidden="true">{profile.registeredTaxpayerName.charAt(0)}</span><span><strong>{profile.registeredTaxpayerName}</strong><small>{client.serviceType} · {client.clientGroup ?? "Independent client relationship"} · {client.entities[0].units.length} unit{client.entities[0].units.length === 1 ? "" : "s"}</small></span></Link></td>
       <td data-label="TIN"><span className="table-value"><strong>{profile.tinDisplay}</strong><small>{profile.branchCode}</small></span></td>
       <td data-label="RDO / LTS"><span className="table-value">{profile.rdoOrLts}</span></td>
       <td data-label="Filing"><span className="table-value"><strong>{profile.filingChannel}</strong><small>{profile.eFPSGroup ?? profile.filingContext}</small></span></td>

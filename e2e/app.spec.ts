@@ -38,7 +38,7 @@ test("My Work follows the Due Register into step-by-step execution detail", asyn
   await page.goto("/app/my-work");
   await expect(page.getByRole("heading", { name: "Work register" })).toBeVisible();
   await expect(page.getByText("Due Register → Work Register → step-by-step detail")).toBeVisible();
-  await page.getByRole("button", { name: /Submission evidence check/ }).click();
+  await page.locator(".work-register__row").filter({ hasText: "Harborline Services" }).click();
   await expect(page.getByRole("heading", { name: "5 of 6 steps recorded" })).toBeVisible();
   await expect(page.getByText("Parallel control facts")).toBeVisible();
   await expect(page.getByText("Reported result is retained; acceptance remains unverified.")).toBeVisible();
@@ -62,4 +62,18 @@ test("critical shell passes an accessibility smoke audit", async ({ page }) => {
   await page.goto("/app/control-tower");
   const results = await new AxeBuilder({ page }).disableRules(["color-contrast"]).analyze();
   expect(results.violations).toEqual([]);
+});
+
+test("calibration Master Admin can edit and reload a sanitized client profile", async ({ page }) => {
+  await page.goto("/app/clients/fixture-client-01");
+  await expect(page.getByText(/Master Admin/)).toBeVisible();
+  await page.getByRole("button", { name: "Edit registration facts" }).click();
+  const drawer = page.getByRole("dialog");
+  await drawer.getByLabel("RDO / LTS").fill("RDO 000 · calibration");
+  await drawer.getByLabel("Reason for change").fill("Calibration review of sanitized profile");
+  await drawer.getByRole("button", { name: "Save registration facts" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved for this sanitized calibration browser");
+  await expect(page.getByText("RDO 000 · calibration", { exact: true })).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("RDO 000 · calibration", { exact: true })).toBeVisible();
 });
