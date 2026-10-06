@@ -18,4 +18,5 @@ coverage/
 *.tiff
 .vercel
 .env*
+supabase/.temp/
 .DS_Store
