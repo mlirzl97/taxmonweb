@@ -34,6 +34,18 @@ test("calendar date selection preserves a shareable date and opens due context",
   await expect(page.getByRole("heading", { name: "Due on 2026-10-05" })).toBeVisible();
 });
 
+test("My Work follows the Due Register into step-by-step execution detail", async ({ page }) => {
+  await page.goto("/app/my-work");
+  await expect(page.getByRole("heading", { name: "Work register" })).toBeVisible();
+  await expect(page.getByText("Due Register → Work Register → step-by-step detail")).toBeVisible();
+  await page.getByRole("button", { name: /Submission evidence check/ }).click();
+  await expect(page.getByRole("heading", { name: "5 of 6 steps recorded" })).toBeVisible();
+  await expect(page.getByText("Parallel control facts")).toBeVisible();
+  await expect(page.getByText("Reported result is retained; acceptance remains unverified.")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("heading", { name: "5 of 6 steps recorded" })).toHaveCount(0);
+});
+
 test("mobile navigation has a real drawer interaction and no horizontal overflow", async ({ page }) => {
   await page.goto("/app/control-tower");
   test.skip((await page.evaluate(() => window.innerWidth)) > 500, "mobile interaction runs in the mobile project");

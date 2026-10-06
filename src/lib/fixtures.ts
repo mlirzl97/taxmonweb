@@ -16,6 +16,20 @@ export type FixtureStatus = "GREEN" | "AMBER" | "RED" | "UNRESOLVED";
 export type FixtureSourceWeightClassification = "Extremely Heavy" | "Heavy" | "Moderate" | "Light" | "Super Light";
 export type FixtureSource = "source_weighted_portfolio" | "synthetic_portfolio_test";
 export type FixtureOperatingModel = "DELIVERY" | "SPECIALIST_CASE";
+export type FixtureWorkStepState = "complete" | "current" | "waiting" | "blocked" | "not-started" | "unresolved";
+
+export type FixtureWorkStep = {
+  id: string;
+  label: string;
+  state: FixtureWorkStepState;
+  detail: string;
+};
+
+export type FixtureWorkComponent = {
+  label: "Submission" | "Payment" | "Evidence";
+  state: string;
+  detail: string;
+};
 
 export type FixtureWorkItem = {
   id: string;
@@ -34,6 +48,9 @@ export type FixtureWorkItem = {
   deadlineType: "TMF internal target" | "Client / service milestone" | "Control milestone";
   owner: string;
   scope: FixtureScope;
+  steps: readonly FixtureWorkStep[];
+  components: readonly FixtureWorkComponent[];
+  returnedFrom?: string;
   blocker?: { category: "CLIENT APPROVAL" | "CLIENT DATA" | "FUNDING" | "INTERNAL" | "BIR/SYSTEM" | "OTHER"; reason: string };
 };
 
@@ -1007,6 +1024,19 @@ export const fixtureWork: FixtureWorkItem[] = [
     deadlineType: "Client / service milestone",
     owner: fixtureTeamMemberName("org-c1-team-lead"),
     scope: "Tower North",
+    steps: [
+      { id: "prepare", label: "Preparation", state: "complete", detail: "Preparation and reconciliation recorded." },
+      { id: "check", label: "Checking", state: "complete", detail: "Internal checking recorded." },
+      { id: "review", label: "Review", state: "complete", detail: "Internal review recorded." },
+      { id: "client-approval", label: "Client approval", state: "blocked", detail: "Approval is still outstanding before filing." },
+      { id: "filing", label: "Filing / submission", state: "not-started", detail: "Not ready until client approval is received." },
+      { id: "evidence", label: "Evidence / archiving", state: "not-started", detail: "Evidence is captured with the relevant action." },
+    ],
+    components: [
+      { label: "Submission", state: "Not ready", detail: "Client approval gate is open." },
+      { label: "Payment", state: "Not configured", detail: "Payment requirement is not shown in this fixture." },
+      { label: "Evidence", state: "Not started", detail: "Evidence will follow the relevant action." },
+    ],
     blocker: { category: "CLIENT APPROVAL", reason: "Client response is outstanding after internal review." },
   },
   {
@@ -1026,6 +1056,20 @@ export const fixtureWork: FixtureWorkItem[] = [
     deadlineType: "Control milestone",
     owner: fixtureTeamMemberName("org-c2-senior-supervisor"),
     scope: "Tower Central",
+    steps: [
+      { id: "prepare", label: "Preparation", state: "complete", detail: "Preparation record is retained." },
+      { id: "check", label: "Checking", state: "complete", detail: "Checking record is retained." },
+      { id: "review", label: "Review", state: "complete", detail: "Review record is retained." },
+      { id: "client-approval", label: "Client approval", state: "complete", detail: "Client approval is recorded for the work item." },
+      { id: "filing", label: "Filing / submission", state: "complete", detail: "A submission result was reported; acceptance is not inferred." },
+      { id: "evidence", label: "Evidence / archiving", state: "current", detail: "Verify the available submission evidence." },
+    ],
+    components: [
+      { label: "Submission", state: "Reported", detail: "Reported result is retained; acceptance remains unverified." },
+      { label: "Payment", state: "Not shown", detail: "Payment is independent and is not established by this fixture." },
+      { label: "Evidence", state: "Needs verification", detail: "Evidence is not yet verified." },
+    ],
+    returnedFrom: "Evidence check",
   },
   {
     id: "work-03",
@@ -1044,6 +1088,19 @@ export const fixtureWork: FixtureWorkItem[] = [
     deadlineType: "TMF internal target",
     owner: fixtureTeamMemberName("org-c3-senior-supervisor"),
     scope: "Tower South",
+    steps: [
+      { id: "prepare", label: "Preparation", state: "complete", detail: "Preparation is recorded and ready for checking." },
+      { id: "check", label: "Checking", state: "current", detail: "Open the checking queue and complete the internal check." },
+      { id: "review", label: "Review", state: "not-started", detail: "Review follows successful checking." },
+      { id: "client-approval", label: "Client approval", state: "not-started", detail: "Client approval follows internal review." },
+      { id: "filing", label: "Filing / submission", state: "not-started", detail: "Not ready until required gates are complete." },
+      { id: "evidence", label: "Evidence / archiving", state: "not-started", detail: "Evidence follows the relevant action." },
+    ],
+    components: [
+      { label: "Submission", state: "Not started", detail: "Required internal control gates are not complete." },
+      { label: "Payment", state: "Not configured", detail: "Payment requirement is not shown in this fixture." },
+      { label: "Evidence", state: "Not started", detail: "Evidence will follow the relevant action." },
+    ],
   },
 ];
 

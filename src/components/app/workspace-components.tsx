@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 
-import { fixtureCalendar, fixtureClients, type FixtureException, type FixtureScope, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
+import { fixtureCalendar, fixtureClients, type FixtureException, type FixtureScope, type FixtureStatus, type FixtureWorkItem, type FixtureWorkStepState } from "@/lib/fixtures";
 import { StatusPill } from "../ui/status-pill";
 
 export const scopeOptions = [
@@ -223,9 +223,21 @@ export function DetailDrawer({
 export function WorkDetail({ work, onClose }: { work: FixtureWorkItem; onClose: () => void }) {
   const calendarItem = fixtureCalendar.find((item) => item.workId === work.id);
   const client = fixtureClients.find((item) => item.id === work.clientId);
+  const completedSteps = work.steps.filter((step) => step.state === "complete").length;
+  const stepStateLabel: Record<FixtureWorkStepState, string> = { complete: "Complete", current: "Current step", waiting: "Waiting", blocked: "Blocked", "not-started": "Not started", unresolved: "Unresolved" };
   return (
-    <DetailDrawer eyebrow="Work item" title={work.title} subtitle={`${work.client} · ${work.period}`} onClose={onClose}>
+    <DetailDrawer eyebrow="Work item" title={work.title} subtitle={`${work.client} · ${calendarItem?.returnLabel?.replace(" · ", " ") ?? "Work item"} · ${work.period}`} onClose={onClose}>
       <div className="drawer-status-row"><StatusLabel status={work.status} detail={work.statusReason} /><ConceptTag tone={work.blocker ? "blocker" : "neutral"}>{work.blocker ? "Blocker" : "No blocker"}</ConceptTag></div>
+      <section className="work-detail-progress" aria-labelledby="work-progress-title">
+        <div className="work-detail-progress__heading"><div><p className="eyebrow">Execution path</p><h3 id="work-progress-title">{completedSteps} of {work.steps.length} steps recorded</h3></div><span>{work.nextAction}</span></div>
+        <ol className="work-step-list">
+          {work.steps.map((step, index) => <li className={`work-step work-step--${step.state}`} key={step.id}>
+            <span className="work-step__marker" aria-hidden="true">{step.state === "complete" ? "✓" : index + 1}</span>
+            <span className="work-step__body"><strong>{step.label}</strong><small>{step.detail}</small></span>
+            <span className="work-step__state">{stepStateLabel[step.state]}</span>
+          </li>)}
+        </ol>
+      </section>
       <dl className="detail-list">
         <div><dt>Registration Unit</dt><dd>{work.registrationUnit}</dd></div>
         <div><dt>Current stage</dt><dd>{work.stage}</dd></div>
@@ -236,8 +248,12 @@ export function WorkDetail({ work, onClose }: { work: FixtureWorkItem; onClose: 
         {client && <div><dt>Control team</dt><dd>{client.assignment.preparer}<small>Preparer</small></dd><dd>{client.assignment.checker}<small>Checker</small></dd><dd>{client.assignment.reviewer}<small>Reviewer</small></dd><dd>{client.assignment.tower}<small>{client.assignment.cluster}</small></dd></div>}
         {work.blocker && <div><dt>Blocker</dt><dd>{work.blocker.category}<small>{work.blocker.reason}</small></dd></div>}
       </dl>
+      <section className="work-component-summary" aria-labelledby="work-components-title">
+        <div className="section-heading"><div><h3 id="work-components-title">Parallel control facts</h3><p>These do not collapse into one filing or payment status.</p></div></div>
+        <div className="work-component-summary__grid">{work.components.map((component) => <div key={component.label}><span>{component.label}</span><strong>{component.state}</strong><small>{component.detail}</small></div>)}</div>
+      </section>
       <div className="next-action-box"><span className="next-action-box__label">Next useful action</span><strong>{work.nextAction}</strong></div>
-      <p className="drawer-note">This review interaction does not change an external filing state.</p>
+      <p className="drawer-note">This is a read-only execution view in the fixture slice. It does not change an external filing, payment, or acceptance state.</p>
     </DetailDrawer>
   );
 }
