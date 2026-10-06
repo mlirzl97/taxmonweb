@@ -6,6 +6,7 @@ import {
   buildOrgChartTree,
   careerServiceLevelLabels,
   orgChartRagLabels,
+  operatingModelLabels,
   type OrgChartNode,
   type OrgChartRag,
   type OrgChartTreeNode,
@@ -35,6 +36,12 @@ function roleWithoutCluster(node: OrgChartNode): string {
 
 function signalsFor(node: OrgChartNode): string[] {
   const signals: string[] = [];
+  if (node.operatingModel === "SPECIALIST_CASE") {
+    if ((node.specialistCaseCount ?? 0) > 0) signals.push(`${node.specialistCaseCount} active case${node.specialistCaseCount === 1 ? "" : "s"}`);
+    if ((node.affectedTaxpayers ?? 0) > 0) signals.push(`${node.affectedTaxpayers} affected taxpayer${node.affectedTaxpayers === 1 ? "" : "s"}`);
+    if ((node.specialistAttention ?? 0) > 0) signals.push(`${node.specialistAttention} attention`);
+    return signals;
+  }
   if ((node.assignedClients ?? 0) > 0) signals.push(`${node.assignedClients} clients`);
   if ((node.activeWork ?? 0) > 0) signals.push(`${node.activeWork} active`);
   if ((node.coverageGaps ?? 0) > 0) signals.push(`${node.coverageGaps} gap${node.coverageGaps === 1 ? "" : "s"}`);
@@ -127,6 +134,10 @@ export function OrgChart({ nodes, onSelect }: OrgChartProps) {
 
       <div className="org-chart__context">
         <span className="org-chart__context-note">{isFiltered ? `${matchingCount} matching people · reporting context retained` : "Click a person to inspect operating context"}</span>
+        <div aria-label="Team operating models" className="org-chart__model-key">
+          <span><i className="org-chart__model-dot org-chart__model-dot--delivery" />{operatingModelLabels.DELIVERY}</span>
+          <span><i className="org-chart__model-dot org-chart__model-dot--specialist" />{operatingModelLabels.SPECIALIST_CASE}</span>
+        </div>
         <div className="org-chart__actions">
           <button className="org-chart__action" onClick={resetOverview} type="button">Reset overview</button>
           <button className="org-chart__action" onClick={collapseAll} type="button">Collapse all</button>
@@ -176,6 +187,7 @@ function OrgNodeCard({ childCount, node, expanded, hasChildren, onSelect, onTogg
             <b className="org-node__level">{node.careerServiceLevel} · {levelLabel}</b>
             <span className={`org-node__status org-node__status--${rag.toLowerCase()}`}><i aria-hidden="true" />{orgChartRagLabels[rag]}</span>
           </span>
+          {node.operatingModel === "SPECIALIST_CASE" && <span className="org-node__model">{operatingModelLabels.SPECIALIST_CASE}</span>}
           {signals.length > 0 && <span className="org-node__signals">{signals.map((signal) => <span key={signal}>{signal}</span>)}</span>}
           {node.sourceStatus !== "confirmed" && <span className="org-node__provisional">{node.sourceStatus === "chart-label-pending" ? "Name confirmation pending" : "Provisional structural role"}</span>}
         </span>

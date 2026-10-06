@@ -1,4 +1,4 @@
-import { fixtureClients, fixtureTeamMembers } from "@/lib/fixtures";
+import { fixtureClients, fixtureOrgDirectoryMembers } from "@/lib/fixtures";
 
 import { reconcileAssignments, reconcileAssignmentsByTower, reconcilePortfolioWeights } from "./portfolio-pressure-test";
 
@@ -6,7 +6,7 @@ import { reconcileAssignments, reconcileAssignmentsByTower, reconcilePortfolioWe
 export function buildPortfolioPressureTestReport() {
   return {
     population: reconcilePortfolioWeights(fixtureClients),
-    assignments: reconcileAssignments(fixtureClients, fixtureTeamMembers).map((member) => ({
+    assignments: reconcileAssignments(fixtureClients, fixtureOrgDirectoryMembers).map((member) => ({
       person: member.name,
       role: member.role,
       tower: member.tower,

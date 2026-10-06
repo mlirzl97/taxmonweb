@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fixtureClients, fixtureTeamMembers } from "@/lib/fixtures";
+import { fixtureClients, fixtureOrgDirectoryMembers } from "@/lib/fixtures";
 import { reconcileAssignments, reconcileAssignmentsByTower, reconcilePortfolioWeights } from "./portfolio-pressure-test";
 
 describe("client portfolio pressure-test fixture", () => {
@@ -31,8 +31,9 @@ describe("client portfolio pressure-test fixture", () => {
   });
 
   it("produces a deterministic assignment reconciliation with controlled gaps", () => {
-    const first = reconcileAssignments(fixtureClients, fixtureTeamMembers);
-    const second = reconcileAssignments(fixtureClients, fixtureTeamMembers);
+    const first = reconcileAssignments(fixtureClients, fixtureOrgDirectoryMembers);
+    const second = reconcileAssignments(fixtureClients, fixtureOrgDirectoryMembers);
+    const directoryNames = new Set(fixtureOrgDirectoryMembers.map((member) => member.name));
 
     expect(first).toEqual(second);
     expect(first.some((member) => member.preparer.aggregateWeight > 0)).toBe(true);
@@ -40,6 +41,7 @@ describe("client portfolio pressure-test fixture", () => {
     expect(first.some((member) => member.reviewer.aggregateWeight > 0)).toBe(true);
     expect(first.reduce((total, member) => total + member.assignmentControlGaps, 0)).toBeGreaterThan(0);
     expect(fixtureClients.filter((client) => client.assignment.preparer === client.assignment.checker || client.assignment.preparer === client.assignment.reviewer || client.assignment.checker === client.assignment.reviewer).length).toBeGreaterThan(0);
+    expect(fixtureClients.flatMap((client) => [client.assignment.preparer, client.assignment.checker, client.assignment.reviewer]).filter((name) => name !== "Unassigned").every((name) => directoryNames.has(name))).toBe(true);
   });
 
   it("reconciles all three tower populations without counting synthetic weight", () => {
@@ -49,5 +51,17 @@ describe("client portfolio pressure-test fixture", () => {
     expect(towers.reduce((total, tower) => total + tower.taxpayerCount, 0)).toBe(112);
     expect(towers.reduce((total, tower) => total + tower.aggregateWeight, 0)).toBe(225);
     expect(towers.every((tower) => Object.values(tower.weightMix).reduce((sum, count) => sum + count, 0) <= tower.taxpayerCount)).toBe(true);
+  });
+
+  it("uses the current Team directory as the tower population", () => {
+    const towers = reconcileAssignmentsByTower(fixtureClients);
+    expect(towers.map((tower) => [tower.tower, tower.taxpayerCount, tower.aggregateWeight])).toEqual([
+      ["Tower Central", 37, 76],
+      ["Tower North", 37, 74],
+      ["Tower South", 38, 75],
+    ]);
+    expect(fixtureOrgDirectoryMembers.filter((member) => member.tower === "Tower North")).toHaveLength(23);
+    expect(fixtureOrgDirectoryMembers.filter((member) => member.tower === "Tower Central")).toHaveLength(22);
+    expect(fixtureOrgDirectoryMembers.filter((member) => member.tower === "Tower South")).toHaveLength(22);
   });
 });

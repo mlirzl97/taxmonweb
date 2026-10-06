@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { fixtureClients, fixtureEnvironment, fixtureExceptions, fixtureWork, isSanitizedFixtureText, validateFixtureSet } from "./fixtures";
+import { fixtureCalendar, fixtureClients, fixtureClock, fixtureEnvironment, fixtureExceptions, fixtureWork, isSanitizedFixtureText, validateFixtureSet } from "./fixtures";
+import { getFixtureOperationalRecords } from "./fixtures-read-model";
 
 describe("demo fixture mechanism", () => {
   it("clearly labels local demo data and keeps external documents out of fixtures", () => {
@@ -16,5 +17,12 @@ describe("demo fixture mechanism", () => {
     expect(isSanitizedFixtureText("real TIN 123")).toBe(false);
     expect(isSanitizedFixtureText("https://example.sharepoint.com/file")).toBe(false);
     expect(isSanitizedFixtureText("synthetic fixture only")).toBe(true);
+  });
+
+  it("uses one operational fixture read model for calendar/work joins", () => {
+    const records = getFixtureOperationalRecords();
+    expect(records).toHaveLength(fixtureCalendar.length);
+    expect(records.every((record) => fixtureWork.some((work) => work.id === record.work.id))).toBe(true);
+    expect(fixtureClock.today).toBe("2026-10-05");
   });
 });

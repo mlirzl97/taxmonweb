@@ -2,10 +2,11 @@
 
 import { useMemo, useState } from "react";
 
-import { fixtureCalendar, fixtureClients, fixtureWork, type FixtureStatus } from "@/lib/fixtures";
+import { fixtureClock, fixtureClients, fixtureWork, type FixtureStatus } from "@/lib/fixtures";
+import { getFixtureOperationalRecords } from "@/lib/fixtures-read-model";
 import { isInScope, type ScopeFilter, WorkDetail } from "./workspace-components";
 
-const reviewDate = "2026-10-05";
+const reviewDate = fixtureClock.today;
 
 type DuePreset = "all" | "today" | "next-5" | "week" | "overdue" | "attention" | "blocked" | "statutory";
 
@@ -17,25 +18,21 @@ function compactReturnLabel(value: string) {
   return value.replace(" · ", " ");
 }
 
-function workForCalendar(item: (typeof fixtureCalendar)[number]) {
-  return fixtureWork.find((work) => work.id === item.workId);
-}
-
 export function DueRegisterView({ scope, preset = "all", dateFilter }: { scope: ScopeFilter; preset?: DuePreset; dateFilter?: string | null }) {
   const [search, setSearch] = useState("");
   const [due, setDue] = useState<DuePreset>(preset);
   const [status, setStatus] = useState<"all" | FixtureStatus>("all");
   const [selectedWorkId, setSelectedWorkId] = useState<string | null>(null);
 
-  const rows = useMemo(() => fixtureCalendar.filter((item) => {
-    const work = workForCalendar(item);
-    if (!isInScope(item.scope, scope) || !work) return false;
+  const operationalRecords = getFixtureOperationalRecords();
+  const rows = useMemo(() => operationalRecords.filter(({ calendar: item, work }) => {
+    if (!isInScope(item.scope, scope)) return false;
     if (dateFilter && item.calendarDate !== dateFilter) return false;
     const daysFromReview = Math.round((dateValue(item.calendarDate) - dateValue(reviewDate)) / 86_400_000);
     if (due === "today" && daysFromReview !== 0) return false;
     if (due === "next-5" && (daysFromReview < 0 || daysFromReview > 5)) return false;
     if (due === "week" && (daysFromReview < 0 || daysFromReview > 7)) return false;
-    if (due === "overdue" && !item.internalDeadline.toLowerCase().includes("overdue")) return false;
+    if (due === "overdue" && !work.deadline.toLowerCase().includes("overdue") && !item.internalDeadline.toLowerCase().includes("overdue")) return false;
     if (due === "attention" && work.status === "GREEN") return false;
     if (due === "blocked" && !work.blocker) return false;
     if (due === "statutory" && (item.statutoryDeadline === "Rule unresolved" || work.status !== "RED")) return false;
@@ -43,7 +40,7 @@ export function DueRegisterView({ scope, preset = "all", dateFilter }: { scope: 
     const query = search.trim().toLowerCase();
     if (query && ![item.client, item.returnLabel, item.period, work.owner, work.stage].some((value) => value.toLowerCase().includes(query))) return false;
     return true;
-  }).sort((a, b) => dateValue(a.calendarDate) - dateValue(b.calendarDate)), [dateFilter, due, scope, search, status]);
+  }).sort((a, b) => dateValue(a.calendar.calendarDate) - dateValue(b.calendar.calendarDate)), [dateFilter, due, operationalRecords, scope, search, status]);
 
   const selectedWork = selectedWorkId ? fixtureWork.find((work) => work.id === selectedWorkId) : undefined;
 
@@ -58,11 +55,9 @@ export function DueRegisterView({ scope, preset = "all", dateFilter }: { scope: 
       </div>
       <section aria-labelledby="due-register-title" className="panel panel--table due-register-panel">
         <div className="section-heading"><div><h2 id="due-register-title">Due register</h2></div><span className="section-heading__note">Internal target first</span></div>
-        <div className="due-register" role="table" aria-label="Due register">
-          <div className="due-register__header" role="row"><span>Target</span><span>Taxpayer</span><span>Return / submission</span><span>Period</span><span>Stage / status</span><span>Owner</span><span>Attention</span></div>
-          {rows.length === 0 ? <div className="inline-empty">No due work matches these filters.</div> : rows.map((item) => {
-            const work = workForCalendar(item);
-            if (!work) return null;
+        <div className="due-register" aria-label="Due register">
+          <div className="due-register__header"><span>Target</span><span>Taxpayer</span><span>Return / submission</span><span>Period</span><span>Stage / status</span><span>Owner</span><span>Attention</span></div>
+          {rows.length === 0 ? <div className="inline-empty">No due work matches these filters.</div> : rows.map(({ calendar: item, work }) => {
             return <button className="due-register__row" key={item.id} onClick={() => setSelectedWorkId(work.id)} type="button">
               <span className={`due-register__date due-register__date--${work.status.toLowerCase()}`}><strong>{item.calendarDate.slice(-2)}</strong><small>{item.internalDeadline.replace(/^.*?·\s*/, "")}</small></span>
               <span><strong>{item.client}</strong><small>{item.scope}</small></span>
@@ -81,16 +76,16 @@ export function DueRegisterView({ scope, preset = "all", dateFilter }: { scope: 
   );
 }
 
-export function CalendarView({ scope }: { scope: ScopeFilter }) {
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+export function CalendarView({ scope, selectedDate, onSelectDate }: { scope: ScopeFilter; selectedDate?: string | null; onSelectDate?: (date: string) => void }) {
   const [selectedWorkId, setSelectedWorkId] = useState<string | null>(null);
-  const year = 2026;
-  const month = 9;
+  const year = fixtureClock.year;
+  const month = fixtureClock.month;
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const cells = Array.from({ length: firstDay + daysInMonth }, (_, index) => index < firstDay ? null : index - firstDay + 1);
-  const scopedItems = fixtureCalendar.filter((item) => isInScope(item.scope, scope));
-  const selectedItems = selectedDate ? scopedItems.filter((item) => item.calendarDate === selectedDate) : [];
+  const operationalRecords = getFixtureOperationalRecords();
+  const scopedItems = operationalRecords.filter((record) => isInScope(record.scope, scope));
+  const selectedItems = selectedDate ? scopedItems.filter(({ calendar: item }) => item.calendarDate === selectedDate) : [];
 
   return (
     <>
@@ -100,11 +95,11 @@ export function CalendarView({ scope }: { scope: ScopeFilter }) {
         <div className="calendar-month__days calendar-month__days--compact">
           {cells.map((day, index) => {
             const date = day ? `2026-10-${String(day).padStart(2, "0")}` : null;
-            const items = date ? scopedItems.filter((item) => item.calendarDate === date) : [];
+            const items = date ? scopedItems.filter(({ calendar: item }) => item.calendarDate === date) : [];
             return <div className={`calendar-day${date && date === selectedDate ? " calendar-day--selected" : ""}${!day ? " calendar-day--empty" : ""}`} key={date ?? `empty-${index}`}>
-              {day && <button aria-label={`October ${day}${items.length ? `, ${items.length} due` : ""}`} className="calendar-day__date" onClick={() => setSelectedDate(date)} type="button"><span className="calendar-day__number">{day}</span></button>}
+              {day && <button aria-label={`October ${day}${items.length ? `, ${items.length} due` : ""}`} className="calendar-day__date" onClick={() => { if (date) onSelectDate?.(date); }} type="button"><span className="calendar-day__number">{day}</span></button>}
               {items.length > 0 && <div className="calendar-day__load"><strong>{items.length}</strong><small>due</small></div>}
-              {items.slice(0, 2).map((item) => <button className={`calendar-event calendar-event--${item.status.toLowerCase()}`} key={item.id} onClick={() => { setSelectedDate(item.calendarDate); setSelectedWorkId(item.workId); }} type="button"><span className="calendar-event__mark" /><span className="calendar-event__label">{compactReturnLabel(item.returnLabel)}</span></button>)}
+              {items.slice(0, 2).map(({ calendar: item, status, work }) => <button className={`calendar-event calendar-event--${status.toLowerCase()}`} key={item.id} onClick={() => { onSelectDate?.(item.calendarDate); setSelectedWorkId(work.id); }} type="button"><span className="calendar-event__mark" /><span className="calendar-event__label">{compactReturnLabel(item.returnLabel)}</span></button>)}
               {items.length > 2 && <span className="calendar-day__more">+{items.length - 2} more</span>}
             </div>;
           })}

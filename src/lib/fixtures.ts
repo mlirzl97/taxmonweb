@@ -3,10 +3,19 @@ export const fixtureEnvironment = {
   description: "Demonstration data only. No live client information or source documents are included.",
 } as const;
 
+/** Explicit clock for sanitized fixtures; screens must not infer dates from the host clock. */
+export const fixtureClock = {
+  today: "2026-10-05",
+  year: 2026,
+  month: 9,
+  label: "5 October 2026",
+} as const;
+
 export type FixtureScope = "Tower North" | "Tower Central" | "Tower South";
 export type FixtureStatus = "GREEN" | "AMBER" | "RED" | "UNRESOLVED";
 export type FixtureSourceWeightClassification = "Extremely Heavy" | "Heavy" | "Moderate" | "Light" | "Super Light";
 export type FixtureSource = "source_weighted_portfolio" | "synthetic_portfolio_test";
+export type FixtureOperatingModel = "DELIVERY" | "SPECIALIST_CASE";
 
 export type FixtureWorkItem = {
   id: string;
@@ -34,6 +43,7 @@ export type FixtureExtractionField = {
   sourcePage: string;
   confidence: "High" | "Review required" | "Missing";
   provenance: "2303-derived" | "Human correction" | "Not on source";
+  reviewState?: "unreviewed" | "corrected";
 };
 
 export type FixtureAuthority = {
@@ -126,18 +136,12 @@ export type FixtureTeamMember = {
   cluster: string;
   active: boolean;
   email: string;
+  operatingModel: FixtureOperatingModel;
+  specialistTeam?: "Tax Team";
   careerServiceLevel?: string;
   reportsToOrgNodeId?: string | null;
   assignmentAliases?: readonly string[];
 };
-
-export const fixtureTeamMembers: readonly FixtureTeamMember[] = [
-  { id: "member-m-santos", name: "M. Santos", title: "Tax Team Member", role: "Team Member", tower: "Tower North", cluster: "North Cluster", active: true, email: "m.santos@example.invalid" },
-  { id: "member-a-rivera", name: "A. Rivera", title: "Tax Reviewer", role: "Reviewer", tower: "Tower Central", cluster: "Central Cluster", active: true, email: "a.rivera@example.invalid" },
-  { id: "member-j-lim", name: "J. Lim", title: "Tax Team Member", role: "Team Member", tower: "Tower South", cluster: "South Cluster", active: true, email: "j.lim@example.invalid" },
-  { id: "member-r-cruz", name: "R. Cruz", title: "Tower Leader", role: "HOD / Leader", tower: "Tower North", cluster: "North Cluster", active: true, email: "r.cruz@example.invalid" },
-  { id: "member-tax-control", name: "Tax Control", title: "Cross-portfolio Tax Control", role: "Reviewer", tower: "All A&T", cluster: "Tax Control", active: true, email: "tax.control@example.invalid" },
-];
 
 // The supplied org-chart photo and the domain-owner corrections provide the
 // reporting shape. Lower cells not yet named remain explicit placeholders.
@@ -158,31 +162,31 @@ type FixtureOrgChartNode = {
 };
 
 const fixtureOrgChartSeedNodes: readonly FixtureOrgChartNode[] = [
-  { id: "org-liezl", name: "Liezl Maigue", careerServiceLevel: "5.2", title: "Senior Manager · HOD", role: "HOD", parentId: null, cluster: "All A&T", workloadPercent: 64, rag: "GREEN", statusReason: "Overall team load is within the current operating range.", sourceStatus: "confirmed" },
-  { id: "org-luiza", name: "Luiza Jimenez", careerServiceLevel: "5.1", title: "Manager · Operations", role: "Operations Manager", parentId: "org-liezl", cluster: "All A&T", workloadPercent: 76, rag: "AMBER", statusReason: "Cross-cluster coordination and promotion review are being monitored.", sourceStatus: "confirmed" },
+  { id: "org-liezl", name: "Synthetic chart node 01", careerServiceLevel: "5.2", title: "Senior Manager · HOD", role: "HOD", parentId: null, cluster: "All A&T", workloadPercent: 64, rag: "GREEN", statusReason: "Overall team load is within the current operating range.", sourceStatus: "confirmed" },
+  { id: "org-luiza", name: "Synthetic chart node 02", careerServiceLevel: "5.1", title: "Manager · Operations", role: "Operations Manager", parentId: "org-liezl", cluster: "All A&T", workloadPercent: 76, rag: "AMBER", statusReason: "Cross-cluster coordination and promotion review are being monitored.", sourceStatus: "confirmed" },
 
-  { id: "org-c1-leader", name: "Maricel", careerServiceLevel: "4.2", title: "Assistant Manager · Barangay Atilano", role: "Cluster Leader", parentId: "org-luiza", cluster: "Barangay Atilano", workloadPercent: 82, rag: "AMBER", statusReason: "Cluster workload is elevated.", sourceStatus: "confirmed" },
-  { id: "org-c2-leader", name: "Lourdes Ann Mandigma Eleato", careerServiceLevel: "4.2", title: "Assistant Manager · Barangay Beato", role: "Cluster Leader", parentId: "org-luiza", cluster: "Barangay Beato", workloadPercent: 58, rag: "GREEN", statusReason: "Cluster load is currently within the operating range.", sourceStatus: "confirmed" },
-  { id: "org-c3-leader", name: "Evangeline De Vera", careerServiceLevel: "4.2", title: "Assistant Manager · Barangay de Vera", role: "Cluster Leader", parentId: "org-luiza", cluster: "Barangay de Vera", workloadPercent: 88, rag: "RED", statusReason: "Cluster workload is above the current intervention threshold.", sourceStatus: "confirmed" },
+  { id: "org-c1-leader", name: "Synthetic chart node 03", careerServiceLevel: "4.2", title: "Assistant Manager · Barangay Atilano", role: "Cluster Leader", parentId: "org-luiza", cluster: "Barangay Atilano", workloadPercent: 82, rag: "AMBER", statusReason: "Cluster workload is elevated.", sourceStatus: "confirmed" },
+  { id: "org-c2-leader", name: "Synthetic chart node 04", careerServiceLevel: "4.2", title: "Assistant Manager · Barangay Beato", role: "Cluster Leader", parentId: "org-luiza", cluster: "Barangay Beato", workloadPercent: 58, rag: "GREEN", statusReason: "Cluster load is currently within the operating range.", sourceStatus: "confirmed" },
+  { id: "org-c3-leader", name: "Synthetic chart node 05", careerServiceLevel: "4.2", title: "Assistant Manager · Barangay de Vera", role: "Cluster Leader", parentId: "org-luiza", cluster: "Barangay de Vera", workloadPercent: 88, rag: "RED", statusReason: "Cluster workload is above the current intervention threshold.", sourceStatus: "confirmed" },
 
-  { id: "org-c1-senior-supervisor", name: "Reignerwin", careerServiceLevel: "4.1", title: "Senior Supervisor · Barangay Atilano", role: "Senior 4.1", parentId: "org-c1-leader", cluster: "Barangay Atilano", workloadPercent: 72, rag: "AMBER", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
-  { id: "org-c1-team-lead", name: "Trinity", careerServiceLevel: "3.2", title: "Experienced Team Lead · Barangay Atilano", role: "Experienced 3.2", parentId: "org-c1-leader", cluster: "Barangay Atilano", workloadPercent: 61, rag: "GREEN", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
+  { id: "org-c1-senior-supervisor", name: "Synthetic chart node 06", careerServiceLevel: "4.1", title: "Senior Supervisor · Barangay Atilano", role: "Senior 4.1", parentId: "org-c1-leader", cluster: "Barangay Atilano", workloadPercent: 72, rag: "AMBER", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
+  { id: "org-c1-team-lead", name: "Synthetic chart node 07", careerServiceLevel: "3.2", title: "Experienced Team Lead · Barangay Atilano", role: "Experienced 3.2", parentId: "org-c1-leader", cluster: "Barangay Atilano", workloadPercent: 61, rag: "GREEN", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
   { id: "org-c1-junior-supervisor", name: "Barangay Atilano · Supervisor", careerServiceLevel: "4.1", title: "Junior Supervisor", role: "Junior 4.1", parentId: "org-c1-senior-supervisor", cluster: "Barangay Atilano", workloadPercent: 67, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
   { id: "org-c1-senior-associate", name: "Barangay Atilano · Senior Associate", careerServiceLevel: "3.1", title: "Senior Associate", role: "Senior Associate", parentId: "org-c1-senior-supervisor", cluster: "Barangay Atilano", workloadPercent: 54, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
   { id: "org-c1-associate-a", name: "Barangay Atilano · Associate A", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c1-junior-supervisor", cluster: "Barangay Atilano", workloadPercent: 49, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
   { id: "org-c1-associate-b", name: "Barangay Atilano · Associate B", careerServiceLevel: "2.1", title: "Associate", role: "Associate", parentId: "org-c1-junior-supervisor", cluster: "Barangay Atilano", workloadPercent: 77, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
   { id: "org-c1-junior-associate", name: "Barangay Atilano · Junior Associate", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c1-team-lead", cluster: "Barangay Atilano", workloadPercent: 44, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
 
-  { id: "org-c2-senior-supervisor", name: "Minezka", careerServiceLevel: "4.1", title: "Supervisor · Barangay Beato", role: "4.1 Supervisor", parentId: "org-c2-leader", cluster: "Barangay Beato", workloadPercent: 69, rag: "AMBER", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
-  { id: "org-c2-team-lead", name: "April Roes", careerServiceLevel: "4.1", title: "Supervisor · Barangay Beato", role: "4.1 Supervisor", parentId: "org-c2-leader", cluster: "Barangay Beato", workloadPercent: 47, rag: "GREEN", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
+  { id: "org-c2-senior-supervisor", name: "Synthetic chart node 08", careerServiceLevel: "4.1", title: "Supervisor · Barangay Beato", role: "4.1 Supervisor", parentId: "org-c2-leader", cluster: "Barangay Beato", workloadPercent: 69, rag: "AMBER", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
+  { id: "org-c2-team-lead", name: "Synthetic chart node 09", careerServiceLevel: "4.1", title: "Supervisor · Barangay Beato", role: "4.1 Supervisor", parentId: "org-c2-leader", cluster: "Barangay Beato", workloadPercent: 47, rag: "GREEN", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
   { id: "org-c2-junior-supervisor", name: "Barangay Beato · Supervisor", careerServiceLevel: "4.1", title: "Junior Supervisor", role: "Junior 4.1", parentId: "org-c2-senior-supervisor", cluster: "Barangay Beato", workloadPercent: 73, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
   { id: "org-c2-senior-associate", name: "Barangay Beato · Senior Associate", careerServiceLevel: "3.1", title: "Senior Associate", role: "Senior Associate", parentId: "org-c2-senior-supervisor", cluster: "Barangay Beato", workloadPercent: 39, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
   { id: "org-c2-associate-a", name: "Barangay Beato · Associate A", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c2-junior-supervisor", cluster: "Barangay Beato", workloadPercent: 63, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
   { id: "org-c2-associate-b", name: "Barangay Beato · Associate B", careerServiceLevel: "2.1", title: "Associate", role: "Associate", parentId: "org-c2-junior-supervisor", cluster: "Barangay Beato", workloadPercent: 35, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
   { id: "org-c2-junior-associate", name: "Barangay Beato · Junior Associate", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c2-team-lead", cluster: "Barangay Beato", workloadPercent: 71, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
 
-  { id: "org-c3-senior-supervisor", name: "Mark Renzel", careerServiceLevel: "4.1", title: "Supervisor · Barangay de Vera", role: "4.1 Supervisor", parentId: "org-c3-leader", cluster: "Barangay de Vera", workloadPercent: 91, rag: "RED", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
-  { id: "org-c3-team-lead", name: "Viengeline", careerServiceLevel: "4.1", title: "Supervisor · Barangay de Vera", role: "4.1 Supervisor", parentId: "org-c3-leader", cluster: "Barangay de Vera", workloadPercent: 84, rag: "RED", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
+  { id: "org-c3-senior-supervisor", name: "Synthetic chart node 10", careerServiceLevel: "4.1", title: "Supervisor · Barangay de Vera", role: "4.1 Supervisor", parentId: "org-c3-leader", cluster: "Barangay de Vera", workloadPercent: 91, rag: "RED", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
+  { id: "org-c3-team-lead", name: "Synthetic chart node 11", careerServiceLevel: "4.1", title: "Supervisor · Barangay de Vera", role: "4.1 Supervisor", parentId: "org-c3-leader", cluster: "Barangay de Vera", workloadPercent: 84, rag: "RED", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
   { id: "org-c3-junior-supervisor", name: "Barangay de Vera · Supervisor", careerServiceLevel: "4.1", title: "Junior Supervisor", role: "Junior 4.1", parentId: "org-c3-senior-supervisor", cluster: "Barangay de Vera", workloadPercent: 78, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
   { id: "org-c3-senior-associate", name: "Barangay de Vera · Senior Associate", careerServiceLevel: "3.1", title: "Senior Associate", role: "Senior Associate", parentId: "org-c3-senior-supervisor", cluster: "Barangay de Vera", workloadPercent: 86, rag: "RED", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
   { id: "org-c3-associate-a", name: "Barangay de Vera · Associate A", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c3-junior-supervisor", cluster: "Barangay de Vera", workloadPercent: 74, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
@@ -245,7 +249,23 @@ const generatedOrgChartNodes: FixtureOrgChartNode[] = orgChartClusters.flatMap((
 // cross-portfolio Tax Control seat is included in the directory.
 generatedOrgChartNodes.push(illustratedOrgNode("org-c1-intern-02", "Atilano Intern 02", "1.1", "org-c1-senior-associate", "Barangay Atilano", 99));
 
-export const fixtureOrgChartNodes = [...fixtureOrgChartSeedNodes, ...generatedOrgChartNodes] as const;
+const syntheticFilipinoNames = [
+  "Ana Villanueva", "Miguel Santos", "Camille Reyes", "Paolo Bautista", "Janelle Garcia", "Rafael Mendoza", "Bianca Cruz", "Carlo Navarro", "Marissa Aquino", "Diego Flores",
+  "Katrina Ramos", "Enrico Mercado", "Liana Castillo", "Tomas Salazar", "Patricia Soriano", "Nico Valencia", "Clarisse Pascual", "Gabriel Cabrera", "Alyssa Dominguez", "Mateo Pineda",
+  "Beatriz Santiago", "Joaquin Dela Cruz", "Reina Ocampo", "Luis de Leon", "Monica Alvarado", "Emilio David", "Hazel Evangelista", "Andres Legaspi", "Celeste Tolentino", "Marco Villarama",
+  "Nina Galang", "Ramon Fajardo", "Isabel Magbanua", "Julian Dizon", "Joyce Marquez", "Adrian Natividad", "Lara Peralta", "Oscar Yap", "Sofia Manalo", "Victor Macapagal",
+  "Elena Robles", "Benedict Lim", "Celine Soriano", "Dennis Flores", "Erika Ramos", "Felix Mercado", "Grace Castillo", "Hector Salazar", "Irene Valencia", "Jonas Pascual",
+  "Karen Cabrera", "Leandro Dominguez", "Mara Pineda", "Noel Santiago", "Olivia Dela Cruz", "Pedro Villareal", "Queenie Ocampo", "Rico de Leon", "Sheila Alvarado", "Toby David",
+  "Uma Evangelista", "Wilfredo Legaspi", "Yasmin Tolentino", "Zandro Villarama", "Arianne Galang", "Berto Fajardo", "Cheska Magbanua", "Daryl Dizon", "Eunice Marquez",
+] as const;
+
+const rawFixtureOrgChartNodes = [...fixtureOrgChartSeedNodes, ...generatedOrgChartNodes] as const;
+
+if (rawFixtureOrgChartNodes.length !== syntheticFilipinoNames.length) {
+  throw new Error("Synthetic Team roster name count must match the org-chart node count.");
+}
+
+export const fixtureOrgChartNodes = rawFixtureOrgChartNodes.map((node, index) => ({ ...node, name: syntheticFilipinoNames[index] }));
 
 const orgNodeTower = (cluster: string): FixtureTeamMember["tower"] => {
   if (cluster === "Barangay Atilano") return "Tower North";
@@ -259,18 +279,10 @@ const orgNodeRole = (node: (typeof fixtureOrgChartNodes)[number]): FixtureTeamMe
   return "Team Member";
 };
 
-const fixtureAssignmentAliases: Record<string, readonly string[]> = {
-  "org-c1-leader": ["R. Cruz"],
-  "org-c1-senior-supervisor": ["M. Santos"],
-  "org-c2-senior-supervisor": ["A. Rivera"],
-  "org-c3-senior-supervisor": ["J. Lim"],
-};
-
-// Directory and chart intentionally share this roster. Assignment aliases keep
-// the existing synthetic portfolio fixture connected until assignments become
-// ID-based in the persisted command model.
+// Directory and chart intentionally share this roster. Names are deterministic
+// fictional Filipino fixtures and are not sourced from actual staff records.
 export const fixtureOrgDirectoryMembers: readonly FixtureTeamMember[] = [
-  ...fixtureOrgChartNodes.map((node) => ({
+  ...fixtureOrgChartNodes.map((node): FixtureTeamMember => ({
     id: node.id,
     name: node.name,
     title: node.title,
@@ -279,12 +291,18 @@ export const fixtureOrgDirectoryMembers: readonly FixtureTeamMember[] = [
     cluster: node.cluster,
     active: true,
     email: `${node.id}@example.invalid`,
+    operatingModel: node.id === "org-c2-team-lead" ? "SPECIALIST_CASE" : "DELIVERY",
+    ...(node.id === "org-c2-team-lead" ? { specialistTeam: "Tax Team" as const } : {}),
     careerServiceLevel: node.careerServiceLevel,
     reportsToOrgNodeId: node.parentId,
-    assignmentAliases: fixtureAssignmentAliases[node.id] ?? [],
+    assignmentAliases: [],
   })),
-  { id: "member-tax-control", name: "Tax Control", title: "Cross-portfolio Tax Control", role: "Reviewer", tower: "All A&T", cluster: "Tax Control", active: true, email: "tax.control@example.invalid", careerServiceLevel: undefined, reportsToOrgNodeId: null, assignmentAliases: [] },
+  { id: "member-tax-control", name: "Tax Control", title: "Cross-portfolio Tax Control", role: "Reviewer", tower: "All A&T", cluster: "Tax Control", active: true, email: "tax.control@example.invalid", operatingModel: "SPECIALIST_CASE", specialistTeam: "Tax Team", careerServiceLevel: undefined, reportsToOrgNodeId: null, assignmentAliases: [] },
 ];
+
+export function fixtureTeamMemberName(memberId: string): string {
+  return fixtureOrgDirectoryMembers.find((member) => member.id === memberId)?.name ?? "Unassigned";
+}
 
 export type FixtureClient = {
   id: string;
@@ -346,7 +364,7 @@ export const fixtureClients: FixtureClient[] = [
     profileSummary: "Active profile · 2303 structure reviewed",
     clientGroup: "Lakeshore Holdings (synthetic)",
     scope: "Tower North",
-    assignment: { preparer: "M. Santos", checker: "A. Rivera", reviewer: "J. Lim", tower: "Tower North", cluster: "Barangay Atilano", effectiveFrom: "Current assignment" },
+    assignment: { preparer: fixtureTeamMemberName("org-c1-team-lead"), checker: fixtureTeamMemberName("org-c1-junior-associate"), reviewer: fixtureTeamMemberName("org-c1-leader"), tower: "Tower North", cluster: "Barangay Atilano", effectiveFrom: "Current assignment" },
     entities: [{
       name: "Lakeshore Apparel Manufacturing Inc. (synthetic)",
       profile: {
@@ -362,7 +380,7 @@ export const fixtureClients: FixtureClient[] = [
     profileSummary: "Active profile · open audit context",
     clientGroup: "Northstar Group (synthetic)",
     scope: "Tower North",
-    assignment: { preparer: "R. Cruz", checker: "A. Rivera", reviewer: "J. Lim", tower: "Tower North", cluster: "Barangay Atilano", effectiveFrom: "Current assignment" },
+    assignment: { preparer: fixtureTeamMemberName("org-c1-senior-associate"), checker: fixtureTeamMemberName("org-c1-junior-associate"), reviewer: fixtureTeamMemberName("org-c1-leader"), tower: "Tower North", cluster: "Barangay Atilano", effectiveFrom: "Current assignment" },
     entities: [{
       name: "Northstar Services Taxpayer (synthetic)",
       profile: { registeredTaxpayerName: "Northstar Services Taxpayer (synthetic)", tinDisplay: "000-000-000-202", branchCode: "000", rdoOrLts: "Illustrative RDO/LTS", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · Central district", lineOfBusiness: "Illustrative services activity", registrationEffective: "Synthetic effective date", registrationStatus: "Active · synthetic", registeredActivities: "Illustrative services activity", tradeName: "Northstar Services (synthetic)", filingChannel: "eBIRForms", filingContext: "Electronic filing · synthetic setup", registeredTaxTypes: ["Income Tax · illustrative"], fiscalYearEnd: "Calendar year · illustrative", booksType: "Manual", invoicing: "Registration detail on file · synthetic", paymentRoute: "Client Pays", weight: 2, weightLabel: "Light", sourceWeightClassification: "Light", sourceFinalWeight: 2, fixtureSource: "source_weighted_portfolio", enateSetup: "No", profileState: "Active", sourceLabel: "Approved registration source · synthetic", sourceKind: "approved registration source", lastValidated: "Synthetic validation date", validator: "Tax Control · synthetic", authorities: [], auditExposures: [{ id: "audit-01", taxableYear: "2024", matter: "BIR audit exposure", status: "Open", asOf: "Synthetic as-of date", context: "High-level exposure context only.", source: "Approved audit source · synthetic" }, { id: "audit-02", taxableYear: "2023", matter: "BIR assessment context", status: "Under review", asOf: "Synthetic as-of date", context: "Technical case details are outside this profile.", source: "Approved audit source · synthetic" }], attention: [],
@@ -376,7 +394,7 @@ export const fixtureClients: FixtureClient[] = [
     entitySummary: "1 taxpayer entity · 1 head office",
     profileSummary: "Ready for validation · attention required",
     scope: "Tower Central",
-    assignment: { preparer: "A. Rivera", checker: "J. Lim", reviewer: "M. Santos", tower: "Tower Central", cluster: "Barangay Beato", effectiveFrom: "Current assignment" },
+    assignment: { preparer: fixtureTeamMemberName("org-c2-senior-associate"), checker: fixtureTeamMemberName("org-c2-junior-associate"), reviewer: fixtureTeamMemberName("org-c2-leader"), tower: "Tower Central", cluster: "Barangay Beato", effectiveFrom: "Current assignment" },
     entities: [{
       name: "Harborline Taxpayer (synthetic)",
       profile: { registeredTaxpayerName: "Harborline Taxpayer (synthetic)", tinDisplay: "000-000-000-303", branchCode: "000", rdoOrLts: "Needs review", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · Central district", lineOfBusiness: "Illustrative services activity", registrationEffective: "Needs source review", registrationStatus: "Pending validation", registeredActivities: "Review required", tradeName: "Harborline (synthetic)", filingChannel: "eFPS", filingContext: "Channel extracted; group unresolved", eFPSGroup: "Needs review", registeredTaxTypes: ["Income Tax · illustrative", "Withholding Tax · illustrative"], fiscalYearEnd: undefined, booksType: "Not configured", invoicing: "Not configured", paymentRoute: "Not configured", weight: 3, weightLabel: "Medium", sourceWeightClassification: "Moderate", sourceFinalWeight: 3, fixtureSource: "source_weighted_portfolio", enateSetup: "Unknown", profileState: "Ready for validation", sourceLabel: "Sanitized 2303 review fixture", sourceKind: "2303-derived", authorities: [], auditExposures: [], attention: ["RDO/LTS missing", "Fiscal year-end missing", "Payment route missing", "eNATE setup unknown"], extractionFields: sanitized2303Fields.map((field) => field.label === "Tax Type" ? { ...field, confidence: "Review required" as const } : field),
@@ -390,7 +408,7 @@ export const fixtureClients: FixtureClient[] = [
     entitySummary: "1 taxpayer entity · 2 registration units",
     profileSummary: "Active profile · multiple-unit edge case",
     scope: "Tower South",
-    assignment: { preparer: "J. Lim", checker: "M. Santos", reviewer: "A. Rivera", tower: "Tower South", cluster: "Barangay de Vera", effectiveFrom: "Current assignment" },
+    assignment: { preparer: fixtureTeamMemberName("org-c3-senior-associate"), checker: fixtureTeamMemberName("org-c3-junior-associate"), reviewer: fixtureTeamMemberName("org-c3-leader"), tower: "Tower South", cluster: "Barangay de Vera", effectiveFrom: "Current assignment" },
     entities: [{
       name: "Cedarfield Taxpayer (synthetic)",
       profile: { registeredTaxpayerName: "Cedarfield Taxpayer (synthetic)", tinDisplay: "000-000-000-404", branchCode: "000", rdoOrLts: "Illustrative RDO/LTS", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · South district", lineOfBusiness: "Illustrative holding activity", registrationEffective: "Synthetic effective date", registrationStatus: "Active · synthetic", registeredActivities: "Illustrative holding activity", tradeName: "Cedarfield (synthetic)", filingChannel: "eFPS", filingContext: "Electronic filing · synthetic setup", registeredTaxTypes: ["Value Added Tax · illustrative"], fiscalYearEnd: "Calendar year · illustrative", booksType: "CAS/CBA · illustrative", invoicing: "Synthetic invoicing registration context", paymentRoute: "Client Pays", weight: 3, weightLabel: "Medium", sourceWeightClassification: "Moderate", sourceFinalWeight: 3, fixtureSource: "source_weighted_portfolio", enateSetup: "No", profileState: "Active", sourceLabel: "Approved registration source · synthetic", sourceKind: "approved registration source", authorities: [], auditExposures: [], attention: [],
@@ -405,7 +423,7 @@ export const fixtureClients: FixtureClient[] = [
     profileSummary: "Active profile · sister company",
     clientGroup: "Northstar Group (synthetic)",
     scope: "Tower Central",
-    assignment: { preparer: "M. Santos", checker: "A. Rivera", reviewer: "J. Lim", tower: "Tower Central", cluster: "Barangay Beato", effectiveFrom: "Current assignment" },
+    assignment: { preparer: fixtureTeamMemberName("org-c2-team-lead"), checker: fixtureTeamMemberName("org-c2-junior-associate"), reviewer: fixtureTeamMemberName("org-c2-leader"), tower: "Tower Central", cluster: "Barangay Beato", effectiveFrom: "Current assignment" },
     entities: [{
       name: "Northstar Services Support Inc. (synthetic)",
       profile: { registeredTaxpayerName: "Northstar Services Support Inc. (synthetic)", tinDisplay: "000-000-000-505", branchCode: "000", rdoOrLts: "Illustrative LTS context", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · Manila district", lineOfBusiness: "Illustrative support services", registrationEffective: "Synthetic effective date", registrationStatus: "Active · synthetic", registeredActivities: "Illustrative support services", tradeName: "Northstar Support (synthetic)", filingChannel: "eFPS", filingContext: "Electronic filing · synthetic setup", registeredTaxTypes: ["Withholding Tax · illustrative"], fiscalYearEnd: "Calendar year · illustrative", booksType: "Loose-leaf", invoicing: "Synthetic invoicing context", paymentRoute: "TMF Pays", weight: 1, weightLabel: "Super Light", sourceWeightClassification: "Super Light", sourceFinalWeight: 1, fixtureSource: "source_weighted_portfolio", enateSetup: "Yes", profileState: "Active", sourceLabel: "Manual baseline · approved synthetic source", sourceKind: "manual validation", authorities: [], auditExposures: [], attention: [],
@@ -420,7 +438,7 @@ export const fixtureClients: FixtureClient[] = [
     profileSummary: "Setup incomplete · assignment conflict",
     clientGroup: "Cedarfield Group (synthetic)",
     scope: "Tower South",
-    assignment: { preparer: "Unassigned", checker: "J. Lim", reviewer: "J. Lim", tower: "Tower South", cluster: "Barangay de Vera", effectiveFrom: "Pending setup" },
+    assignment: { preparer: "Unassigned", checker: fixtureTeamMemberName("org-c3-senior-supervisor"), reviewer: fixtureTeamMemberName("org-c3-senior-supervisor"), tower: "Tower South", cluster: "Barangay de Vera", effectiveFrom: "Pending setup" },
     entities: [{
       name: "Cedarfield Operations Inc. (synthetic)",
       profile: { registeredTaxpayerName: "Cedarfield Operations Inc. (synthetic)", tinDisplay: "000-000-000-606", branchCode: "000", rdoOrLts: "Illustrative RDO/LTS", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · South district", lineOfBusiness: "Illustrative operations activity", registrationEffective: "Needs source review", registrationStatus: "Pending validation", registeredActivities: "Review required", tradeName: "Cedarfield Operations (synthetic)", filingChannel: "Not configured", filingContext: "Needs setup", registeredTaxTypes: ["Requires review"], fiscalYearEnd: undefined, booksType: "Not configured", invoicing: "Not configured", paymentRoute: "Client Pays", weight: 5, weightLabel: "Super Heavy", weightNote: "Setup fixture only.", sourceWeightClassification: "Extremely Heavy", sourceFinalWeight: 5, fixtureSource: "source_weighted_portfolio", enateSetup: "Unknown", profileState: "Setup incomplete", sourceLabel: "Manual baseline · synthetic", sourceKind: "manual validation", authorities: [], auditExposures: [], attention: ["Assignment incomplete", "Checker and Reviewer conflict", "Filing channel missing", "eNATE setup unknown"],
@@ -641,10 +659,11 @@ const generatedPortfolioClients = [
 fixtureClients.push(...generatedPortfolioClients);
 
 type AssignmentRole = "preparer" | "checker" | "reviewer";
+const portfolioAssignmentMembers = fixtureOrgDirectoryMembers.filter((member) => member.active && member.tower !== "All A&T" && member.operatingModel === "DELIVERY");
 const assignmentRolePools: Record<AssignmentRole, readonly FixtureTeamMember[]> = {
-  preparer: fixtureTeamMembers.filter((member) => member.name !== "Tax Control"),
-  checker: fixtureTeamMembers.filter((member) => member.name !== "Tax Control"),
-  reviewer: fixtureTeamMembers,
+  preparer: portfolioAssignmentMembers.filter((member) => member.role === "Team Member"),
+  checker: portfolioAssignmentMembers.filter((member) => member.role === "Team Member" || member.role === "HOD / Leader"),
+  reviewer: portfolioAssignmentMembers.filter((member) => member.role === "HOD / Leader"),
 };
 
 function assignPortfolioClients() {
@@ -719,6 +738,51 @@ function assignPortfolioClients() {
 
 assignPortfolioClients();
 
+/**
+ * Controlled Team fixture boundary for specialist work. This is intentionally
+ * not a Tax Audit workflow: it only proves that specialist cases can be
+ * surfaced beside, without mutating, recurring portfolio ownership.
+ */
+export type FixtureSpecialistCase = {
+  id: string;
+  caseType: "Tax Audit";
+  taxpayerClientId: string;
+  assigneeMemberIds: readonly string[];
+  accountableMemberId: string;
+  status: "Open" | "Under review";
+  attention: FixtureStatus;
+  attentionLabel: string;
+  deadlineLabel: string;
+  statusReason: string;
+};
+
+export const fixtureSpecialistCases: readonly FixtureSpecialistCase[] = [
+  {
+    id: "specialist-case-01",
+    caseType: "Tax Audit",
+    taxpayerClientId: "fixture-client-02",
+    assigneeMemberIds: ["org-c2-team-lead", "member-tax-control"],
+    accountableMemberId: "org-c2-team-lead",
+    status: "Under review",
+    attention: "AMBER",
+    attentionLabel: "Control attention",
+    deadlineLabel: "Synthetic control target · this week",
+    statusReason: "Controlled specialist-case fixture; the Tax Audit workflow is outside this Team slice.",
+  },
+  {
+    id: "specialist-case-02",
+    caseType: "Tax Audit",
+    taxpayerClientId: "fixture-client-04",
+    assigneeMemberIds: ["org-c2-team-lead"],
+    accountableMemberId: "org-c2-team-lead",
+    status: "Open",
+    attention: "GREEN",
+    attentionLabel: "Within current control range",
+    deadlineLabel: "Synthetic control target · next review",
+    statusReason: "Controlled specialist-case fixture; the Tax Audit workflow is outside this Team slice.",
+  },
+];
+
 export type FixtureComplianceItem = {
   id: string;
   clientId: string;
@@ -754,7 +818,7 @@ export const fixtureCompliance: FixtureComplianceItem[] = [
     deadlineState: "configured",
     statusLabel: "Awaiting client approval",
     status: "AMBER",
-    owner: "M. Santos",
+    owner: fixtureTeamMemberName("org-c1-team-lead"),
     attentionKind: "Blocker",
     workId: "work-01",
     componentSummary: { submission: "Ready after approval", payment: "Not applicable", attachments: "None indicated", evidence: "Pending after submission" },
@@ -793,7 +857,7 @@ export const fixtureCompliance: FixtureComplianceItem[] = [
     deadlineState: "configured",
     statusLabel: "Evidence to verify",
     status: "RED",
-    owner: "A. Rivera",
+    owner: fixtureTeamMemberName("org-c2-senior-supervisor"),
     attentionKind: "Exception",
     workId: "work-02",
     componentSummary: { submission: "Reported submitted", payment: "Awaiting confirmation", attachments: "None indicated", evidence: "Verification pending" },
@@ -813,7 +877,7 @@ export const fixtureCompliance: FixtureComplianceItem[] = [
     deadlineState: "unresolved",
     statusLabel: "Ready for checking",
     status: "UNRESOLVED",
-    owner: "J. Lim",
+    owner: fixtureTeamMemberName("org-c3-senior-supervisor"),
     attentionKind: "Exception",
     workId: "work-03",
     componentSummary: { submission: "Preparation recorded", payment: "No payment assertion", attachments: "None indicated", evidence: "Not started" },
@@ -833,7 +897,7 @@ export const fixtureCompliance: FixtureComplianceItem[] = [
     deadlineState: "configured",
     statusLabel: "Preparation in progress",
     status: "GREEN",
-    owner: "J. Lim",
+    owner: fixtureTeamMemberName("org-c3-senior-supervisor"),
     componentSummary: { submission: "In preparation", payment: "Not applicable", attachments: "Pending review", evidence: "Not started" },
     nextAction: "Complete preparation and send for checking",
     statusReason: "This return belongs to a taxpayer with multiple registration units.",
@@ -901,11 +965,11 @@ export type FixtureTeamHistory = {
 };
 
 export const fixtureTeamHistory: FixtureTeamHistory[] = [
-  { id: "team-history-01", clientId: "fixture-client-01", effectivePeriod: "Current assignment", preparer: "M. Santos", checker: "A. Rivera", reviewer: "J. Lim", tower: "Tower North", cluster: "North Cluster", reason: "Current assignment" },
-  { id: "team-history-02", clientId: "fixture-client-01", effectivePeriod: "Prior assignment", preparer: "R. Cruz", checker: "A. Rivera", reviewer: "J. Lim", tower: "Tower North", cluster: "North Cluster", reason: "Workload rebalance" },
-  { id: "team-history-03", clientId: "fixture-client-02", effectivePeriod: "Current assignment", preparer: "A. Rivera", checker: "J. Lim", reviewer: "M. Santos", tower: "Tower Central", cluster: "Central Cluster", reason: "Current assignment" },
-  { id: "team-history-04", clientId: "fixture-client-03", effectivePeriod: "Current assignment", preparer: "J. Lim", checker: "M. Santos", reviewer: "A. Rivera", tower: "Tower South", cluster: "South Cluster", reason: "Current assignment" },
-  { id: "team-history-05", clientId: "fixture-client-04", effectivePeriod: "Current assignment", preparer: "R. Cruz", checker: "A. Rivera", reviewer: "J. Lim", tower: "Tower North", cluster: "North Cluster", reason: "Current assignment" },
+  { id: "team-history-01", clientId: "fixture-client-01", effectivePeriod: "Current assignment", preparer: fixtureTeamMemberName("org-c1-team-lead"), checker: fixtureTeamMemberName("org-c1-junior-associate"), reviewer: fixtureTeamMemberName("org-c1-leader"), tower: "Tower North", cluster: "North Cluster", reason: "Current assignment" },
+  { id: "team-history-02", clientId: "fixture-client-01", effectivePeriod: "Prior assignment", preparer: fixtureTeamMemberName("org-c1-leader"), checker: fixtureTeamMemberName("org-c1-senior-supervisor"), reviewer: fixtureTeamMemberName("org-c2-senior-supervisor"), tower: "Tower North", cluster: "North Cluster", reason: "Workload rebalance" },
+  { id: "team-history-03", clientId: "fixture-client-02", effectivePeriod: "Current assignment", preparer: fixtureTeamMemberName("org-c2-team-lead"), checker: fixtureTeamMemberName("org-c2-junior-associate"), reviewer: fixtureTeamMemberName("org-c2-leader"), tower: "Tower Central", cluster: "Central Cluster", reason: "Current assignment" },
+  { id: "team-history-04", clientId: "fixture-client-03", effectivePeriod: "Current assignment", preparer: fixtureTeamMemberName("org-c3-team-lead"), checker: fixtureTeamMemberName("org-c3-junior-associate"), reviewer: fixtureTeamMemberName("org-c3-leader"), tower: "Tower South", cluster: "South Cluster", reason: "Current assignment" },
+  { id: "team-history-05", clientId: "fixture-client-04", effectivePeriod: "Current assignment", preparer: fixtureTeamMemberName("org-c1-leader"), checker: fixtureTeamMemberName("org-c1-senior-supervisor"), reviewer: fixtureTeamMemberName("org-c2-senior-supervisor"), tower: "Tower North", cluster: "North Cluster", reason: "Current assignment" },
 ];
 
 for (const history of fixtureTeamHistory) {
@@ -941,7 +1005,7 @@ export const fixtureWork: FixtureWorkItem[] = [
     statusReason: "Internal review is complete; client approval is still outstanding.",
     deadline: "Today · 3:00 PM",
     deadlineType: "Client / service milestone",
-    owner: "M. Santos",
+    owner: fixtureTeamMemberName("org-c1-team-lead"),
     scope: "Tower North",
     blocker: { category: "CLIENT APPROVAL", reason: "Client response is outstanding after internal review." },
   },
@@ -960,7 +1024,7 @@ export const fixtureWork: FixtureWorkItem[] = [
     statusReason: "A submission result has been reported, but control evidence is not verified.",
     deadline: "Overdue · control milestone",
     deadlineType: "Control milestone",
-    owner: "A. Rivera",
+    owner: fixtureTeamMemberName("org-c2-senior-supervisor"),
     scope: "Tower Central",
   },
   {
@@ -978,7 +1042,7 @@ export const fixtureWork: FixtureWorkItem[] = [
     statusReason: "Preparation is recorded and the next internal control step is available.",
     deadline: "Tomorrow · 5:00 PM",
     deadlineType: "TMF internal target",
-    owner: "J. Lim",
+    owner: fixtureTeamMemberName("org-c3-senior-supervisor"),
     scope: "Tower South",
   },
 ];
@@ -1010,7 +1074,7 @@ export const fixtureExceptions: FixtureException[] = [
     detail: "The internal review is complete; client response is outstanding.",
     severity: "AMBER",
     aging: "Aging: 1 day",
-    owner: "M. Santos",
+    owner: fixtureTeamMemberName("org-c1-team-lead"),
     nextAction: "Follow up on client approval",
   },
   {
@@ -1024,7 +1088,7 @@ export const fixtureExceptions: FixtureException[] = [
     detail: "A reported submission result exists, but evidence verification is pending.",
     severity: "RED",
     aging: "Open: 2 days",
-    owner: "A. Rivera",
+    owner: fixtureTeamMemberName("org-c2-senior-supervisor"),
     nextAction: "Verify the available submission evidence",
   },
   {
@@ -1052,7 +1116,7 @@ export const fixtureExceptions: FixtureException[] = [
     detail: "The approved service milestone is approaching while client approval is outstanding.",
     severity: "AMBER",
     aging: "Target today",
-    owner: "M. Santos",
+    owner: fixtureTeamMemberName("org-c1-team-lead"),
     nextAction: "Review the client dependency",
   },
 ];

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 
-import { fixtureCalendar, type FixtureException, type FixtureScope, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
+import { fixtureCalendar, fixtureClients, type FixtureException, type FixtureScope, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
 import { StatusPill } from "../ui/status-pill";
 
 export const scopeOptions = [
@@ -170,6 +170,8 @@ export function DetailDrawer({
 
   useEffect(() => {
     const previousActiveElement = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     closeButtonRef.current?.focus();
 
     function handleKeyDown(event: KeyboardEvent) {
@@ -195,18 +197,19 @@ export function DetailDrawer({
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
       previousActiveElement?.focus();
     };
   }, [onClose]);
 
   return (
     <div className="drawer-layer" role="presentation">
-      <button aria-label="Close detail panel" className="drawer-backdrop" onClick={onClose} type="button" />
-      <aside aria-label={`${eyebrow}: ${title}`} aria-modal="true" className="detail-drawer" ref={drawerRef} role="dialog">
+      <button aria-label="Close detail panel" className="drawer-backdrop" onClick={onClose} tabIndex={-1} type="button" />
+      <aside aria-labelledby="detail-drawer-title" aria-modal="true" className="detail-drawer" ref={drawerRef} role="dialog">
         <div className="detail-drawer__header">
           <div>
             <p className="eyebrow">{eyebrow}</p>
-            <h2>{title}</h2>
+            <h2 id="detail-drawer-title">{title}</h2>
             {subtitle && <p>{subtitle}</p>}
           </div>
           <button aria-label="Close detail panel" className="icon-button" onClick={onClose} ref={closeButtonRef} type="button">×</button>
@@ -219,6 +222,7 @@ export function DetailDrawer({
 
 export function WorkDetail({ work, onClose }: { work: FixtureWorkItem; onClose: () => void }) {
   const calendarItem = fixtureCalendar.find((item) => item.workId === work.id);
+  const client = fixtureClients.find((item) => item.id === work.clientId);
   return (
     <DetailDrawer eyebrow="Work item" title={work.title} subtitle={`${work.client} · ${work.period}`} onClose={onClose}>
       <div className="drawer-status-row"><StatusLabel status={work.status} detail={work.statusReason} /><ConceptTag tone={work.blocker ? "blocker" : "neutral"}>{work.blocker ? "Blocker" : "No blocker"}</ConceptTag></div>
@@ -229,6 +233,7 @@ export function WorkDetail({ work, onClose }: { work: FixtureWorkItem; onClose: 
         {calendarItem && <div><dt>Statutory deadline</dt><dd>{calendarItem.statutoryDeadline}<small>Adjusted date remains rule-dependent</small></dd></div>}
         {calendarItem && <div><dt>TMF package target</dt><dd>{calendarItem.internalDeadline}<small>Internal control target</small></dd></div>}
         <div><dt>Accountable owner</dt><dd>{work.owner}</dd></div>
+        {client && <div><dt>Control team</dt><dd>{client.assignment.preparer}<small>Preparer</small></dd><dd>{client.assignment.checker}<small>Checker</small></dd><dd>{client.assignment.reviewer}<small>Reviewer</small></dd><dd>{client.assignment.tower}<small>{client.assignment.cluster}</small></dd></div>}
         {work.blocker && <div><dt>Blocker</dt><dd>{work.blocker.category}<small>{work.blocker.reason}</small></dd></div>}
       </dl>
       <div className="next-action-box"><span className="next-action-box__label">Next useful action</span><strong>{work.nextAction}</strong></div>

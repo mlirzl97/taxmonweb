@@ -1,4 +1,11 @@
-import { getClientWorkloadWeight, type FixtureClient, type FixtureTeamMember, type FixtureWorkItem } from "@/lib/fixtures";
+import {
+  getClientWorkloadWeight,
+  type FixtureClient,
+  type FixtureOperatingModel,
+  type FixtureSpecialistCase,
+  type FixtureTeamMember,
+  type FixtureWorkItem,
+} from "@/lib/fixtures";
 
 export const careerServiceLevelLabels = {
   "5.2": "Senior Manager",
@@ -28,10 +35,14 @@ export type OrgChartNode = {
   statusReason: string;
   photoUrl?: string | null;
   sourceStatus: "confirmed" | "chart-label-pending" | "illustrative";
+  operatingModel?: FixtureOperatingModel;
   assignedClients?: number;
   clientWeight?: number;
   activeWork?: number;
   coverageGaps?: number;
+  specialistCaseCount?: number;
+  affectedTaxpayers?: number;
+  specialistAttention?: number;
 };
 
 export type OrgChartTreeNode = OrgChartNode & { children: OrgChartTreeNode[] };
@@ -41,6 +52,11 @@ export const orgChartRagLabels: Record<OrgChartRag, string> = {
   AMBER: "Amber",
   RED: "Red",
   UNRESOLVED: "Unresolved",
+};
+
+export const operatingModelLabels: Record<FixtureOperatingModel, string> = {
+  DELIVERY: "Recurring portfolio",
+  SPECIALIST_CASE: "Specialist cases",
 };
 
 export function clampWorkloadPercent(value: number): number {
@@ -63,11 +79,16 @@ export function buildOrgChartTree(nodes: readonly OrgChartNode[]): OrgChartTreeN
 }
 
 export type TeamMemberLoad = FixtureTeamMember & {
+  portfolioApplicable: boolean;
   assignedClients: number;
   clientWeight: number;
   activeWork: number;
   coverageGaps: number;
   assignedClientIds: string[];
+  specialistCaseIds: string[];
+  activeSpecialistCases: number;
+  affectedTaxpayers: number;
+  specialistAttention: number;
 };
 
 export type TeamTowerSummary = {
@@ -80,29 +101,47 @@ export type TeamTowerSummary = {
   coverageGaps: number;
 };
 
+export type TeamSpecialistSummary = {
+  memberCount: number;
+  caseCount: number;
+  affectedTaxpayerCount: number;
+  attentionCount: number;
+};
+
 export function deriveTeamMemberLoad(
   members: readonly FixtureTeamMember[],
   clients: readonly FixtureClient[],
   work: readonly FixtureWorkItem[],
+  specialistCases: readonly FixtureSpecialistCase[] = [],
 ): TeamMemberLoad[] {
   return members.map((member) => {
     const assignmentNames = [member.name, ...(member.assignmentAliases ?? [])];
-    const assignedClients = clients.filter((client) => assignmentNames.some((name) => isAssignedToMember(client, name)));
+    const portfolioApplicable = member.operatingModel === "DELIVERY";
+    const assignedClients = portfolioApplicable
+      ? clients.filter((client) => assignmentNames.some((name) => isAssignedToMember(client, name)))
+      : [];
     const assignedClientIds = assignedClients.map((client) => client.id);
+    const assignedSpecialistCases = specialistCases.filter((specialistCase) => specialistCase.assigneeMemberIds.includes(member.id));
+    const affectedTaxpayerIds = new Set(assignedSpecialistCases.map((specialistCase) => specialistCase.taxpayerClientId));
 
     return {
       ...member,
+      portfolioApplicable,
       assignedClients: assignedClients.length,
       clientWeight: assignedClients.reduce((total, client) => total + getClientWorkloadWeight(client), 0),
-      activeWork: work.filter((item) => assignmentNames.includes(item.owner)).length,
+      activeWork: portfolioApplicable ? work.filter((item) => assignmentNames.includes(item.owner)).length : 0,
       coverageGaps: assignedClients.filter((client) => hasCoverageGap(client)).length,
       assignedClientIds,
+      specialistCaseIds: assignedSpecialistCases.map((specialistCase) => specialistCase.id),
+      activeSpecialistCases: assignedSpecialistCases.length,
+      affectedTaxpayers: affectedTaxpayerIds.size,
+      specialistAttention: assignedSpecialistCases.filter((specialistCase) => specialistCase.attention === "AMBER" || specialistCase.attention === "RED" || specialistCase.attention === "UNRESOLVED").length,
     };
   });
 }
 
 export function overlayOrgChartLoad(nodes: readonly OrgChartNode[], load: readonly TeamMemberLoad[]): OrgChartNode[] {
-  const maxClientWeight = Math.max(...load.map((member) => member.clientWeight), 0);
+  const maxClientWeight = Math.max(...load.filter((member) => member.portfolioApplicable).map((member) => member.clientWeight), 0);
   const byName = new Map(load.map((member) => [member.name, member]));
 
   return nodes.map((node) => {
@@ -111,11 +150,15 @@ export function overlayOrgChartLoad(nodes: readonly OrgChartNode[], load: readon
 
     return {
       ...node,
-      workloadPercent: maxClientWeight === 0 ? 0 : Math.round((member.clientWeight / maxClientWeight) * 100),
+      operatingModel: member.operatingModel,
+      workloadPercent: member.portfolioApplicable && maxClientWeight > 0 ? Math.round((member.clientWeight / maxClientWeight) * 100) : 0,
       assignedClients: member.assignedClients,
       clientWeight: member.clientWeight,
       activeWork: member.activeWork,
       coverageGaps: member.coverageGaps,
+      specialistCaseCount: member.activeSpecialistCases,
+      affectedTaxpayers: member.affectedTaxpayers,
+      specialistAttention: member.specialistAttention,
     };
   });
 }
@@ -125,7 +168,7 @@ export function deriveTeamTowerSummary(load: readonly TeamMemberLoad[], clients:
 
   return towers.map((tower) => {
     const towerClients = clients.filter((client) => client.assignment.tower === tower);
-    const towerMembers = load.filter((member) => member.tower === tower);
+    const towerMembers = load.filter((member) => member.tower === tower && member.operatingModel === "DELIVERY");
 
     return {
       tower,
@@ -137,6 +180,18 @@ export function deriveTeamTowerSummary(load: readonly TeamMemberLoad[], clients:
       coverageGaps: towerClients.filter(hasCoverageGap).length,
     };
   });
+}
+
+export function deriveTeamSpecialistSummary(
+  load: readonly TeamMemberLoad[],
+  specialistCases: readonly FixtureSpecialistCase[],
+): TeamSpecialistSummary {
+  return {
+    memberCount: load.filter((member) => member.operatingModel === "SPECIALIST_CASE").length,
+    caseCount: specialistCases.length,
+    affectedTaxpayerCount: new Set(specialistCases.map((specialistCase) => specialistCase.taxpayerClientId)).size,
+    attentionCount: specialistCases.filter((specialistCase) => specialistCase.attention === "AMBER" || specialistCase.attention === "RED" || specialistCase.attention === "UNRESOLVED").length,
+  };
 }
 
 export function isAssignedToMember(client: FixtureClient, memberName: string): boolean {
