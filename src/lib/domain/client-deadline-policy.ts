@@ -28,6 +28,15 @@ const leadDayKeys: ReadonlyArray<keyof Omit<ClientDeadlinePolicy, "mode" | "sour
 
 export const defaultClientDeadlinePolicy: ClientDeadlinePolicy = { mode: "follow_group" };
 
+/** Prototype group operating schedule used when a client follows the group policy. */
+export const defaultGroupScheduleLeadDays = {
+  clientProvideLeadDays: 5,
+  clientApprovalLeadDays: 2,
+  tmfPackageLeadDays: 1,
+  estimatedFilingLeadDays: 1,
+  estimatedPaymentLeadDays: 2,
+} as const satisfies Required<Omit<ClientDeadlinePolicy, "mode" | "sourceReference">>;
+
 export function isValidClientDeadlineLeadDays(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 365;
 }

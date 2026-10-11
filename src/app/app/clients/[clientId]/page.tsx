@@ -11,17 +11,16 @@ import { requireModuleAccess } from "@/lib/server/module-access";
 export default async function ClientWorkspacePage({ params }: { params: Promise<{ clientId: string }> }) {
   await requireModuleAccess("clients");
   const { clientId } = await params;
-  const liveClient = await getPortfolioClient(clientId);
   // Fixture records are intentionally available only in the explicitly gated
   // sanitized prototype. Production must never resolve an unknown client to a
   // local fixture, even when the requested id happens to match one.
-  const client = liveClient
-    ? portfolioClientToFixtureClient(liveClient)
-    : isPrototypeDemoMode()
-      ? fixtureClients.find((item) => item.id === clientId)
-      : undefined;
+  const prototypeMode = isPrototypeDemoMode();
+  const liveClient = prototypeMode ? null : await getPortfolioClient(clientId);
+  const client = prototypeMode
+    ? fixtureClients.find((item) => item.id === clientId)
+    : liveClient ? portfolioClientToFixtureClient(liveClient) : undefined;
 
   if (!client) notFound();
 
-  return <FixturePageFrame><ClientWorkspace calibrationEditMode={isCalibrationOpenEditMode()} client={client} demoMode={isPrototypeDemoMode()} serverAuthorized={Boolean(liveClient)} /></FixturePageFrame>;
+  return <FixturePageFrame><ClientWorkspace calibrationEditMode={isCalibrationOpenEditMode()} client={client} demoMode={prototypeMode} serverAuthorized={Boolean(liveClient)} /></FixturePageFrame>;
 }

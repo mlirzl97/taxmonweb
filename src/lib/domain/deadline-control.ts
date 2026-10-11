@@ -1,7 +1,8 @@
 import { type FixtureClient } from "@/lib/fixtures";
 import { forms } from "@/lib/domain/tax-foundation-catalog";
+import { normalizeReturnSearchText } from "@/lib/domain/client-return-selection";
 import { calculateDeadline, calculateInternalTarget, type DeadlinePolicyVersion, type VerificationStatus } from "@/lib/domain/tax-foundation";
-import { normalizeClientDeadlinePolicy, workingDaysBefore, type ClientDeadlinePolicy } from "@/lib/domain/client-deadline-policy";
+import { defaultGroupScheduleLeadDays, normalizeClientDeadlinePolicy, workingDaysBefore, type ClientDeadlinePolicy } from "@/lib/domain/client-deadline-policy";
 
 /**
  * Prototype projection over the canonical Requirement/Rule/Calendar concepts.
@@ -230,9 +231,11 @@ function calculateRow(formNumber: string, year: number, period: ReturnType<typeo
   };
 }
 
-export function buildDeadlineControlRows(year: number): DeadlineControlRow[] {
+export function buildDeadlineControlRows(year: number, requestedFormNumbers?: readonly string[]): DeadlineControlRow[] {
+  const requested = requestedFormNumbers ? new Set(requestedFormNumbers) : undefined;
   return forms
-    .filter((form) => Object.prototype.hasOwnProperty.call(ruleSeeds, form.formNumber))
+    // Global control must expose every governed return so missing rules are actionable.
+    .filter((form) => requested ? requested.has(form.formNumber) : form.taxTypeCodes.length > 0)
     .flatMap((form) => rowPeriods(form.formNumber, year).map((period) => calculateRow(form.formNumber, year, period)));
 }
 
@@ -246,19 +249,36 @@ function taxTypeMatches(formNumber: string, taxTypes: readonly string[]) {
 }
 
 export function clientCandidateFormNumbers(client: FixtureClient) {
+  const configuredReturns = client.entities[0]?.profile.registeredReturnCodes ?? [];
+  if (configuredReturns.length > 0) {
+    return [...new Set(configuredReturns.flatMap((configuredReturn) => {
+      const normalized = normalizeReturnSearchText(configuredReturn);
+      return forms.find((form) => form.taxTypeCodes.length > 0 && normalizeReturnSearchText(form.formNumber) === normalized)?.formNumber ?? [];
+    }))];
+  }
   const taxTypes = client.entities[0]?.profile.registeredTaxTypes ?? [];
   return [...new Set(forms.filter((form) => form.taxTypeCodes.length > 0 && form.formNumber in ruleSeeds && taxTypeMatches(form.formNumber, taxTypes)).map((form) => form.formNumber))];
 }
 
 export function getClientServiceCalendarRows(client: FixtureClient, year: number, overrides: Readonly<Record<string, DeadlinePublicationOverride>> = {}): { rows: ClientServiceCalendarRow[]; heldRows: DeadlineControlRow[] } {
-  const candidateForms = new Set(clientCandidateFormNumbers(client));
+  const candidateForms = clientCandidateFormNumbers(client);
   const clientDeadlinePolicy = normalizeClientDeadlinePolicy(client.entities[0]?.profile.deadlinePolicy);
-  const candidateRows = buildDeadlineControlRows(year)
-    .filter((row) => candidateForms.has(row.formNumber))
+  const goLiveDate = client.entities[0]?.profile.goLiveDate;
+  const goLiveYear = goLiveDate ? Number(goLiveDate.slice(0, 4)) : undefined;
+  const goLiveMonth = goLiveDate ? new Date(`${goLiveDate}T00:00:00Z`).getUTCMonth() : undefined;
+  const candidateRows = buildDeadlineControlRows(year, candidateForms)
     .map((row) => {
       const override = overrides[row.id];
       if (!override) return row;
       return { ...row, publicationStatus: override.status, publishedOperationalDeadline: override.status === "published" ? override.publishedOperationalDeadline ?? row.adjustedStatutoryDeadline : null };
+    })
+    .filter((row) => {
+      if (goLiveYear === undefined || !Number.isFinite(goLiveYear) || !goLiveDate) return true;
+      const effectiveDeadline = row.publishedOperationalDeadline ?? row.adjustedStatutoryDeadline;
+      if (effectiveDeadline) return effectiveDeadline > goLiveDate;
+      // An unresolved rule has no date to compare. Keep only periods that are
+      // not definitely before go-live so the missing rule remains visible as a gate.
+      return row.calendarYear > goLiveYear || (row.calendarYear === goLiveYear && (goLiveMonth === undefined || !Number.isFinite(goLiveMonth) || monthNames.indexOf(row.activityMonth as typeof monthNames[number]) >= goLiveMonth));
     });
   const rows = candidateRows.filter((row) => row.publicationStatus === "published" && row.publishedOperationalDeadline).map((row) => ({
     ...row,
@@ -276,7 +296,10 @@ export function getClientServiceCalendarRows(client: FixtureClient, year: number
 function clientTimingDate(policy: ClientDeadlinePolicy, publishedDate: string | null, key: keyof Omit<ClientDeadlinePolicy, "mode" | "sourceReference">, groupValue: string | null = "Follow group schedule") {
   if (!publishedDate) return "Not configured";
   const leadDays = policy[key];
-  if (policy.mode === "follow_group") return groupValue ?? "Not configured";
+  if (policy.mode === "follow_group") {
+    if (key === "tmfPackageLeadDays" && groupValue && groupValue !== "Follow group schedule") return groupValue;
+    return workingDaysBefore(publishedDate, defaultGroupScheduleLeadDays[key]) ?? "Not configured";
+  }
   return leadDays === undefined ? "Not configured" : workingDaysBefore(publishedDate, leadDays) ?? "Not configured";
 }
 

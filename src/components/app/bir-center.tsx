@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import type { BirOfficeReference } from "@/lib/server/bir-center-repository";
 import type { TaxFoundationForm, TaxFoundationTaxType } from "@/lib/server/tax-foundation-repository";
@@ -14,13 +14,14 @@ type TaxTypeGroup = { code: string; label: string; taxTypeCodes: readonly string
 
 export function BirCenter({ offices, taxpayers, taxTypes, forms }: { offices: BirOfficeReference[]; taxpayers: BirTaxpayerLink[]; taxTypes: TaxFoundationTaxType[]; forms: TaxFoundationForm[] }) {
   const [activeTab, setActiveTab] = useState<"tax_map" | "directory" | "regulatory_updates">("tax_map");
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [taxQuery, setTaxQuery] = useState("");
   const [officeQuery, setOfficeQuery] = useState("");
   const [officeDetailOpen, setOfficeDetailOpen] = useState(false);
   const [selectedOfficeCode, setSelectedOfficeCode] = useState(() => offices.find((office) => office.code === "RDO-50")?.code ?? offices[0]?.code ?? "");
   const normalizedTaxQuery = taxQuery.trim().toLowerCase();
   const normalizedOfficeQuery = officeQuery.trim().toLowerCase();
-  const taxTypeGroups = buildTaxTypeGroups(taxTypes);
+  const taxTypeGroups = buildTaxTypeGroups(taxTypes, forms);
   const visibleGroups = taxTypeGroups.filter((group) => {
     return matches(normalizedTaxQuery, [group.label, group.code, group.cadence, ...group.forms.flatMap((form) => [form.formNumber, form.title])]);
   });
@@ -35,13 +36,44 @@ export function BirCenter({ offices, taxpayers, taxTypes, forms }: { offices: Bi
         <div className="module-header__right"><span className="module-count">Governed reference</span></div>
       </header>
 
-      <nav aria-label="BIR Center views" className="bir-center-tabs bir-center-tabs--primary module-tabs">
-        <button aria-pressed={activeTab === "tax_map"} className={activeTab === "tax_map" ? "bir-center-tab is-active" : "bir-center-tab"} onClick={() => setActiveTab("tax_map")} type="button">Tax map</button>
-        <button aria-pressed={activeTab === "directory"} className={activeTab === "directory" ? "bir-center-tab is-active" : "bir-center-tab"} onClick={() => setActiveTab("directory")} type="button">BIR directory</button>
-        <button aria-pressed={activeTab === "regulatory_updates"} className={activeTab === "regulatory_updates" ? "bir-center-tab is-active" : "bir-center-tab"} onClick={() => setActiveTab("regulatory_updates")} type="button">Regulatory updates</button>
-      </nav>
+      <div aria-label="BIR Center views" className="bir-center-tabs bir-center-tabs--primary module-tabs" role="tablist">
+        {([
+          ["tax_map", "Tax map"],
+          ["directory", "BIR directory"],
+          ["regulatory_updates", "Regulatory updates"],
+        ] as const).map(([value, label]) => <button
+          aria-controls={`bir-center-panel-${value}`}
+          aria-selected={activeTab === value}
+          className={activeTab === value ? "bir-center-tab is-active" : "bir-center-tab"}
+          id={`bir-center-tab-${value}`}
+          key={value}
+          onClick={() => setActiveTab(value)}
+          onKeyDown={(event) => {
+            if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"].includes(event.key)) return;
+            event.preventDefault();
+            const tabs = ["tax_map", "directory", "regulatory_updates"] as const;
+            const currentIndex = tabs.indexOf(value);
+            const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (currentIndex + (event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : -1) + tabs.length) % tabs.length;
+            const nextTab = tabs[nextIndex];
+            setActiveTab(nextTab);
+            tabRefs.current[nextTab]?.focus();
+          }}
+          ref={(element) => { tabRefs.current[value] = element; }}
+          role="tab"
+          tabIndex={activeTab === value ? 0 : -1}
+          type="button"
+        >{label}</button>)}
+      </div>
 
-      {activeTab === "tax_map" ? <TaxMap groups={visibleGroups} forms={forms} query={taxQuery} onQueryChange={setTaxQuery} /> : activeTab === "directory" ? <BirDirectory offices={visibleOffices} selectedOffice={selectedOffice} selectedOfficeCode={selectedOfficeCode} linkedTaxpayers={linkedTaxpayers} query={officeQuery} onQueryChange={setOfficeQuery} onSelect={(code) => { setSelectedOfficeCode(code); setOfficeDetailOpen(true); }} onCloseDetails={() => setOfficeDetailOpen(false)} detailOpen={officeDetailOpen} /> : <RegulatoryUpdates />}
+      <div aria-labelledby="bir-center-tab-tax_map" className="bir-center-tabpanel" hidden={activeTab !== "tax_map"} id="bir-center-panel-tax_map" role="tabpanel" tabIndex={0}>
+        <TaxMap groups={visibleGroups} forms={forms} query={taxQuery} onQueryChange={setTaxQuery} />
+      </div>
+      <div aria-labelledby="bir-center-tab-directory" className="bir-center-tabpanel" hidden={activeTab !== "directory"} id="bir-center-panel-directory" role="tabpanel" tabIndex={0}>
+        <BirDirectory offices={visibleOffices} selectedOffice={selectedOffice} selectedOfficeCode={selectedOfficeCode} linkedTaxpayers={linkedTaxpayers} query={officeQuery} onQueryChange={setOfficeQuery} onSelect={(code) => { setSelectedOfficeCode(code); setOfficeDetailOpen(true); }} onCloseDetails={() => setOfficeDetailOpen(false)} detailOpen={officeDetailOpen} />
+      </div>
+      <div aria-labelledby="bir-center-tab-regulatory_updates" className="bir-center-tabpanel" hidden={activeTab !== "regulatory_updates"} id="bir-center-panel-regulatory_updates" role="tabpanel" tabIndex={0}>
+        <RegulatoryUpdates />
+      </div>
   </FixturePageFrame>
   );
 }
@@ -115,7 +147,7 @@ function OfficeDetailDrawer({ office, linkedTaxpayers, onClose }: { office: BirO
   </DetailDrawer>;
 }
 
-function buildTaxTypeGroups(taxTypes: readonly TaxFoundationTaxType[]): TaxTypeGroup[] {
+function buildTaxTypeGroups(taxTypes: readonly TaxFoundationTaxType[], forms: readonly TaxFoundationForm[]): TaxTypeGroup[] {
   const definitions: Array<{ code: string; label: string; codes: readonly string[]; cadence: string }> = [
     { code: "CIT", label: "CIT", codes: ["CIT"], cadence: "Unresolved" },
     { code: "VAT_PERCENTAGE", label: "VAT / Percentage Tax", codes: ["VAT", "PERCENTAGE_TAX"], cadence: "Unresolved" },
@@ -126,7 +158,7 @@ function buildTaxTypeGroups(taxTypes: readonly TaxFoundationTaxType[]): TaxTypeG
     code: definition.code,
     label: definition.label,
     taxTypeCodes: taxTypes.filter((taxType) => definition.codes.includes(taxType.code)).map((taxType) => taxType.code),
-    forms: [],
+    forms: forms.filter((form) => definition.codes.some((code) => form.taxTypeCodes.includes(code))),
     cadence: definition.cadence,
   }));
 }

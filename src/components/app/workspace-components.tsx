@@ -173,6 +173,7 @@ export function DetailDrawer({
   const drawerRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
+  const subtitleId = useId();
 
   useEffect(() => {
     const previousActiveElement = document.activeElement as HTMLElement | null;
@@ -211,12 +212,12 @@ export function DetailDrawer({
   return (
     <div className="drawer-layer" role="presentation">
       <button aria-label="Close detail panel" className="drawer-backdrop" onClick={onClose} tabIndex={-1} type="button" />
-      <aside aria-labelledby={titleId} aria-modal="true" className="detail-drawer" ref={drawerRef} role="dialog">
+      <aside aria-describedby={subtitle ? subtitleId : undefined} aria-labelledby={titleId} aria-modal="true" className="detail-drawer" ref={drawerRef} role="dialog">
         <div className="detail-drawer__header">
           <div>
             <p className="eyebrow">{eyebrow}</p>
             <h2 id={titleId}>{title}</h2>
-            {subtitle && <p>{subtitle}</p>}
+            {subtitle && <p id={subtitleId}>{subtitle}</p>}
           </div>
           <button aria-label="Close detail panel" className="icon-button" onClick={onClose} ref={closeButtonRef} type="button">×</button>
         </div>

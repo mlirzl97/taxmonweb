@@ -32,10 +32,14 @@ export function buildTaxProfilePersistencePayload(
       filingContext: profile.filingContext,
       eFPSGroup: profile.eFPSGroup ?? "",
       registeredTaxTypes: profile.registeredTaxTypes,
+      registeredTaxTypeCodes: profile.registeredTaxTypeCodes ?? [],
+      registeredReturnCodes: profile.registeredReturnCodes ?? [],
       taxYearBasis: profile.taxYearBasis ?? "",
       booksType: profile.booksType ?? "",
       accountingSystem: profile.accountingSystem ?? "",
       invoicing: profile.invoicing ?? "",
+      goLiveDate: profile.goLiveDate ?? "",
+      permanentFileLink: profile.permanentFileLink ?? "",
       paymentRoute: profile.paymentRoute,
       clientWeight: String(profile.weight),
       enateSetup: profile.enateSetup,
@@ -78,6 +82,32 @@ export type PersistedTaxProfileSnapshot = {
  */
 export function hasCredibleTaxProfileValidation(profile: Pick<FixtureTaxProfile, "profileState" | "lastValidated" | "validator">) {
   return profile.profileState === "Active" && Boolean(profile.lastValidated?.trim() && profile.validator?.trim());
+}
+
+function configured(value: string | undefined): boolean {
+  return Boolean(value?.trim()) && !/not configured|needs review|unknown|missing|requires approved/i.test(value ?? "");
+}
+
+/** Keep fixture and persisted attention projections aligned with the current saved controls. */
+export function reconcileClientAttention(attention: readonly string[], profile: FixtureTaxProfile, assignment: FixtureAssignment): string[] {
+  const distinctRoles = new Set([assignment.preparer, assignment.checker, assignment.reviewer]).size === 3;
+  return Array.from(new Set(attention.filter((item) => {
+    const normalized = item.toLowerCase();
+    if (normalized.includes("assignment incomplete")) return assignment.preparer === "Unassigned" || assignment.checker === "Unassigned" || assignment.reviewer === "Unassigned" || !distinctRoles;
+    if (normalized.includes("preparer assignment missing")) return assignment.preparer === "Unassigned";
+    if (normalized.includes("checker assignment missing")) return assignment.checker === "Unassigned";
+    if (normalized.includes("reviewer assignment missing")) return assignment.reviewer === "Unassigned";
+    if (normalized.includes("checker and reviewer conflict")) return !distinctRoles;
+    if (normalized.includes("rdo") && (normalized.includes("missing") || normalized.includes("requires"))) return !configured(profile.rdoOrLts);
+    if (normalized.includes("fiscal year-end missing")) return profile.taxYearBasis === "Fiscal year" && !configured(profile.fiscalYearEnd);
+    if (normalized.includes("tax year basis missing")) return !profile.taxYearBasis;
+    if (normalized.includes("accounting system missing")) return !configured(profile.accountingSystem);
+    if (normalized.includes("filing channel missing")) return !configured(profile.filingChannel);
+    if (normalized.includes("efps context requires")) return profile.filingChannel === "eFPS" && !configured(profile.eFPSGroup);
+    if (normalized.includes("payment route missing")) return !configured(profile.paymentRoute);
+    if (normalized.includes("enate setup unknown")) return profile.enateSetup === "Unknown";
+    return true;
+  })));
 }
 
 function text(value: unknown, fallback: string): string {
@@ -125,7 +155,11 @@ export function applyPersistedTaxProfileSnapshot(
     filingContext: text(source.filingContext, baseProfile.filingContext),
     eFPSGroup: text(source.eFPSGroup, baseProfile.eFPSGroup ?? ""),
     registeredTaxTypes: Array.isArray(source.registeredTaxTypes) ? source.registeredTaxTypes.filter((value): value is string => typeof value === "string") : baseProfile.registeredTaxTypes,
+    registeredTaxTypeCodes: Array.isArray(source.registeredTaxTypeCodes) ? source.registeredTaxTypeCodes.filter((value): value is string => typeof value === "string") : baseProfile.registeredTaxTypeCodes,
+    registeredReturnCodes: Array.isArray(source.registeredReturnCodes) ? source.registeredReturnCodes.filter((value): value is string => typeof value === "string") : baseProfile.registeredReturnCodes,
     taxYearBasis: source.taxYearBasis === "Calendar year" || source.taxYearBasis === "Fiscal year" ? source.taxYearBasis : baseProfile.taxYearBasis,
+    goLiveDate: text(source.goLiveDate, baseProfile.goLiveDate ?? ""),
+    permanentFileLink: text(source.permanentFileLink, baseProfile.permanentFileLink ?? ""),
     booksType: text(source.booksType, baseProfile.booksType ?? ""),
     accountingSystem: text(source.accountingSystem, baseProfile.accountingSystem ?? ""),
     invoicing: text(source.invoicing, baseProfile.invoicing ?? ""),

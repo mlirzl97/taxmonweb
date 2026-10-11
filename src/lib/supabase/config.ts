@@ -10,10 +10,10 @@ export function getSupabaseConfig() {
 }
 
 export function isPrototypeDemoMode() {
-  // Demo access is deliberately impossible in production. This is a server
-  // boundary, not a UI preference: a misconfigured Vercel variable must not
-  // turn a deployed application into an ungated client-data surface.
-  if (process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production") return false;
+  // Demo access is deliberately impossible on Vercel production. The local
+  // E2E harness may run the production build with an explicit test-only flag.
+  const localE2E = process.env.TAXMON_E2E_MODE === "true" && !process.env.VERCEL_ENV;
+  if ((process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production") && !localE2E) return false;
 
   const localDemo = process.env.TAXMON_DEMO_MODE === "true";
   const previewDemo = process.env.TAXMON_PUBLIC_SANITIZED_DEMO === "true" && process.env.TAXMON_DATA_MODE === "sanitized";

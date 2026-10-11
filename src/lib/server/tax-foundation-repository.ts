@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { forms as prototypeForms, taxTypes as prototypeTaxTypes } from "@/lib/domain/tax-foundation-catalog";
 
 export type TaxFoundationTaxType = {
   code: string;
@@ -11,6 +12,8 @@ export type TaxFoundationForm = {
   formNumber: string;
   title: string;
   revisionLabel: string;
+  /** Empty until an approved Requirement Master version establishes the relationship. */
+  taxTypeCodes: readonly string[];
   verificationStatus: "verified" | "partially_verified" | "unresolved" | "superseded";
 };
 
@@ -27,7 +30,12 @@ export async function listTaxFoundationReference(): Promise<{
   forms: TaxFoundationForm[];
 }> {
   const client = await createSupabaseServerClient();
-  if (!client) return { taxTypes: [], forms: [] };
+  if (!client) {
+    return {
+      taxTypes: prototypeTaxTypes.map(({ code, label, operatingCategory, verificationStatus }) => ({ code, label, operatingCategory, verificationStatus })),
+      forms: prototypeForms.map(({ formNumber, title, taxTypeCodes, verificationStatus }) => ({ formNumber, title, revisionLabel: "Sanitized prototype catalog", taxTypeCodes, verificationStatus })),
+    };
+  }
 
   const [taxTypeResult, formResult] = await Promise.all([
     client
@@ -58,6 +66,7 @@ export async function listTaxFoundationReference(): Promise<{
       formNumber: row.form_number,
       title: row.title,
       revisionLabel: row.revision_label,
+      taxTypeCodes: [],
       verificationStatus: row.verification_status,
     })),
   };

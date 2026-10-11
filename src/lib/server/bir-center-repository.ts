@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { prototypeBirOfficeOptions } from "@/lib/domain/client-profile-options";
 
 export type BirOfficeReference = {
   code: string;
@@ -27,7 +28,22 @@ export type BirOfficeContact = {
 
 export async function listBirOfficeReference(): Promise<BirOfficeReference[]> {
   const client = await createSupabaseServerClient();
-  if (!client) return [];
+  if (!client) {
+    return prototypeBirOfficeOptions.map((office) => ({
+      code: office.code,
+      name: office.name,
+      active: true,
+      officeType: "rdo",
+      parentCode: null,
+      parentName: null,
+      address: null,
+      cityOrArea: office.name,
+      publicEmail: null,
+      publicTelephone: null,
+      notes: "Sanitized prototype reference; the governed office master is used when connected.",
+      contacts: [],
+    }));
+  }
 
   const current = await client
     .from("bir_offices")

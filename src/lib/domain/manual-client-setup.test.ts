@@ -65,15 +65,15 @@ describe("manual client setup contract", () => {
       profileData: {
         registeredTaxTypeCodes: ["CIT", "VAT"],
         registeredTaxTypes: ["CIT", "VAT"],
-        booksType: "CAS/CBA",
-        invoicing: "Source wording",
+        booksType: "Computerized books",
+        invoicing: "CAS / POS / CRM",
         enateSetup: "Yes",
         paymentRoute: "TMF Pays",
       },
     });
 
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.profileData).toMatchObject({ registeredTaxTypeCodes: ["CIT", "VAT"], booksType: "CAS/CBA", invoicing: "Source wording", enateSetup: "Yes", paymentRoute: "TMF Pays" });
+    if (result.ok) expect(result.value.profileData).toMatchObject({ registeredTaxTypeCodes: ["CIT", "VAT"], booksType: "Computerized books", invoicing: "CAS / POS / CRM", enateSetup: "Yes", paymentRoute: "TMF Pays" });
   });
 
   it("preserves governed return-form proposals separately from source tax wording", () => {

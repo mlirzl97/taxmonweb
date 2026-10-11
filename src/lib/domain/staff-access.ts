@@ -42,7 +42,7 @@ export const staffAccessProfiles: readonly StaffAccessProfileDefinition[] = [
     label: "System & User Admin",
     description: "Manage users, access, and organization configuration; no tax-control authority.",
     roleKey: "system_admin",
-    defaultScope: "all_a_and_t",
+    defaultScope: "own_assigned_work",
     capabilities: ["AdministerUsers", "AdministerOrganization"],
   },
   {

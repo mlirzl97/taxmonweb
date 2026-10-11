@@ -91,7 +91,7 @@ export function ClientCsvImportDrawer({ onClose, onImported }: { onClose: () => 
   return (
     <DetailDrawer eyebrow="Client registry · controlled intake" title="Import client CSV" subtitle="Load identity and source references into intake drafts. This does not activate profiles or generate compliance work." onClose={onClose}>
       <div className="form-stack client-csv-import">
-        <div className="drawer-section-intro"><strong>Use the client intake template</strong><span>Required identity and source fields are validated before anything is saved. Registration facts, documents, assignment, and Tax Profile validation remain controlled follow-up steps.</span></div>
+        <div className="drawer-section-intro"><strong>Use the client intake template</strong><span>Export the CRM data to this CSV shape first. Extra CRM columns are ignored; required identity and source fields are validated before anything is saved. Registration facts, documents, assignment, and Tax Profile validation remain controlled follow-up steps.</span></div>
         <div className="client-csv-import__actions"><button className="button button--quiet button--small" onClick={downloadTemplate} type="button">Download template</button><label className="button button--quiet button--small client-csv-import__file"><span>Choose CSV</span><input accept=".csv,text/csv" onChange={(event) => { const file = event.target.files?.[0]; if (file) void readFile(file); }} type="file" /></label></div>
         {fileName && <div className="drawer-form-note">Selected: <strong>{fileName}</strong></div>}
         {error && <div className="form-error" role="alert">{error}</div>}

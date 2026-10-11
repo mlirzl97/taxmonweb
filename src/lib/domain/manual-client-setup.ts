@@ -1,6 +1,7 @@
 import { clientDeadlineModes, clientDeadlinePolicyErrors, isValidClientDeadlineLeadDays, normalizeClientDeadlinePolicy, type ClientDeadlinePolicy } from "@/lib/domain/client-deadline-policy";
 import { generatedEntityReference, normalizeTinDigits } from "@/lib/domain/client-onboarding";
 import { governedReturnForms } from "@/lib/domain/client-return-selection";
+import { clientProfileControlErrors } from "@/lib/domain/client-profile-options";
 
 const referenceCodePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -25,6 +26,7 @@ export type ManualClientSetupInput = {
   profileData?: {
     rdoOrLts?: string;
     registeredAddress?: string;
+    registrationEffective?: string;
     taxYearBasis?: string;
     fiscalYearEnd?: string;
     accountingSystem?: string;
@@ -38,6 +40,9 @@ export type ManualClientSetupInput = {
     registeredTaxTypes?: string[];
     registeredTaxTypesRaw?: string;
     proposedReturnCodes?: string[];
+    registeredReturnCodes?: string[];
+    goLiveDate?: string;
+    permanentFileLink?: string;
     sourceNotes?: string;
     deadlinePolicy?: ClientDeadlinePolicy;
   };
@@ -147,6 +152,7 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
   const profileData = profileSource && typeof profileSource === "object" && !Array.isArray(profileSource)
     ? profileSource as Record<string, unknown>
     : undefined;
+  if (profileData) errors.push(...clientProfileControlErrors(profileData));
 
   const profileText = (key: string, maxLength: number) => {
     if (!profileData) return undefined;
@@ -172,6 +178,14 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
   if (proposedReturnCodes !== undefined && (!Array.isArray(proposedReturnCodes) || proposedReturnCodes.some((value) => typeof value !== "string" || !governedReturnCodes.has(value.trim())))) {
     errors.push("profileData.proposedReturnCodes must contain only return forms from the current governed form catalog.");
   }
+  const registeredReturnCodes = profileData?.registeredReturnCodes;
+  if (registeredReturnCodes !== undefined && (!Array.isArray(registeredReturnCodes) || registeredReturnCodes.some((value) => typeof value !== "string" || !governedReturnCodes.has(value.trim())))) {
+    errors.push("profileData.registeredReturnCodes must contain only return forms from the current governed form catalog.");
+  }
+  const goLiveDate = profileText("goLiveDate", 10);
+  if (goLiveDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(goLiveDate)) errors.push("profileData.goLiveDate must use YYYY-MM-DD.");
+  const permanentFileLink = profileText("permanentFileLink", 500);
+  if (permanentFileLink !== undefined && !/^https:\/\//i.test(permanentFileLink) && !/^synthetic:\/\//i.test(permanentFileLink)) errors.push("profileData.permanentFileLink must be an HTTPS or sanitized synthetic link.");
   const enateSetup = profileText("enateSetup", 32);
   if (enateSetup !== undefined && !["Yes", "No", "Unknown"].includes(enateSetup)) errors.push("profileData.enateSetup must be Yes, No, or Unknown.");
   const paymentRoute = profileText("paymentRoute", 32);
@@ -286,6 +300,7 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
       profileData: profileData ? {
         rdoOrLts: profileText("rdoOrLts", 160),
         registeredAddress: profileText("registeredAddress", 500),
+        registrationEffective: profileText("registrationEffective", 32),
         taxYearBasis: profileText("taxYearBasis", 80),
         fiscalYearEnd: profileText("fiscalYearEnd", 80),
         accountingSystem: profileText("accountingSystem", 160),
@@ -299,6 +314,9 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
         registeredTaxTypes: Array.isArray(registeredTaxTypes) ? registeredTaxTypes.map((value) => String(value).trim()).filter(Boolean) : undefined,
         registeredTaxTypesRaw: profileText("registeredTaxTypesRaw", 1000),
         proposedReturnCodes: Array.isArray(proposedReturnCodes) ? [...new Set(proposedReturnCodes.map((value) => String(value).trim()).filter(Boolean))] : undefined,
+        registeredReturnCodes: Array.isArray(registeredReturnCodes) ? [...new Set(registeredReturnCodes.map((value) => String(value).trim()).filter(Boolean))] : undefined,
+        goLiveDate,
+        permanentFileLink,
         sourceNotes: profileText("sourceNotes", 500),
         deadlinePolicy,
       } : undefined,

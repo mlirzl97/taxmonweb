@@ -52,6 +52,18 @@ export function AppShell({ children, email, demoMode = false, calibrationEditMod
   }, []);
 
   useEffect(() => {
+    function handleSidebarShortcut(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if ((target?.tagName === "INPUT" || target?.tagName === "SELECT" || target?.tagName === "TEXTAREA") || (!event.metaKey && !event.ctrlKey) || event.key.toLowerCase() !== "b") return;
+      event.preventDefault();
+      if (isMobile) setMobileOpen((open) => !open);
+      else setCollapsed((value) => !value);
+    }
+    window.addEventListener("keydown", handleSidebarShortcut);
+    return () => window.removeEventListener("keydown", handleSidebarShortcut);
+  }, [isMobile]);
+
+  useEffect(() => {
     trackModuleView(pathname);
     return trackUsageInteractions(pathname);
   }, [pathname]);
@@ -101,7 +113,7 @@ export function AppShell({ children, email, demoMode = false, calibrationEditMod
     <WorkflowProvider prototypeMode={demoMode}>
     <div className="app-frame">
       <a className="skip-link" href="#main-content">Skip to content</a>
-      <aside aria-label="Application navigation" className={`app-sidebar${collapsed ? " app-sidebar--collapsed" : ""}${mobileOpen ? " app-sidebar--mobile-open" : ""}`} ref={mobileSidebarRef}>
+      <aside aria-label="Application navigation" className={`app-sidebar${collapsed ? " app-sidebar--collapsed" : ""}${mobileOpen ? " app-sidebar--mobile-open" : ""}`} id="application-sidebar" ref={mobileSidebarRef}>
         <div className="app-sidebar__brand">
           {collapsed ? <Link aria-label="TaxMonWeb" className="collapsed-brand" href="/app/control-tower"><AntMark size={30} /></Link> : <BrandLockup />}
         </div>
@@ -113,7 +125,7 @@ export function AppShell({ children, email, demoMode = false, calibrationEditMod
       {mobileOpen && <button aria-label="Close navigation" className="sidebar-backdrop" onClick={() => setMobileOpen(false)} type="button" />}
       <div className="app-main">
         <header className="app-main-header">
-          <button aria-controls="primary-navigation" aria-expanded={isMobile ? mobileOpen : !collapsed} aria-label={isMobile ? (mobileOpen ? "Close modules" : "Open modules") : (collapsed ? "Expand sidebar" : "Collapse sidebar")} className="sidebar-toggle" data-usage-action="toggle_navigation" onClick={() => { if (isMobile) setMobileOpen((open) => !open); else setCollapsed((value) => !value); }} ref={toggleRef} type="button"><Icon name="menu" size={19} /><span className="sidebar-toggle__label">Modules</span></button>
+          <button aria-controls="application-sidebar" aria-expanded={isMobile ? mobileOpen : !collapsed} aria-label={isMobile ? (mobileOpen ? "Close modules" : "Open modules") : (collapsed ? "Expand sidebar" : "Collapse sidebar")} className="sidebar-toggle" data-usage-action="toggle_navigation" onClick={() => { if (isMobile) setMobileOpen((open) => !open); else setCollapsed((value) => !value); }} ref={toggleRef} type="button"><Icon name="menu" size={19} /><span className="sidebar-toggle__label">Modules</span></button>
           <div className="app-main-header__brand"><BrandLockup compact /></div>
           <span className="app-main-header__context">{context}</span>
           <WorkflowPerspectiveControl pathname={pathname} />

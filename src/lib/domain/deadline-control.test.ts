@@ -9,7 +9,7 @@ describe("deadline control projection", () => {
     const second = buildDeadlineControlRows(2026);
 
     expect(first).toEqual(second);
-    expect(first).toHaveLength(25);
+    expect(first).toHaveLength(85);
     const cit = first.find((row) => row.formNumber === "1702-RT");
     const vatQ1 = first.find((row) => row.formNumber === "2550Q" && row.activityPeriod === "Q1 2026");
     expect(cit?.baseStatutoryDeadline).toBe("2027-04-15");
@@ -23,10 +23,15 @@ describe("deadline control projection", () => {
 
   it("keeps source verification and publication status distinct", () => {
     const summary = deadlineControlSummary(buildDeadlineControlRows(2026));
-    expect(summary).toEqual({ total: 25, published: 5, requiringReview: 4, unresolved: 16 });
+    expect(summary).toEqual({ total: 85, published: 5, requiringReview: 4, unresolved: 76 });
     expect(buildDeadlineControlRows(2026).filter((row) => row.publicationStatus === "unresolved").every((row) => row.publishedOperationalDeadline === null)).toBe(true);
     expect(buildDeadlineControlRows(2026).filter((row) => row.publicationStatus === "needs_review").every((row) => row.adjustedStatutoryDeadline !== null)).toBe(true);
-    expect(deadlineControlSummary(buildDeadlineControlRows(2027))).toEqual({ total: 25, published: 0, requiringReview: 9, unresolved: 16 });
+    expect(deadlineControlSummary(buildDeadlineControlRows(2027))).toEqual({ total: 85, published: 0, requiringReview: 9, unresolved: 76 });
+  });
+
+  it("exposes every governed return to global Tax Team control", () => {
+    const formNumbers = new Set(buildDeadlineControlRows(2026).map((row) => row.formNumber));
+    expect(formNumbers).toEqual(new Set(["0619-E", "0619-F", "1600", "1600WP", "1601-C", "1601-EQ", "1702-RT", "2550Q", "2551M", "2551Q"]));
   });
 
   it("derives a client's calendar from registered tax types and published rows", () => {
@@ -62,6 +67,39 @@ describe("deadline control projection", () => {
     ]);
     expect(calendar.heldRows).toHaveLength(16);
     expect(calendar.heldRows.every((row) => row.publicationStatus === "unresolved")).toBe(true);
+  });
+
+  it("uses selected BIR returns and starts the service calendar at go-live", () => {
+    const client = fixtureClients.find((item) => item.id === "fixture-client-061");
+    expect(client).toBeDefined();
+    const configuredClient = { ...client!, entities: [{ ...client!.entities[0], profile: { ...client!.entities[0].profile, registeredReturnCodes: ["2550Q"], goLiveDate: "2026-07-01" } }] };
+    const calendar = getClientServiceCalendarRows(configuredClient, 2026);
+    expect(calendar.rows.map((row) => row.activityMonth)).toEqual(["April", "July", "October"]);
+    expect(calendar.rows.every((row) => row.formNumber === "2550Q")).toBe(true);
+  });
+
+  it("keeps selected returns with missing rules visible and compares go-live with the filing date", () => {
+    const client = fixtureClients.find((item) => item.id === "fixture-client-061");
+    expect(client).toBeDefined();
+    const configuredClient = {
+      ...client!,
+      entities: [{
+        ...client!.entities[0],
+        profile: {
+          ...client!.entities[0].profile,
+          registeredReturnCodes: ["0619E", "0619-F", "1601-C", "2550Q", "1702-RT", "2551Q"],
+          goLiveDate: "2026-04-01",
+        },
+      }],
+    };
+    const calendar = getClientServiceCalendarRows(configuredClient, 2026);
+
+    expect(calendar.rows.some((row) => row.formNumber === "2550Q" && row.activityMonth === "January" && row.publishedOperationalDeadline === "2026-04-25")).toBe(true);
+    expect(calendar.heldRows.some((row) => row.formNumber === "0619-E")).toBe(true);
+    expect(calendar.heldRows.some((row) => row.formNumber === "0619-F")).toBe(true);
+    expect(calendar.heldRows.some((row) => row.formNumber === "1601-C")).toBe(true);
+    expect(calendar.heldRows.some((row) => row.formNumber === "2551Q")).toBe(true);
+    expect([...calendar.rows, ...calendar.heldRows].every((row) => !row.publishedOperationalDeadline || row.publishedOperationalDeadline > "2026-04-01")).toBe(true);
   });
 
   it("allows a controlled publication override without changing the statutory calculation", () => {

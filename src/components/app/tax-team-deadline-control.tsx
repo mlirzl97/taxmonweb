@@ -6,6 +6,7 @@ import {
   buildDeadlineControlRows,
   deadlineControlSummary,
   readDeadlinePublicationOverrides,
+  writeDeadlinePublicationOverrides,
   type DeadlineControlRow,
   type DeadlinePublicationOverride,
   type DeadlinePublicationStatus,
@@ -40,7 +41,7 @@ function effectiveRow(row: DeadlineControlRow, overrides: Readonly<Record<string
 
 export function TaxTeamDeadlineControl() {
   const [year, setYear] = useState(2026);
-  const [overrides] = useState<Record<string, DeadlinePublicationOverride>>(() => readDeadlinePublicationOverrides(typeof window === "undefined" ? undefined : window.localStorage));
+  const [overrides, setOverrides] = useState<Record<string, DeadlinePublicationOverride>>(() => readDeadlinePublicationOverrides(typeof window === "undefined" ? undefined : window.localStorage));
   const [rows, setRows] = useState<DeadlineControlRow[]>([]);
   const [source, setSource] = useState<RepositorySource>("loading");
   const [selectedRow, setSelectedRow] = useState<DeadlineControlRow | null>(null);
@@ -85,10 +86,34 @@ export function TaxTeamDeadlineControl() {
   const summary = deadlineControlSummary(visibleRows);
 
   async function transition(row: DeadlineControlRow, status: DeadlinePublicationStatus, publishedOperationalDeadline: string | null = null, providedReason?: string) {
-    const reason = providedReason?.trim() || window.prompt(`Reason for ${statusLabels[status].toLowerCase()}:`, "Tax Team control review")?.trim();
+    const reason = providedReason?.trim() || (source === "repository" ? window.prompt(`Reason for ${statusLabels[status].toLowerCase()}:`, "Tax Team control review")?.trim() : "Tax Team prototype review simulation");
     if (!reason) return;
     if (source !== "repository") {
-      setMessage("The governed deadline repository is unavailable. The sanitized fallback is read-only.");
+      if (status === "confirmed" && row.adjustedStatutoryDeadline && (row.publicationStatus === "generated" || row.publicationStatus === "needs_review")) {
+        const nextOverrides = { ...overrides, [row.id]: { status: "confirmed" as const } };
+        writeDeadlinePublicationOverrides(window.localStorage, nextOverrides);
+        setOverrides(nextOverrides);
+        setSelectedRow(null);
+        setMessage(`${row.formNumber || row.requirementCode} confirmed for prototype review. It remains held until a verified rule can be published.`);
+        return;
+      }
+      if (status === "published") {
+        if (row.verificationStatus !== "verified") {
+          setMessage(`${row.formNumber || row.requirementCode} cannot be published: its rule/source is not verified.`);
+          return;
+        }
+        if (!publishedOperationalDeadline) {
+          setMessage(`${row.formNumber || row.requirementCode} cannot be published without an approved deadline.`);
+          return;
+        }
+        const nextOverrides = { ...overrides, [row.id]: { status: "published" as const, publishedOperationalDeadline } };
+        writeDeadlinePublicationOverrides(window.localStorage, nextOverrides);
+        setOverrides(nextOverrides);
+        setSelectedRow(null);
+        setMessage(`${row.formNumber || row.requirementCode} published in the sanitized prototype. Client calendars will use this date after refresh.`);
+        return;
+      }
+      setMessage("This sanitized fallback supports review simulation only. Unresolved rules remain read-only until governed source data is available.");
       return;
     }
     setBusy(true); setMessage("");

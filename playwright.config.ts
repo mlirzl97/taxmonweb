@@ -2,9 +2,9 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
-  // The prototype intentionally exercises browser-local persistence and a
-  // shared Next dev server. Keep the cross-project suite deterministic; unit
-  // and production-build checks provide the parallelism that is useful here.
+  timeout: 120_000,
+  // The prototype intentionally exercises browser-local persistence. Run the
+  // browser gate against the production server so HMR cannot mask regressions.
   fullyParallel: false,
   workers: 1,
   forbidOnly: !!process.env.CI,
@@ -15,9 +15,9 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "NEXT_DIST_DIR=.next-e2e TAXMON_DEMO_MODE=true TAXMON_CALIBRATION_EDIT_MODE=true TAXMON_DATA_MODE=sanitized npm run dev -- --hostname 127.0.0.1 --port 3110",
+    command: "TAXMON_E2E_MODE=true TAXMON_DEMO_MODE=true TAXMON_CALIBRATION_EDIT_MODE=true TAXMON_DATA_MODE=sanitized npm run start -- --hostname 127.0.0.1 --port 3110",
     url: "http://127.0.0.1:3110/app/control-tower",
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
   projects: [

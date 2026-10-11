@@ -271,11 +271,11 @@ export default function TaxTeamReportPage({ initialView = "overview" }: { initia
         action={<a className="button button--primary" aria-disabled={!validRange} href={validRange ? pdfHref : undefined}>{filters.reportType === "audit" ? "Download Tax Audit Pack" : "Download PDF report"}</a>}
       />
 
-      <nav aria-label="Tax Team reports" className="tower-tabs module-tabs">
-        <button aria-pressed={activeView === "overview"} className={activeView === "overview" ? "tower-tab tower-tab--active" : "tower-tab"} onClick={() => setActiveView("overview")} type="button">Overview</button>
-        <button aria-pressed={activeView === "deadline-control"} className={activeView === "deadline-control" ? "tower-tab tower-tab--active" : "tower-tab"} onClick={() => setActiveView("deadline-control")} type="button">Deadline Control</button>
-        <button aria-pressed={activeView === "period-locks"} className={activeView === "period-locks" ? "tower-tab tower-tab--active" : "tower-tab"} onClick={() => setActiveView("period-locks")} type="button">Period locks</button>
-        {taxTeamReportTypes.map((report) => <button aria-pressed={activeView === report.id} className={activeView === report.id ? "tower-tab tower-tab--active" : "tower-tab"} key={report.id} onClick={() => openReport(report.id)} type="button">{report.label}</button>)}
+      <nav aria-label="Tax Team reports" className="tower-tabs module-tabs" role="tablist">
+        <button aria-selected={activeView === "overview"} className={activeView === "overview" ? "tower-tab tower-tab--active" : "tower-tab"} onClick={() => setActiveView("overview")} role="tab" tabIndex={activeView === "overview" ? 0 : -1} type="button">Overview</button>
+        <button aria-selected={activeView === "deadline-control"} className={activeView === "deadline-control" ? "tower-tab tower-tab--active" : "tower-tab"} onClick={() => setActiveView("deadline-control")} role="tab" tabIndex={activeView === "deadline-control" ? 0 : -1} type="button">Deadline Control</button>
+        <button aria-selected={activeView === "period-locks"} className={activeView === "period-locks" ? "tower-tab tower-tab--active" : "tower-tab"} onClick={() => setActiveView("period-locks")} role="tab" tabIndex={activeView === "period-locks" ? 0 : -1} type="button">Period locks</button>
+        {taxTeamReportTypes.map((report) => <button aria-selected={activeView === report.id} className={activeView === report.id ? "tower-tab tower-tab--active" : "tower-tab"} key={report.id} onClick={() => openReport(report.id)} role="tab" tabIndex={activeView === report.id ? 0 : -1} type="button">{report.label}</button>)}
       </nav>
 
       {activeView === "overview" && <TaxTeamOverview onOpenDeadlineControl={() => setActiveView("deadline-control")} onOpenPeriodLocks={() => setActiveView("period-locks")} onOpenReport={openReport} qaOpenCount={filteredTransactionReviews.filter((review) => review.reviewStatus !== "certified").length} summary={summary} />}

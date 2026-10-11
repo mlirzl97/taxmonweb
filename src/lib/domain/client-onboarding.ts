@@ -1,9 +1,10 @@
 export const clientOnboardingDocumentTypes = [
   { id: "bir_form_2303", label: "BIR Form 2303 / Certificate of Registration", detail: "Primary registration source for human review." },
   { id: "authority_to_print", label: "Authority to Print (ATP)", detail: "Record when applicable; applicability is not inferred." },
+  { id: "books_registration", label: "Books registration / permit to use", detail: "Record the registered books source when applicable." },
   { id: "registration_update", label: "BIR registration update / certificate", detail: "Use for later registration changes or supplemental registration evidence." },
+  { id: "sec_registration", label: "SEC registration source", detail: "Record the corporate registration source when applicable." },
   { id: "authority_record", label: "PEZA / BOI / other authority record", detail: "Record only when an approved source establishes the context." },
-  { id: "other_registration_source", label: "Other supporting registration document", detail: "Capture an additional source without inventing a tax treatment." },
 ] as const;
 
 export const clientOnboardingContractTypes = [
@@ -13,6 +14,8 @@ export const clientOnboardingContractTypes = [
   { id: "crf_crn", label: "CRF/CRN", detail: "Additional engagement outside the main contract." },
   { id: "not_confirmed", label: "Not yet confirmed", detail: "Keep unresolved until the contract source is reviewed." },
 ] as const;
+
+export const clientOnboardingMainContractTypes = clientOnboardingContractTypes.filter((type) => type.id === "msa" || type.id === "lsa" || type.id === "not_confirmed");
 
 export type ClientOnboardingContractType = (typeof clientOnboardingContractTypes)[number]["id"];
 
@@ -24,6 +27,13 @@ export type ClientOnboardingContract = {
 
 export type ClientOnboardingDocumentType = (typeof clientOnboardingDocumentTypes)[number]["id"];
 export type ClientOnboardingDocumentStatus = "not_captured" | "received" | "not_applicable" | "unknown";
+
+export const clientOnboardingDocumentStatusOptions = [
+  { value: "not_captured", label: "Not recorded" },
+  { value: "received", label: "Available" },
+  { value: "not_applicable", label: "Not applicable" },
+  { value: "unknown", label: "Unknown / verify" },
+] as const satisfies ReadonlyArray<{ value: ClientOnboardingDocumentStatus; label: string }>;
 
 export type ClientOnboardingDocument = {
   type: ClientOnboardingDocumentType;
@@ -42,6 +52,7 @@ export type ClientOnboardingIdentity = {
   unitDisplayName: string;
   unitKind: "head_office" | "branch" | "other";
   sourceReference: string;
+  goLiveDate?: string;
 };
 
 /** Keep the source value numeric; punctuation is presentation only. */
@@ -80,7 +91,7 @@ export function getClientOnboardingReadiness(
   documents: readonly ClientOnboardingDocument[],
 ): ClientOnboardingReadiness {
   const identityGaps = requiredIdentityFields
-    .filter(([field]) => !identity[field].trim())
+    .filter(([field]) => !String(identity[field] ?? "").trim())
     .map(([, label]) => `${label} is required.`);
 
   const sourcePackGaps = clientOnboardingDocumentTypes.flatMap((definition) => {

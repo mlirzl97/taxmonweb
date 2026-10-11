@@ -155,9 +155,13 @@ export type FixtureTaxProfile = {
   registeredTaxTypes: readonly string[];
   taxYearBasis?: "Calendar year" | "Fiscal year";
   fiscalYearEnd?: string;
+  goLiveDate?: string;
+  permanentFileLink?: string;
   accountingSystem?: string;
   booksType?: string;
   invoicing?: string;
+  registeredTaxTypeCodes?: readonly string[];
+  registeredReturnCodes?: readonly string[];
   paymentRoute: "Client Pays" | "TMF Pays" | "Not configured";
   deadlinePolicy?: ClientDeadlinePolicy;
   /** Numeric source workload value. Zero is preserved when the supplied source total requires it. */

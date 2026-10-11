@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 
 test("Settings removes only browser-local prototype data", async ({ page }) => {
   await page.goto("/app/admin");
+  await expect(page.getByRole("heading", { name: "Admin", exact: true })).toBeVisible();
   await page.evaluate(() => {
     window.localStorage.setItem("taxmonweb.prototype.work-register", "changed");
     window.localStorage.setItem("taxmonweb.sidebar.collapsed", "true");

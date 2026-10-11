@@ -93,7 +93,7 @@ begin
     p_title,
     p_organization_unit_id,
     p_effective_from,
-    false,
+    true,
     p_career_service_level,
     p_reports_to_user_id,
     p_operating_model,

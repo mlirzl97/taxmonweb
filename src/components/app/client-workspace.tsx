@@ -7,6 +7,7 @@ import {
   fixtureExceptions,
   fixtureFilingHistory,
   fixtureHistory,
+  fixtureOrgDirectoryMembers,
   fixtureTeamHistory,
   fixtureWork,
   getClientContractSummary,
@@ -19,9 +20,13 @@ import {
   type FixtureTaxProfile,
 } from "@/lib/fixtures";
 import { fixtureClock } from "@/lib/fixtures";
-import { applyPersistedTaxProfileSnapshot, buildTaxProfilePersistencePayload, hasCredibleTaxProfileValidation, profileActivationGaps, type PersistedTaxProfileSnapshot } from "@/lib/domain/client-profile-persistence";
+import { formatTin, normalizeTinDigits } from "@/lib/domain/client-onboarding";
+import type { BirOfficeOption } from "@/lib/domain/bir-office-reference";
+import { applyPersistedTaxProfileSnapshot, buildTaxProfilePersistencePayload, hasCredibleTaxProfileValidation, profileActivationGaps, reconcileClientAttention, type PersistedTaxProfileSnapshot } from "@/lib/domain/client-profile-persistence";
 import { canManageModuleRecords, hasCalibrationEditAccess } from "@/lib/domain/access";
+import { governedReturnForms } from "@/lib/domain/client-return-selection";
 import { useWorkflow } from "@/lib/workflow-state";
+import { birOfficeCode, birOfficeLabel, clientAccountingSystemOptions, clientAuthorityOptions, clientBooksOptions, clientEfpsGroupOptions, clientEntityTypeOptions, clientFilingChannelOptions, clientInvoicingOptions, clientRegistrationStatusOptions, controlledOptionLabel, controlledOptionValue, isIsoDate, prototypeBirOfficeOptions } from "@/lib/domain/client-profile-options";
 import { DetailDrawer, SectionHeading } from "./workspace-components";
 import { ClientServiceCalendarView } from "./client-service-calendar";
 
@@ -59,7 +64,7 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
 
   const units = client.entities[0].units;
   const selectedUnit = units[0];
-  const attention = profile.attention;
+  const attention = reconcileClientAttention(profile.attention, profile, assignment);
   const openAuditCount = profile.auditExposures.filter((item) => item.status !== "Closed").length;
   const closedAuditCount = profile.auditExposures.filter((item) => item.status === "Closed").length;
   const profileHistory = prototypeMode ? fixtureHistory.filter((item) => item.clientId === client.id) : [];
@@ -111,6 +116,7 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
   const editDisabled = !canEditProfile || (!calibrationEditMode && persistenceState !== "available");
   const editTitle = !canEditProfile ? "This access view is read-only for taxpayer setup" : persistenceState === "checking" ? "Checking the saved profile" : persistenceState === "unavailable" ? "This profile is read-only until it is linked to the client repository" : undefined;
 
+
   useEffect(() => {
     const syncTabFromHash = () => setActiveTab(clientTabFromHash(window.location.hash));
     syncTabFromHash();
@@ -126,6 +132,14 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
     setActiveTab(tab);
     window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#client-${tab}`);
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function openAttention(item: string) {
+    const tab = clientAttentionTab(item);
+    selectTab(tab);
+    if (!editDisabled && tab === "team") setDrawer("setup");
+    if (!editDisabled && tab === "registration") setDrawer("identity");
+    if (tab === "activity") window.setTimeout(() => document.getElementById("client-audit-history")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
 
   function closeDrawer() {
@@ -208,29 +222,29 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
 
       <div aria-labelledby={`client-tab-${activeTab}`} className="client-tab-panel" id={`client-panel-${activeTab}`} role="tabpanel" tabIndex={0}>
         {activeTab === "overview" && <>
-          <ClientOverview attention={attention} client={client} auditCount={openAuditCount} nextWork={nextWork} openWorkCount={openWorkCount} profile={profile} onSelectTab={selectTab} />
+          <ClientOverview attention={attention} client={client} auditCount={openAuditCount} nextWork={nextWork} onOpenAttention={openAttention} openWorkCount={openWorkCount} profile={profile} onSelectTab={selectTab} />
         </>}
 
         {activeTab === "registration" && <div className="client-registration-layout" id="client-registration">
           <section className="dossier-section dossier-section--identity">
-            <SectionHeading detail="The taxpayer’s legal identity, BIR registration, filing context, and registered tax types." title="Identity / BIR registration" />
+            <SectionHeading detail="The taxpayer’s legal identity, BIR registration, filing context, and returns." title="Identity / BIR registration" />
             <div className="dossier-facts">
               <Fact label="Registered name" value={profile.registeredTaxpayerName} wide />
               <Fact label="Client reference" value={client.id} />
               <Fact label="TIN" value={profile.tinDisplay} />
               <Fact label="Head Office / Branch" value={selectedUnit.type} />
-              <Fact label="RDO / LTS" value={profile.rdoOrLts} />
-              <Fact label="Entity type" value={profile.entityType} />
-              <Fact label="Registration status" value={profile.registrationStatus} />
+              <Fact label="RDO" value={birOfficeLabel(profile.rdoOrLts, prototypeBirOfficeOptions)} />
+              <Fact label="Entity type" value={controlledOptionLabel(profile.entityType, clientEntityTypeOptions)} />
+              <Fact label="Registration status" value={controlledOptionLabel(profile.registrationStatus, clientRegistrationStatusOptions)} />
               <Fact label="Registered address" value={profile.registeredAddress} wide />
               <Fact label="Nature / line of business" value={profile.lineOfBusiness} />
               <Fact label="Registration date" value={profile.registrationEffective} />
               <Fact label="Tax year basis" value={profile.taxYearBasis ?? "Not configured"} />
               <Fact label="Fiscal year-end" value={profile.fiscalYearEnd ?? "Not configured"} />
-              <Fact label="Filing channel" value={profile.filingChannel} />
-              <Fact label="eFPS / eBIRForms context" value={profile.filingContext} />
-              {profile.eFPSGroup && <Fact label="eFPS group" value={profile.eFPSGroup} />}
-              <Fact label="BIR registered tax types" value={profile.registeredTaxTypes.join(" · ")} wide />
+              <Fact label="Filing channel" value={controlledOptionLabel(profile.filingChannel, clientFilingChannelOptions)} />
+              {profile.filingChannel === "eFPS" && <Fact label="eFPS group" value={controlledOptionLabel(profile.eFPSGroup, ["", ...clientEfpsGroupOptions, "Not applicable", "Needs review"])} />}
+              <Fact label="Returns to be filed" value={profile.registeredReturnCodes?.join(" · ") || "Not configured"} wide />
+              <Fact label="Go-live date" value={profile.goLiveDate ?? "Not configured"} />
             </div>
             <div className="dossier-section__footer">
               <div><span className="meta-label">Registration record</span><strong>Current effective profile</strong><small>Update the facts here; source provenance and validation remain in Sources.</small></div>
@@ -253,9 +267,9 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
             <section className="dossier-section">
               <SectionHeading detail="Registration-side books and invoicing context." title="Books & invoicing" />
               <div className="dossier-facts dossier-facts--compact">
-                <Fact label="Accounting system" value={profile.accountingSystem ?? "Not configured"} />
-                <Fact label="Books type" value={profile.booksType ?? "Not configured"} />
-                <Fact label="Invoicing / permit" value={profile.invoicing ?? "Not configured"} />
+                <Fact label="Accounting system" value={controlledOptionLabel(profile.accountingSystem, clientAccountingSystemOptions)} />
+                <Fact label="Books type" value={controlledOptionLabel(profile.booksType, clientBooksOptions)} />
+                <Fact label="Invoicing / permit" value={controlledOptionLabel(profile.invoicing, clientInvoicingOptions)} />
               </div>
             </section>
 
@@ -323,16 +337,16 @@ function demoProfileStorageKey(clientId: string) {
 }
 
 function cloneProfile(profile: FixtureTaxProfile): FixtureTaxProfile {
-  return { ...profile, authorities: [...profile.authorities], auditExposures: [...profile.auditExposures], attention: [...profile.attention], extractionFields: profile.extractionFields ? [...profile.extractionFields] : undefined };
+  return { ...profile, entityType: controlledOptionValue(profile.entityType, clientEntityTypeOptions), registrationStatus: controlledOptionValue(profile.registrationStatus, clientRegistrationStatusOptions), accountingSystem: controlledOptionValue(profile.accountingSystem, clientAccountingSystemOptions, "Not configured"), booksType: controlledOptionValue(profile.booksType, clientBooksOptions, "Not configured"), invoicing: controlledOptionValue(profile.invoicing, clientInvoicingOptions, "Not configured"), filingChannel: controlledOptionValue(profile.filingChannel, ["Not configured", "eFPS", "eBIRForms", "eSubmission", "eAFS", "Needs review"], "Needs review"), eFPSGroup: profile.filingChannel === "eFPS" ? controlledOptionValue(profile.eFPSGroup, ["Group A", "Group B", "Group C", "Group D", "Group E", "Needs review"], "Needs review") : profile.eFPSGroup, registrationEffective: isIsoDate(profile.registrationEffective) ? profile.registrationEffective : "", authorities: [...profile.authorities], auditExposures: [...profile.auditExposures], attention: [...profile.attention], extractionFields: profile.extractionFields ? [...profile.extractionFields] : undefined, registeredTaxTypeCodes: profile.registeredTaxTypeCodes ? [...profile.registeredTaxTypeCodes] : undefined, registeredReturnCodes: profile.registeredReturnCodes ? [...profile.registeredReturnCodes] : undefined };
 }
 
-function ClientOverview({ attention, client, auditCount, nextWork, openWorkCount, profile, onSelectTab }: { attention: readonly string[]; client: FixtureClient; auditCount: number; nextWork?: (typeof fixtureWork)[number]; openWorkCount: number; profile: FixtureTaxProfile; onSelectTab: (tab: ClientWorkspaceTab) => void }) {
+function ClientOverview({ attention, client, auditCount, nextWork, onOpenAttention, openWorkCount, profile, onSelectTab }: { attention: readonly string[]; client: FixtureClient; auditCount: number; nextWork?: (typeof fixtureWork)[number]; onOpenAttention: (item: string) => void; openWorkCount: number; profile: FixtureTaxProfile; onSelectTab: (tab: ClientWorkspaceTab) => void }) {
   const attentionCount = attention.length;
   return <section className="client-overview" id="client-overview">
       <div className="client-overview__header"><div><p className="eyebrow">Overview</p><h2>At a glance</h2></div></div>
     <div className="client-overview__metrics">
       <div className="client-overview__metric"><span>Setup</span><strong>{profile.profileState}</strong><small>{profile.lastValidated ? `Validated ${profile.lastValidated}` : "Validation pending"}</small></div>
-      <button className={attentionCount > 0 ? "client-overview__metric client-overview__metric--attention" : "client-overview__metric"} onClick={() => onSelectTab(attention.length > 0 ? clientAttentionTab(attention[0]) : "registration")} type="button"><span>Attention</span><strong>{attentionCount || "None"}</strong><small>{attentionCount > 0 ? "Review profile controls" : "Nothing flagged"}</small></button>
+      <button aria-label={attentionCount > 0 ? `Attention: ${attentionCount} items requiring action` : "Attention: none"} className={attentionCount > 0 ? "client-overview__metric client-overview__metric--attention" : "client-overview__metric"} onClick={() => attention.length > 0 ? onOpenAttention(attention[0]) : onSelectTab("registration")} type="button"><span>Attention</span><strong>{attentionCount || "None"}</strong><small>{attentionCount > 0 ? `Resolve: ${clientAttentionSummary(attention[0])}` : "Nothing flagged"}</small></button>
       <button className={openWorkCount > 0 ? "client-overview__metric client-overview__metric--attention" : "client-overview__metric"} onClick={() => onSelectTab("activity")} type="button"><span>Open work</span><strong>{openWorkCount || "None"}</strong><small>{openWorkCount > 0 ? "View next action" : "No open activity"}</small></button>
       <div className="client-overview__metric"><span>Owner</span><strong>{client.assignment.preparer === "Unassigned" ? "Gap" : "Assigned"}</strong><small>{client.assignment.cluster}</small></div>
     </div>
@@ -346,6 +360,26 @@ function clientAttentionTab(item: string): ClientWorkspaceTab {
   if (normalized.includes("assignment") || normalized.includes("checker") || normalized.includes("reviewer")) return "team";
   if (normalized.includes("source") || normalized.includes("validation")) return "sources";
   return "registration";
+}
+
+function clientAttentionSummary(item: string): string {
+  const normalized = item.toLowerCase();
+  if (normalized.includes("assignment incomplete")) return "Assignment required";
+  if (normalized.includes("checker and reviewer conflict")) return "Separate Checker and Reviewer";
+  if (normalized.includes("preparer assignment missing")) return "Preparer required";
+  if (normalized.includes("checker assignment missing")) return "Checker required";
+  if (normalized.includes("reviewer assignment missing")) return "Reviewer required";
+  if (normalized.includes("rdo")) return "RDO needs review";
+  if (normalized.includes("tax year basis")) return "Tax year basis missing";
+  if (normalized.includes("fiscal year-end")) return "Fiscal year-end missing";
+  if (normalized.includes("filing channel")) return "Filing channel missing";
+  if (normalized.includes("accounting system")) return "Accounting system missing";
+  if (normalized.includes("efps")) return "eFPS group needs review";
+  if (normalized.includes("enate")) return "eNATE setup missing";
+  if (normalized.includes("payment route")) return "Payment route missing";
+  if (normalized.includes("audit")) return "BIR audit needs review";
+  if (normalized.includes("source") || normalized.includes("validation")) return "Source validation required";
+  return item;
 }
 
 function ClientActivitySection({ auditExposures, client, closedAuditCount, exceptions, openAuditCount, work }: { auditExposures: readonly FixtureAuditExposure[]; client: FixtureClient; closedAuditCount: number; exceptions: FixtureException[]; openAuditCount: number; work: typeof fixtureWork }) {
@@ -418,10 +452,42 @@ function FilingHistoryTable({ client }: { client: FixtureClient }) {
   return records.length === 0 ? <div className="dossier-empty">No filing history is recorded for this client.</div> : <div className="history-list">{records.map((item) => <div className="history-row" key={item.id}><div><strong>{item.formLabel} · {item.period}</strong><small>{item.filingResult} · payment {item.paymentState} · evidence {item.evidenceState}</small></div><time>{item.filingDate}</time></div>)}</div>;
 }
 
+const profileFiscalYearMonths = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"] as const;
+const profileFiscalYearDays = Array.from({ length: 31 }, (_, index) => String(index + 1));
+const profileFiscalYearDayCount: Record<string, number> = { April: 30, June: 30, September: 30, November: 30, February: 29 };
+
+function profileFiscalYearEndParts(value?: string) {
+  const [month, day] = (value ?? "").trim().split(/\s+/);
+  return { month: profileFiscalYearMonths.includes(month as (typeof profileFiscalYearMonths)[number]) ? month : "", day: /^\d{1,2}$/.test(day ?? "") ? day : "" };
+}
+
+function profileReturnCodes(profile: FixtureTaxProfile) {
+  return profile.registeredReturnCodes?.length ? [...profile.registeredReturnCodes] : governedReturnForms.filter((form) => profile.registeredTaxTypes.includes(form.formNumber)).map((form) => form.formNumber);
+}
+
 function IdentityDrawer({ profile, isSaving, onClose, onSave }: { profile: FixtureTaxProfile; isSaving: boolean; onClose: () => void; onSave: (profile: FixtureTaxProfile, reason: string) => void }) {
   const [draft, setDraft] = useState(() => cloneProfile(profile));
   const [reason, setReason] = useState("");
-  return <DetailDrawer eyebrow="Profile setup" title="Edit registration facts" subtitle="Changes are saved as a dated profile version." onClose={onClose}><div className="form-stack"><Field label="Registered taxpayer name"><input value={draft.registeredTaxpayerName} onChange={(event) => setDraft({ ...draft, registeredTaxpayerName: event.target.value })} /></Field><Field label="TIN"><input value={draft.tinDisplay} onChange={(event) => setDraft({ ...draft, tinDisplay: event.target.value })} /></Field><div className="form-grid"><Field label="RDO / LTS"><input value={draft.rdoOrLts} onChange={(event) => setDraft({ ...draft, rdoOrLts: event.target.value })} /></Field><Field label="Entity type"><input value={draft.entityType} onChange={(event) => setDraft({ ...draft, entityType: event.target.value })} /></Field></div><Field label="Registered address"><textarea value={draft.registeredAddress} onChange={(event) => setDraft({ ...draft, registeredAddress: event.target.value })} /></Field><div className="form-grid"><Field label="Registration date"><input value={draft.registrationEffective} onChange={(event) => setDraft({ ...draft, registrationEffective: event.target.value })} /></Field><Field label="Registration status"><input value={draft.registrationStatus} onChange={(event) => setDraft({ ...draft, registrationStatus: event.target.value })} /></Field></div><Field label="Nature / line of business"><textarea value={draft.lineOfBusiness} onChange={(event) => setDraft({ ...draft, lineOfBusiness: event.target.value })} /></Field><div className="form-grid"><Field label="Tax year basis"><select value={draft.taxYearBasis ?? ""} onChange={(event) => setDraft({ ...draft, taxYearBasis: (event.target.value || undefined) as FixtureTaxProfile["taxYearBasis"] })}><option value="">Not configured</option><option>Calendar year</option><option>Fiscal year</option></select></Field><Field label="Fiscal year-end"><input value={draft.fiscalYearEnd ?? ""} onChange={(event) => setDraft({ ...draft, fiscalYearEnd: event.target.value })} placeholder="Source wording or unresolved" /></Field></div><Field label="BIR registered tax types / forms"><textarea value={draft.registeredTaxTypes.join("\n")} onChange={(event) => setDraft({ ...draft, registeredTaxTypes: event.target.value.split(/\n|,/).map((value) => value.trim()).filter(Boolean) })} placeholder="One governed tax code or form per line" /></Field><div className="form-grid"><Field label="Accounting system"><input value={draft.accountingSystem ?? ""} onChange={(event) => setDraft({ ...draft, accountingSystem: event.target.value })} placeholder="System or source wording; leave unresolved when unknown" /></Field><Field label="Books type"><input value={draft.booksType ?? ""} onChange={(event) => setDraft({ ...draft, booksType: event.target.value })} placeholder="Source wording" /></Field></div><Field label="Invoicing / permit"><input value={draft.invoicing ?? ""} onChange={(event) => setDraft({ ...draft, invoicing: event.target.value })} placeholder="Source wording" /></Field><Field label="Filing channel"><select value={draft.filingChannel} onChange={(event) => setDraft({ ...draft, filingChannel: event.target.value })}><option>Not configured</option><option>eFPS</option><option>eBIRForms</option><option>Other approved channel</option><option>Needs review</option></select></Field><Field label="Reason for change"><input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required" /></Field><button className="button button--primary" disabled={isSaving || !reason.trim()} onClick={() => onSave(draft, reason)} type="button">{isSaving ? "Saving…" : "Save registration facts"}</button></div></DetailDrawer>;
+  const initialFiscalYearEnd = profileFiscalYearEndParts(profile.fiscalYearEnd);
+  const [fiscalYearEndMonth, setFiscalYearEndMonth] = useState(initialFiscalYearEnd.month);
+  const [fiscalYearEndDay, setFiscalYearEndDay] = useState(initialFiscalYearEnd.day);
+  const [returnCodes, setReturnCodes] = useState(() => profileReturnCodes(profile));
+  const [birOfficeOptions, setBirOfficeOptions] = useState<BirOfficeOption[]>([]);
+  const referenceBirOffices = birOfficeOptions.length > 0 ? birOfficeOptions : prototypeBirOfficeOptions;
+  const efpsGroupOptions = Array.from(new Set(["", ...clientEfpsGroupOptions, "Not applicable", "Needs review"]));
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/bir-offices", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const result = await response.json() as { data?: BirOfficeOption[] };
+        if (!cancelled && Array.isArray(result.data)) setBirOfficeOptions(result.data);
+      })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+  const selectedRdoCode = birOfficeCode(draft.rdoOrLts, referenceBirOffices);
+  return <DetailDrawer eyebrow="Profile setup" title="Edit registration facts" subtitle="Changes are saved as a dated profile version." onClose={onClose}><div className="form-stack"><Field label="Registered taxpayer name"><input value={draft.registeredTaxpayerName} onChange={(event) => setDraft({ ...draft, registeredTaxpayerName: event.target.value })} /></Field><Field label="TIN"><input inputMode="numeric" maxLength={17} value={formatTin(draft.tinDisplay)} onChange={(event) => setDraft({ ...draft, tinDisplay: normalizeTinDigits(event.target.value) })} /></Field><div className="form-grid"><Field label="RDO"><select value={selectedRdoCode} onChange={(event) => setDraft({ ...draft, rdoOrLts: event.target.value })}>{referenceBirOffices.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}<option value="Needs review">Needs review</option></select></Field><Field label="Entity type"><select value={clientEntityTypeOptions.includes(draft.entityType as typeof clientEntityTypeOptions[number]) ? draft.entityType : "Needs review"} onChange={(event) => setDraft({ ...draft, entityType: event.target.value })}>{clientEntityTypeOptions.map((option) => <option key={option}>{option}</option>)}</select></Field></div><Field label="Registered address"><textarea value={draft.registeredAddress} onChange={(event) => setDraft({ ...draft, registeredAddress: event.target.value })} /></Field><div className="form-grid"><Field label="Registration date"><input type="date" value={isIsoDate(draft.registrationEffective) ? draft.registrationEffective : ""} onChange={(event) => setDraft({ ...draft, registrationEffective: event.target.value })} /></Field><Field label="Registration status"><select value={clientRegistrationStatusOptions.includes(draft.registrationStatus as typeof clientRegistrationStatusOptions[number]) ? draft.registrationStatus : "Needs review"} onChange={(event) => setDraft({ ...draft, registrationStatus: event.target.value })}>{clientRegistrationStatusOptions.map((option) => <option key={option}>{option}</option>)}</select></Field></div><Field label="Nature / line of business"><textarea value={draft.lineOfBusiness} onChange={(event) => setDraft({ ...draft, lineOfBusiness: event.target.value })} /></Field><div className="form-grid"><Field label="Tax year basis"><select value={draft.taxYearBasis ?? ""} onChange={(event) => { const taxYearBasis = (event.target.value || undefined) as FixtureTaxProfile["taxYearBasis"]; setDraft({ ...draft, taxYearBasis, fiscalYearEnd: taxYearBasis === "Fiscal year" ? draft.fiscalYearEnd : undefined }); if (taxYearBasis !== "Fiscal year") { setFiscalYearEndMonth(""); setFiscalYearEndDay(""); } }}><option value="">Not configured</option><option>Calendar year</option><option>Fiscal year</option></select></Field><div className="form-field"><span>Fiscal year-end</span><div className="form-grid form-grid--compact"><select aria-label="Fiscal year-end month" disabled={draft.taxYearBasis !== "Fiscal year"} value={fiscalYearEndMonth} onChange={(event) => { setFiscalYearEndMonth(event.target.value); setFiscalYearEndDay(""); }}><option value="">Month</option>{profileFiscalYearMonths.map((month) => <option key={month}>{month}</option>)}</select><select aria-label="Fiscal year-end day" disabled={draft.taxYearBasis !== "Fiscal year" || !fiscalYearEndMonth} value={fiscalYearEndDay} onChange={(event) => setFiscalYearEndDay(event.target.value)}><option value="">Day</option>{profileFiscalYearDays.slice(0, profileFiscalYearDayCount[fiscalYearEndMonth] ?? 31).map((day) => <option key={day}>{day}</option>)}</select></div></div></div><section aria-labelledby="profile-returns-title" className="onboarding-tax-selector"><div className="drawer-section-intro"><strong id="profile-returns-title">Returns to be filed</strong><span>Use the governed BIR return list. Tax Team approval still controls generation.</span></div><div className="onboarding-tax-selector__selected">{returnCodes.length > 0 ? returnCodes.map((code) => <span className="onboarding-tax-chip" key={code}><strong>{code}</strong><button aria-label={`Remove ${code}`} onClick={() => setReturnCodes((current) => current.filter((value) => value !== code))} type="button">×</button></span>) : <span className="onboarding-tax-selector__empty">No returns selected</span>}</div><Field label="Add BIR return"><select aria-label="Add BIR return" value="" onChange={(event) => { if (event.target.value) setReturnCodes((current) => current.includes(event.target.value) ? current : [...current, event.target.value]); }}><option value="">Select a governed return</option>{governedReturnForms.filter((form) => !returnCodes.includes(form.formNumber)).map((form) => <option key={form.formNumber} value={form.formNumber}>{form.formNumber}</option>)}</select></Field></section><div className="form-grid"><Field label="Go-live date"><input value={draft.goLiveDate ?? ""} onChange={(event) => setDraft({ ...draft, goLiveDate: event.target.value })} type="date" /></Field><Field label="Permanent SharePoint file"><input value={draft.permanentFileLink ?? ""} onChange={(event) => setDraft({ ...draft, permanentFileLink: event.target.value })} type="url" /></Field></div><div className="form-grid"><Field label="Accounting system"><select value={clientAccountingSystemOptions.includes(draft.accountingSystem as typeof clientAccountingSystemOptions[number]) ? draft.accountingSystem : "Not configured"} onChange={(event) => setDraft({ ...draft, accountingSystem: event.target.value })}>{clientAccountingSystemOptions.map((option) => <option key={option}>{option}</option>)}</select></Field><Field label="Books"><select value={clientBooksOptions.includes(draft.booksType as typeof clientBooksOptions[number]) ? draft.booksType : "Needs review"} onChange={(event) => setDraft({ ...draft, booksType: event.target.value })}>{clientBooksOptions.map((option) => <option key={option}>{option}</option>)}</select></Field></div><div className="form-grid"><Field label="Receipts / invoicing"><select value={clientInvoicingOptions.includes(draft.invoicing as typeof clientInvoicingOptions[number]) ? draft.invoicing : "Needs review"} onChange={(event) => setDraft({ ...draft, invoicing: event.target.value })}>{clientInvoicingOptions.map((option) => <option key={option}>{option}</option>)}</select></Field><Field label="Filing channel"><select value={draft.filingChannel} onChange={(event) => { const filingChannel = event.target.value; setDraft({ ...draft, filingChannel, eFPSGroup: filingChannel === "eFPS" ? draft.eFPSGroup : "Not applicable" }); }}><option>Not configured</option><option>eFPS</option><option>eBIRForms</option><option>eSubmission</option><option>eAFS</option><option>Needs review</option></select></Field></div><Field label="eFPS group"><select disabled={draft.filingChannel !== "eFPS"} value={draft.filingChannel === "eFPS" ? (efpsGroupOptions.includes(draft.eFPSGroup ?? "") ? draft.eFPSGroup : "Needs review") : "Not applicable"} onChange={(event) => setDraft({ ...draft, eFPSGroup: event.target.value })}><option value="">Not configured</option>{efpsGroupOptions.filter(Boolean).map((option) => <option key={option}>{option}</option>)}</select></Field><Field label="Reason for change"><input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required" /></Field><button className="button button--primary" disabled={isSaving || !reason.trim()} onClick={() => onSave({ ...draft, tinDisplay: normalizeTinDigits(draft.tinDisplay), fiscalYearEnd: draft.taxYearBasis === "Fiscal year" && fiscalYearEndMonth && fiscalYearEndDay ? `${fiscalYearEndMonth} ${fiscalYearEndDay}` : undefined, registeredReturnCodes: returnCodes }, reason)} type="button">{isSaving ? "Saving…" : "Save registration facts"}</button></div></DetailDrawer>;
 }
 
 function SetupDrawer({ assignment, profile, isSaving, onClose, onSave }: { assignment: FixtureClient["assignment"]; profile: FixtureTaxProfile; isSaving: boolean; onClose: () => void; onSave: (assignment: FixtureClient["assignment"], profile: FixtureTaxProfile, reason: string) => void }) {
@@ -437,13 +503,23 @@ function SetupDrawer({ assignment, profile, isSaving, onClose, onSave }: { assig
     if (!reason.trim()) return setError("Enter a reason for this setup change.");
     onSave(draftAssignment, draftProfile, reason);
   }
-  return <DetailDrawer eyebrow="TMF setup" title="Edit operating setup" subtitle="Changes are saved as a dated setup version." onClose={onClose}><div className="form-stack">{error && <div className="form-error" role="alert">{error}</div>}<div className="form-grid"><Field label="Preparer"><input value={draftAssignment.preparer} onChange={(event) => setDraftAssignment({ ...draftAssignment, preparer: event.target.value })} /></Field><Field label="Checker"><input value={draftAssignment.checker} onChange={(event) => setDraftAssignment({ ...draftAssignment, checker: event.target.value })} /></Field><Field label="Reviewer"><input value={draftAssignment.reviewer} onChange={(event) => setDraftAssignment({ ...draftAssignment, reviewer: event.target.value })} /></Field><Field label="Cluster"><input value={draftAssignment.cluster} onChange={(event) => setDraftAssignment({ ...draftAssignment, cluster: event.target.value })} /></Field></div><Field label="Client Weight"><select value={draftProfile.weight} onChange={(event) => { const weight = Number(event.target.value) as FixtureTaxProfile["weight"]; setDraftProfile({ ...draftProfile, weight, weightLabel: weightLabels[weight] }); }}><option value="1">1 · Super Light</option><option value="2">2 · Light</option><option value="3">3 · Medium</option><option value="4">4 · Heavy</option><option value="5">5 · Super Heavy</option></select></Field><Field label="eNATE Setup"><select value={draftProfile.enateSetup} onChange={(event) => setDraftProfile({ ...draftProfile, enateSetup: event.target.value as FixtureTaxProfile["enateSetup"] })}><option>Yes</option><option>No</option><option>Unknown</option></select></Field><Field label="Payment Route"><select value={draftProfile.paymentRoute} onChange={(event) => setDraftProfile({ ...draftProfile, paymentRoute: event.target.value as FixtureTaxProfile["paymentRoute"] })}><option>Client Pays</option><option>TMF Pays</option><option>Not configured</option></select></Field><Field label="Reason for change"><input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required" /></Field><button className="button button--primary" disabled={isSaving} onClick={save} type="button">{isSaving ? "Saving…" : "Save operating setup"}</button></div></DetailDrawer>;
+  const activeMembers = fixtureOrgDirectoryMembers.filter((member) => member.active && member.tower !== "All A&T" && member.operatingModel !== "TAX_TEAM");
+  const roleOptions = (role: "preparer" | "checker" | "reviewer") => {
+    const eligible = role === "preparer" ? activeMembers.filter((member) => member.role === "Team Member") : role === "checker" ? activeMembers.filter((member) => member.role === "Team Member" || member.role === "HOD / Leader") : activeMembers.filter((member) => member.role === "HOD / Leader");
+    return Array.from(new Set([draftAssignment[role], ...eligible.map((member) => member.name)].filter(Boolean)));
+  };
+  const clusterOptions = Array.from(new Set([draftAssignment.cluster, ...activeMembers.map((member) => member.cluster)].filter(Boolean)));
+  return <DetailDrawer eyebrow="TMF setup" title="Edit operating setup" subtitle="Changes are saved as a dated setup version." onClose={onClose}><div className="form-stack">{error && <div className="form-error" role="alert">{error}</div>}<div className="form-grid"><AssignmentSelect label="Preparer" value={draftAssignment.preparer} options={roleOptions("preparer")} onChange={(value) => setDraftAssignment({ ...draftAssignment, preparer: value })} /><AssignmentSelect label="Checker" value={draftAssignment.checker} options={roleOptions("checker")} onChange={(value) => setDraftAssignment({ ...draftAssignment, checker: value })} /><AssignmentSelect label="Reviewer" value={draftAssignment.reviewer} options={roleOptions("reviewer")} onChange={(value) => setDraftAssignment({ ...draftAssignment, reviewer: value })} /><AssignmentSelect label="Cluster" value={draftAssignment.cluster} options={clusterOptions} onChange={(value) => setDraftAssignment({ ...draftAssignment, cluster: value })} /></div><Field label="Client Weight"><select value={draftProfile.weight} onChange={(event) => { const weight = Number(event.target.value) as FixtureTaxProfile["weight"]; setDraftProfile({ ...draftProfile, weight, weightLabel: weightLabels[weight] }); }}><option value="1">1 · Super Light</option><option value="2">2 · Light</option><option value="3">3 · Medium</option><option value="4">4 · Heavy</option><option value="5">5 · Super Heavy</option></select></Field><Field label="eNATE Setup"><select value={draftProfile.enateSetup} onChange={(event) => setDraftProfile({ ...draftProfile, enateSetup: event.target.value as FixtureTaxProfile["enateSetup"] })}><option>Yes</option><option>No</option><option>Unknown</option></select></Field><Field label="Payment Route"><select value={draftProfile.paymentRoute} onChange={(event) => setDraftProfile({ ...draftProfile, paymentRoute: event.target.value as FixtureTaxProfile["paymentRoute"] })}><option>Client Pays</option><option>TMF Pays</option><option>Not configured</option></select></Field><Field label="Reason for change"><input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required" /></Field><button className="button button--primary" disabled={isSaving} onClick={save} type="button">{isSaving ? "Saving…" : "Save operating setup"}</button></div></DetailDrawer>;
+}
+
+function AssignmentSelect({ label, value, options, onChange }: { label: string; value: string; options: readonly string[]; onChange: (value: string) => void }) {
+  return <Field label={label}><select value={value} onChange={(event) => onChange(event.target.value)}><option value="Unassigned">Unassigned</option>{options.filter((option) => option !== "Unassigned").map((option) => <option key={option}>{option}</option>)}</select></Field>;
 }
 
 function AuthorityDrawer({ isSaving, onClose, onSave }: { isSaving: boolean; onClose: () => void; onSave: (authority: FixtureAuthority, reason: string) => void }) {
   const [authority, setAuthority] = useState<FixtureAuthority>({ id: "authority-review", authority: "", reference: "Review reference", status: "Active", effectiveFrom: "Current review", entitlement: "Context recorded; tax treatment is not inferred.", source: "Approved review source" });
   const [reason, setReason] = useState("");
-  return <DetailDrawer eyebrow="Standing context" title="Add authority record" subtitle="The record is saved with source and effective-date history." onClose={onClose}><div className="form-stack"><Field label="Authority / scheme"><input autoFocus value={authority.authority} onChange={(event) => setAuthority({ ...authority, authority: event.target.value })} placeholder="PEZA, SEC, BOI, DOE or other" /></Field><Field label="Reference"><input value={authority.reference} onChange={(event) => setAuthority({ ...authority, reference: event.target.value })} /></Field><Field label="Status"><select value={authority.status} onChange={(event) => setAuthority({ ...authority, status: event.target.value as FixtureAuthority["status"] })}><option>Active</option><option>Review due</option><option>Not configured</option></select></Field><Field label="Entitlement / exemption context"><textarea value={authority.entitlement} onChange={(event) => setAuthority({ ...authority, entitlement: event.target.value })} /></Field><Field label="Reason for change"><input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required" /></Field><button className="button button--primary" disabled={!authority.authority.trim() || !reason.trim() || isSaving} onClick={() => onSave(authority, reason)} type="button">{isSaving ? "Saving…" : "Add authority"}</button></div></DetailDrawer>;
+  return <DetailDrawer eyebrow="Standing context" title="Add authority record" subtitle="The record is saved with source and effective-date history." onClose={onClose}><div className="form-stack"><Field label="Authority / scheme"><select autoFocus value={authority.authority} onChange={(event) => setAuthority({ ...authority, authority: event.target.value })}><option value="">Select authority</option>{clientAuthorityOptions.map((option) => <option key={option}>{option}</option>)}</select></Field><Field label="Reference"><input value={authority.reference} onChange={(event) => setAuthority({ ...authority, reference: event.target.value })} /></Field><Field label="Status"><select value={authority.status} onChange={(event) => setAuthority({ ...authority, status: event.target.value as FixtureAuthority["status"] })}><option>Active</option><option>Review due</option><option>Not configured</option></select></Field><Field label="Entitlement / exemption context"><textarea value={authority.entitlement} onChange={(event) => setAuthority({ ...authority, entitlement: event.target.value })} /></Field><Field label="Reason for change"><input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required" /></Field><button className="button button--primary" disabled={!authority.authority.trim() || !reason.trim() || isSaving} onClick={() => onSave(authority, reason)} type="button">{isSaving ? "Saving…" : "Add authority"}</button></div></DetailDrawer>;
 }
 
 function AuditDrawer({ isSaving, onClose, onSave }: { isSaving: boolean; onClose: () => void; onSave: (audit: FixtureAuditExposure, reason: string) => void }) {
@@ -462,8 +538,8 @@ function AuditDrawer({ isSaving, onClose, onSave }: { isSaving: boolean; onClose
   return <DetailDrawer eyebrow="Tax audit" title="Add audit record" subtitle="Record standing year-level context without creating a tax-audit case file." onClose={onClose}><div className="form-stack">{error && <div className="form-error" role="alert">{error}</div>}<div className="form-grid"><Field label="Taxable year"><input autoFocus value={audit.taxableYear} onChange={(event) => setAudit({ ...audit, taxableYear: event.target.value })} placeholder="e.g. FY 2024" /></Field><Field label="As of"><input value={audit.asOf} onChange={(event) => setAudit({ ...audit, asOf: event.target.value })} /></Field></div><Field label="Matter / scope"><input value={audit.matter} onChange={(event) => setAudit({ ...audit, matter: event.target.value })} placeholder="BIR audit exposure or assessment context" /></Field><Field label="Status"><select value={audit.status} onChange={(event) => setAudit({ ...audit, status: event.target.value as FixtureAuditExposure["status"] })}><option>Open</option><option>Under review</option><option>Closed</option></select></Field><div className="form-grid"><Field label="BIR officer"><input value={audit.officerName ?? ""} onChange={(event) => setAudit({ ...audit, officerName: event.target.value })} placeholder="Name as recorded" /></Field><Field label="Officer role"><input value={audit.officerRole ?? ""} onChange={(event) => setAudit({ ...audit, officerRole: event.target.value })} placeholder="Optional" /></Field></div><Field label="Officer contact"><input value={audit.officerContact ?? ""} onChange={(event) => setAudit({ ...audit, officerContact: event.target.value })} placeholder="Optional phone or email" /></Field><Field label="Context"><textarea value={audit.context} onChange={(event) => setAudit({ ...audit, context: event.target.value })} placeholder="High-level context only" /></Field><Field label="Source / reference"><input value={audit.source} onChange={(event) => setAudit({ ...audit, source: event.target.value })} placeholder="Approved source or reference" /></Field><Field label="Reason for change"><input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required" /></Field><button className="button button--primary" disabled={isSaving} onClick={save} type="button">{isSaving ? "Saving…" : "Save audit record"}</button></div></DetailDrawer>;
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="form-field"><span>{label}</span>{children}</label>;
+function Field({ label, children, invalid = false, required = false }: { label: string; children: React.ReactNode; invalid?: boolean; required?: boolean }) {
+  return <label className={invalid ? "form-field form-field--invalid" : "form-field"}><span>{label}{required ? " *" : ""}</span>{children}{invalid && <small className="form-field__error">Required</small>}</label>;
 }
 
 const weightLabels: Record<number, string> = { 0: "No numeric source weight", 1: "Super Light", 2: "Light", 3: "Medium", 4: "Heavy", 5: "Super Heavy" };

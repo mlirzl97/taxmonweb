@@ -25,29 +25,34 @@ export function SignInForm({ isConfigured }: SignInFormProps) {
     const client = createSupabaseBrowserClient();
 
     if (!client) {
-      setError("Supabase Auth is not configured for this environment.");
+      setError("Sign-in is temporarily unavailable.");
       setIsSubmitting(false);
       return;
     }
 
-    const { error: signInError } = await client.auth.signInWithPassword({ email, password });
+    try {
+      const { error: signInError } = await client.auth.signInWithPassword({ email, password });
 
-    if (signInError) {
-      setError(signInError.message);
+      if (signInError) {
+        setError("Incorrect email or password.");
+        return;
+      }
+
+      router.replace("/app/control-tower");
+      router.refresh();
+    } catch {
+      setError("Unable to sign in right now. Try again.");
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    router.replace("/app/control-tower");
-    router.refresh();
   }
 
   return (
     <form className="sign-in-form" onSubmit={handleSubmit}>
       {!isConfigured && (
         <div className="callout callout--warning" role="status">
-          <strong>Environment setup required</strong>
-          <p>Copy <code>.env.example</code> to <code>.env.local</code> and add the approved Supabase project URL and anon key before signing in.</p>
+          <strong>Sign-in unavailable</strong>
+          <p>This environment is not connected to TaxMonWeb Auth.</p>
         </div>
       )}
       {error && <div className="callout callout--error" role="alert">{error}</div>}
@@ -63,7 +68,6 @@ export function SignInForm({ isConfigured }: SignInFormProps) {
         {isSubmitting ? "Signing in…" : "Sign in"}
       </button>
       <Link className="auth-back-link" href="/forgot-password">Forgot password?</Link>
-      <p className="form-footnote">Access is provided through the configured TaxMonWeb Supabase Auth project.</p>
     </form>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { EmptyState, FixturePageFrame, PageHeader, SectionHeading } from "@/components/app/workspace-components";
@@ -25,13 +26,16 @@ const moduleLabels: ReadonlyArray<[ModuleKey, string]> = [["control_tower", "Con
 const accessLevelOptions: readonly AccessLevel[] = ["NONE", "VIEW", "ACT", "APPROVE", "GOVERN", "OVERRIDE"];
 
 export default function AdminPage() {
-  const [view, setView] = useState<AdminView>("overview");
+  const searchParams = useSearchParams();
+  const requestedView = searchParams.get("view");
+  const initialView: AdminView = requestedView === "access" || requestedView === "organization" || requestedView === "audit" || requestedView === "settings" ? requestedView : "overview";
+  const [view, setView] = useState<AdminView>(initialView);
 
   return (
     <FixturePageFrame>
       <PageHeader description="Govern access, structure and history." title="Admin" />
-      <nav aria-label="Admin views" className="tower-tabs module-tabs">
-        {adminViews.map((item) => <button aria-pressed={view === item.id} className={view === item.id ? "tower-tab tower-tab--active" : "tower-tab"} key={item.id} onClick={() => setView(item.id)} type="button">{item.label}</button>)}
+      <nav aria-label="Admin views" className="tower-tabs module-tabs" role="tablist">
+        {adminViews.map((item) => <button aria-selected={view === item.id} className={view === item.id ? "tower-tab tower-tab--active" : "tower-tab"} key={item.id} onClick={() => setView(item.id)} role="tab" tabIndex={view === item.id ? 0 : -1} type="button">{item.label}</button>)}
       </nav>
 
       {view === "overview" && <AdminOverview />}

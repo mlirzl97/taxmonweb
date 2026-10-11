@@ -1130,6 +1130,10 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
 .service-calendar-table th { background: var(--surface-soft); color: var(--muted); font-size: 9px; font-weight: 850; letter-spacing: .05em; padding: 8px; text-align: left; text-transform: uppercase; }
 .service-calendar-table td { border-top: 1px solid var(--border); color: var(--ink-soft); font-size: 10px; padding: 9px 8px; vertical-align: top; }
 .service-calendar-table td strong { color: var(--ink); font-size: 11px; }
+.service-calendar-table .service-calendar-month-row th { background: var(--ink); color: #fff; font-size: 9px; letter-spacing: .08em; padding: 7px 8px; text-align: left; text-transform: uppercase; }
+.service-calendar-print-summary { display: none; }
+.service-calendar-print-sections,
+.service-calendar-print-footer { display: none; }
 .service-calendar-print-document .service-calendar-table th,
 .service-calendar-print-document .service-calendar-table td { overflow-wrap: anywhere; }
 .client-audit-history--compact { margin-top: 14px; }
@@ -1208,13 +1212,18 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
 .form-grid { display: grid; gap: 11px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .form-field { display: grid; gap: 5px; }
 .form-field > span { color: var(--ink-soft); font-size: 11px; font-weight: 750; }
+.form-field--invalid > span { color: var(--danger); }
 .form-field__hint { color: var(--muted); font-size: 10px; line-height: 1.35; }
+.form-field__error { color: var(--danger); font-size: 10px; line-height: 1.35; }
 .form-grid--compact { grid-template-columns: minmax(0, 1.35fr) minmax(78px, .65fr); }
 .form-field input, .form-field select, .form-field textarea { background: var(--surface); border: 1px solid var(--border-strong); color: var(--ink); min-height: 36px; padding: 8px 9px; width: 100%; }
+.form-field--invalid input, .form-field--invalid select, .form-field--invalid textarea { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+.form-field:has(input:required:invalid) > span, .form-field:has(select:required:invalid) > span, .form-field:has(input[placeholder="e.g. CRM-2026-001"]:placeholder-shown) > span, .form-field:has(input[placeholder="Approved client name"]:placeholder-shown) > span, .form-field:has(input[placeholder="Name from 2303"]:placeholder-shown) > span, .form-field:has(input[placeholder="Required"]:placeholder-shown) > span, .detail-drawer:not(:has(.onboarding-drawer)) .form-field:has(select option:checked[value=""]) > span, .detail-drawer:not(:has(.onboarding-drawer)) .form-field:has(select option:checked[value="Needs review"]) > span { color: var(--danger); }
+.form-field:has(input:required:invalid) input, .form-field:has(select:required:invalid) select, .form-field:has(textarea:required:invalid) textarea, .form-field:has(input[placeholder="e.g. CRM-2026-001"]:placeholder-shown) input, .form-field:has(input[placeholder="Approved client name"]:placeholder-shown) input, .form-field:has(input[placeholder="Name from 2303"]:placeholder-shown) input, .form-field:has(input[placeholder="Required"]:placeholder-shown) input, .detail-drawer:not(:has(.onboarding-drawer)) .form-field:has(select option:checked[value=""]) select, .detail-drawer:not(:has(.onboarding-drawer)) .form-field:has(select option:checked[value="Needs review"]) select { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
 .form-field textarea { min-height: 76px; resize: vertical; }
 .form-error { background: var(--danger-bg); border: 1px solid #efc8c8; color: var(--danger); font-size: 11px; padding: 9px 10px; }
 .onboarding-drawer { gap: 16px; }
-.onboarding-steps { border-bottom: 1px solid var(--border); display: grid; gap: 4px; grid-template-columns: repeat(4, minmax(0, 1fr)); padding-bottom: 10px; }
+.onboarding-steps { border-bottom: 1px solid var(--border); display: grid; gap: 0; grid-template-columns: repeat(5, minmax(0, 1fr)); padding-bottom: 10px; }
 .onboarding-step { align-items: center; background: transparent; border: 0; color: var(--muted); cursor: pointer; display: grid; font-size: 9px; font-weight: 800; gap: 5px; justify-items: center; padding: 0 2px; text-align: center; }
 .onboarding-step span { align-items: center; border: 1px solid var(--border-strong); border-radius: 50%; display: flex; height: 22px; justify-content: center; width: 22px; }
 .onboarding-step--active { color: var(--brand-red-dark); }
@@ -1222,11 +1231,22 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
 .onboarding-status { align-items: baseline; background: var(--surface-soft); border-left: 3px solid var(--amber); display: flex; flex-wrap: wrap; gap: 8px; padding: 9px 10px; }
 .onboarding-status strong { font-size: 12px; }
 .onboarding-status span { color: var(--slate); font-size: 10px; }
+.onboarding-requiredness { align-items: baseline; color: var(--slate); display: flex; flex-wrap: wrap; font-size: 10px; gap: 6px; }
+.onboarding-requiredness strong { color: var(--ink-soft); font-size: 10px; }
+.onboarding-requiredness b { color: var(--danger); }
+.onboarding-drawer .form-field:has(input:required) > span::after, .onboarding-drawer .form-field:has(select:required) > span::after, .onboarding-drawer .form-field:has(textarea:required) > span::after { color: var(--danger); content: " *"; }
+.onboarding-document--check { align-items: center; cursor: pointer; display: flex; gap: 10px; justify-content: space-between; }
+.onboarding-document--check > span { display: grid; gap: 3px; }
+.onboarding-document--check small { color: var(--slate); font-size: 9px; }
+.onboarding-document--check input { accent-color: var(--brand-red); height: 18px; width: 18px; }
 .drawer-section-intro { background: #f8f4f1; border: 1px solid #ebe0d8; display: grid; gap: 3px; padding: 11px; }
 .drawer-section-intro strong { font-size: 12px; }
 .drawer-section-intro span { color: var(--slate); font-size: 10px; line-height: 1.45; }
 .onboarding-document-list { display: grid; gap: 9px; }
 .onboarding-tax-selector { display: grid; gap: 10px; }
+.onboarding-tax-selector--invalid .drawer-section-intro { border-color: var(--danger); }
+.onboarding-tax-selector--invalid .drawer-section-intro strong { color: var(--danger); }
+.onboarding-tax-selector--invalid .onboarding-tax-selector__selected { border: 1px solid var(--danger); box-shadow: 0 0 0 1px var(--danger); padding: 8px; }
 .onboarding-tax-selector__selected { align-items: center; display: flex; flex-wrap: wrap; gap: 7px; min-height: 36px; }
 .onboarding-tax-chip { align-items: center; background: var(--brand-red-dark); border: 1px solid var(--brand-red-dark); border-radius: 999px; color: #fff; display: inline-flex; font-size: 10px; font-weight: 800; gap: 6px; padding: 6px 8px 6px 10px; }
 .onboarding-tax-chip button { background: transparent; border: 0; color: inherit; cursor: pointer; font-size: 15px; line-height: 1; padding: 0; }
@@ -1237,6 +1257,9 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
 .onboarding-tax-suggestion small { color: var(--muted); font-size: 9px; font-weight: 500; line-height: 1.2; max-width: 280px; }
 .onboarding-tax-suggestion:hover, .onboarding-tax-suggestion:focus-visible { border-color: var(--brand-red); color: var(--brand-red-dark); }
 .onboarding-document { border: 1px solid var(--border); display: grid; gap: 9px; padding: 10px; }
+.onboarding-document--invalid { border-color: var(--danger); }
+.onboarding-document--invalid select { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
+.onboarding-document input:required:invalid { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger); }
 .onboarding-document__header { align-items: start; display: flex; gap: 10px; justify-content: space-between; }
 .onboarding-document__header > div { display: grid; gap: 3px; min-width: 0; }
 .onboarding-document__header strong { font-size: 11px; }
@@ -1893,7 +1916,8 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
   body * { visibility: hidden !important; }
   #client-service-calendar-print,
   #client-service-calendar-print * { visibility: visible !important; }
-  #client-service-calendar-print { background: #fff; left: 0; margin: 0; position: absolute; top: 0; width: 100%; }
+  #client-service-calendar-print { background: #fff; color: #202326; font-family: Arial, Helvetica, sans-serif; left: 0; margin: 0; padding: 0; position: absolute; top: 0; width: 100%; }
+  #client-service-calendar-print::before { background: #e31b23; content: ""; display: block; height: 8px; margin: -12mm -12mm 12px; }
   #client-service-calendar-print .service-calendar-print-action,
   #client-service-calendar-print .module-header__right .button,
   #client-service-calendar-print .registry-toolbar,
@@ -1901,17 +1925,43 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
   #client-service-calendar-print .section-heading p,
   #client-service-calendar-print .service-calendar-table-wrap + .inline-empty { display: none !important; }
   #client-service-calendar-print .module-header { align-items: start; border-bottom: 0; display: flex; margin: 0 0 12px; padding: 0; }
-  #client-service-calendar-print .service-calendar-heading { gap: 18px; }
+  #client-service-calendar-print .service-calendar-heading { gap: 18px; width: 100%; }
   #client-service-calendar-print .service-calendar-brand { display: flex; }
   #client-service-calendar-print .service-calendar-brand strong { font-size: 16px; }
   #client-service-calendar-print .module-header h2 { font-size: 20px; margin: 4px 0; }
   #client-service-calendar-print .module-header__description { font-size: 8px; max-width: 420px; }
-  #client-service-calendar-print .module-header__right { display: block; margin-left: auto; }
-  #client-service-calendar-print .module-count { border: 1px solid #d8d6d1; padding: 7px 9px; }
+  #client-service-calendar-print .module-header__right,
+  #client-service-calendar-print .module-count { display: none; }
+  #client-service-calendar-print .service-calendar-print-summary { display: grid; gap: 7px; grid-template-columns: repeat(3, 1fr); margin: 0 0 14px; }
+  #client-service-calendar-print .service-calendar-print-summary > div { background: #f5f5f2; border: 0.4px solid #d8d6d1; min-height: 30px; padding: 7px; }
+  #client-service-calendar-print .service-calendar-print-summary > div:first-child { background: #fff1f1; }
+  #client-service-calendar-print .service-calendar-print-summary span { color: #697078; display: block; font-size: 5.2px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  #client-service-calendar-print .service-calendar-print-summary strong { color: #202326; display: block; font-size: 9px; margin-top: 3px; }
+  #client-service-calendar-print .service-calendar-print-summary > div:first-child strong { color: #e31b23; }
   #client-service-calendar-print .panel { border: 0; padding: 0; }
   #client-service-calendar-print .section-heading { margin-bottom: 7px; }
   #client-service-calendar-print .section-heading h2 { font-size: 10px; }
   #client-service-calendar-print .service-calendar-table-wrap { border: 1px solid #cfcfc9; overflow: visible; }
+  #client-service-calendar-print .service-calendar-table-wrap { display: none; }
+  #client-service-calendar-print .service-calendar-print-sections { display: block; }
+  #client-service-calendar-print .service-calendar-print-section { break-inside: avoid; margin: 0 0 8px; page-break-inside: avoid; }
+  #client-service-calendar-print .service-calendar-print-section h3 { background: #202326; border-left: 5px solid #e31b23; color: #fff; font-size: 7.4px; letter-spacing: .08em; margin: 0; padding: 6px 7px; text-transform: uppercase; }
+  #client-service-calendar-print .service-calendar-print-table { border: 1px solid #cfcfc9; border-collapse: collapse; table-layout: fixed; width: 100%; }
+  #client-service-calendar-print .service-calendar-print-table thead { display: table-header-group; }
+  #client-service-calendar-print .service-calendar-print-table th { background: #ededeb; color: #202326; font-size: 6.2px; line-height: 1.15; padding: 6px 4px; text-align: left; }
+  #client-service-calendar-print .service-calendar-print-table td { border-top: 0.35px solid #d0d0cc; color: #202326; font-size: 6.5px; line-height: 1.2; padding: 6px 4px; vertical-align: top; }
+  #client-service-calendar-print .service-calendar-print-table td strong { font-size: 7px; }
+  #client-service-calendar-print .service-calendar-print-table th:nth-child(1) { width: 8%; }
+  #client-service-calendar-print .service-calendar-print-table th:nth-child(2) { width: 9%; }
+  #client-service-calendar-print .service-calendar-print-table th:nth-child(3) { width: 17%; }
+  #client-service-calendar-print .service-calendar-print-table th:nth-child(4) { width: 11%; }
+  #client-service-calendar-print .service-calendar-print-table th:nth-child(5) { width: 12%; }
+  #client-service-calendar-print .service-calendar-print-table th:nth-child(6) { width: 11%; }
+  #client-service-calendar-print .service-calendar-print-table th:nth-child(7) { width: 11%; }
+  #client-service-calendar-print .service-calendar-print-table th:nth-child(8) { width: 10%; }
+  #client-service-calendar-print .service-calendar-print-table th:nth-child(9) { width: 11%; }
+  #client-service-calendar-print .service-calendar-print-table tr { break-inside: avoid; page-break-inside: avoid; }
+  #client-service-calendar-print .service-calendar-print-footer { border-top: 0.4px solid #d1d0cb; color: #697078; display: block; font-size: 5.8px; margin-top: 10px; padding-top: 4px; }
   #client-service-calendar-print .service-calendar-table { min-width: 0; table-layout: fixed; width: 100%; }
   #client-service-calendar-print .service-calendar-table th { font-size: 6.2px; line-height: 1.15; padding: 6px 4px; }
   #client-service-calendar-print .service-calendar-table td { font-size: 6.5px; line-height: 1.2; padding: 6px 4px; }
@@ -1927,8 +1977,10 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
   #client-service-calendar-print .service-calendar-table th:nth-child(9) { width: 11%; }
   #client-service-calendar-print .service-calendar-table thead { display: table-header-group; }
   #client-service-calendar-print .service-calendar-table tr { break-inside: avoid; page-break-inside: avoid; }
+  #client-service-calendar-print .service-calendar-table .service-calendar-month-row { break-after: avoid; page-break-after: avoid; }
   #client-service-calendar-print .service-calendar-table th,
   #client-service-calendar-print .service-calendar-table td { color: #202326; }
+  #client-service-calendar-print .service-calendar-table .service-calendar-month-row th { background: #202326; color: #fff; font-size: 7px; padding: 5px 4px; }
 }
 
 /* Return journey: the process is read top-to-bottom on one control spine. */

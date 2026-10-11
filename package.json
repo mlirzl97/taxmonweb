@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "TAXMON_E2E_MODE=true TAXMON_DEMO_MODE=true TAXMON_CALIBRATION_EDIT_MODE=true TAXMON_DATA_MODE=sanitized npm run build && playwright test",
     "fixtures:import": "tsx scripts/import-sanitized-fixtures.ts",
     "fixtures:audit": "tsx scripts/import-sanitized-fixtures.ts --audit --include-tax-profiles",
     "test:watch": "vitest",

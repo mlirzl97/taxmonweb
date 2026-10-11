@@ -286,7 +286,7 @@ const sanitized2303Fields: readonly FixtureExtractionField[] = [
   { label: "Business Category / Registration Date", value: "Primary · synthetic registration date", sourcePage: "Page 2", confidence: "High", provenance: "2303-derived" },
   { label: "Certification / Registering Authority", value: "Synthetic certification block · no signature retained", sourcePage: "Page 3", confidence: "High", provenance: "2303-derived" },
   { label: "Fiscal Year-End", value: "Not shown on supplied specimen", sourcePage: "Not on source", confidence: "Missing", provenance: "Not on source" },
-  { label: "RDO / LTS", value: "Requires approved supplementary source", sourcePage: "Not on source", confidence: "Missing", provenance: "Not on source" },
+  { label: "RDO", value: "Needs review", sourcePage: "Not on source", confidence: "Missing", provenance: "Not on source" },
   { label: "eFPS Group", value: "Not shown on supplied specimen", sourcePage: "Not on source", confidence: "Missing", provenance: "Not on source" },
 ];
 
@@ -516,11 +516,11 @@ function generatedPortfolioProfile(
 
   if (certificateStructureFixture) attention.push("Sanitized 2303 registration structure captured; human validation required");
   if (needs2303Review) attention.push("Source review pending; no binary document is stored");
-  if (needsRdoSource) attention.push("RDO/LTS requires approved supplementary source");
+  if (needsRdoSource) attention.push("RDO requires approved supplementary source");
   if (missingFiscalYear) attention.push("Fiscal year-end missing");
   if (missingFiscalYear) attention.push("Tax year basis missing");
   const taxYearBasis: FixtureTaxProfile["taxYearBasis"] = missingFiscalYear ? undefined : clientIndex % 5 === 0 ? "Fiscal year" : "Calendar year";
-  const accountingSystem = clientIndex % 4 === 0 ? "CAS/CBA · illustrative" : clientIndex % 4 === 1 ? "ERP · illustrative" : clientIndex % 4 === 2 ? "Manual accounting system · illustrative" : "Not configured";
+  const accountingSystem = clientIndex % 4 === 0 ? "CAS / CBA" : clientIndex % 4 === 1 ? "ERP" : clientIndex % 4 === 2 ? "Manual" : "Not configured";
   if (missingFilingSetup) attention.push("Filing channel missing");
   if (incompleteEFPSContext) attention.push("eFPS context requires source review");
   if (paymentRoute === "TMF Pays" && clientIndex % 29 === 0) attention.push("Funding confirmation required before TMF payment");
@@ -538,24 +538,24 @@ function generatedPortfolioProfile(
   if (hasAuditExposure) attention.push("Open BIR audit exposure recorded");
 
   const sourceKind: FixtureTaxProfile["sourceKind"] = needs2303Review || certificateStructureFixture ? "2303-derived" : clientIndex % 4 === 0 ? "approved registration source" : "manual validation";
-  const extractionFields = needs2303Review || certificateStructureFixture ? sanitized2303Fields.map((field) => ({ ...field, confidence: field.label === "RDO / LTS" ? "Missing" as const : field.confidence })) : undefined;
+  const extractionFields = needs2303Review || certificateStructureFixture ? sanitized2303Fields.map((field) => ({ ...field, confidence: field.label === "RDO" ? "Missing" as const : field.confidence })) : undefined;
   const syntheticTinSeed = String(100000000 + clientIndex * 7919).padStart(9, "0").slice(-9);
 
   return {
     registeredTaxpayerName: registeredName,
     tinDisplay: `${syntheticTinSeed.slice(0, 3)}-${syntheticTinSeed.slice(3, 6)}-${syntheticTinSeed.slice(6, 9)}-000`,
     branchCode: "000",
-    rdoOrLts: needsRdoSource ? "Requires approved supplementary source" : clientIndex % 4 === 0 ? "Illustrative RDO/LTS context" : clientIndex % 4 === 1 ? "Illustrative LTS context" : "RDO/LTS context · source verification pending",
-    entityType: "Synthetic corporation",
+    rdoOrLts: needsRdoSource ? "Needs review" : `RDO-${47 + (clientIndex % 4)}`,
+    entityType: "Corporation",
     registeredAddress: `Synthetic registered address · ${clientIndex % 2 === 0 ? "Metro Manila" : clientIndex % 3 === 0 ? "Cavite" : "Laguna"}`,
     lineOfBusiness: `${generatedPortfolioIndustries[clientIndex % generatedPortfolioIndustries.length]} · illustrative`,
     registrationEffective: "Synthetic effective date",
-    registrationStatus: profileState === "Active" ? "Active · synthetic" : "Pending validation",
+    registrationStatus: profileState === "Active" ? "Active" : "Pending validation",
     registeredActivities: "Illustrative activity; approved tax treatment not inferred",
     tradeName: registeredName.replace(/ (Inc\.|Corp\.|Philippines Inc\.|Holdings Inc\.)$/, ""),
     filingChannel,
     filingContext: missingFilingSetup ? "Needs setup" : `${filingChannel} context · row-level applicability remains unresolved`,
-    eFPSGroup: eFPS ? incompleteEFPSContext ? "Needs review" : "eFPS group · source configuration pending" : undefined,
+    eFPSGroup: eFPS ? incompleteEFPSContext ? "Needs review" : `Group ${String.fromCharCode(65 + (clientIndex % 5))}` : undefined,
     registeredTaxTypes: certificateStructureFixture ? [
       "Income Tax · source-derived; validation pending",
       "Value Added Tax · source-derived; validation pending",
@@ -569,8 +569,8 @@ function generatedPortfolioProfile(
     taxYearBasis,
     fiscalYearEnd: taxYearBasis === "Fiscal year" ? "Fiscal year-end · source context" : undefined,
     accountingSystem,
-    booksType: clientIndex % 3 === 0 ? "Loose-leaf · illustrative" : clientIndex % 3 === 1 ? "Manual · illustrative" : "Not configured",
-    invoicing: clientIndex % 4 === 0 ? "Registration context on file · synthetic" : "Not configured",
+    booksType: clientIndex % 3 === 0 ? "Loose-leaf books" : clientIndex % 3 === 1 ? "Manual books" : "Not configured",
+    invoicing: clientIndex % 4 === 0 ? "ATP receipts / invoices" : "Not configured",
     paymentRoute,
     weight: sourceFinalWeight ?? 0,
     weightLabel: sourceFinalWeight === null ? "Excluded from source reconciliation" : sourceFinalWeight === 0 ? "No numeric source weight" : `${sourceFinalWeight} · ${classification}`,
@@ -630,6 +630,22 @@ const generatedPortfolioClients = [
 ];
 
 fixtureClients.push(...generatedPortfolioClients);
+
+// Keep legacy hand-crafted fixtures inside the same governed value vocabulary
+// as the onboarding/editor controls; unresolved source facts remain explicit.
+for (const client of fixtureClients) {
+  const profile = client.entities[0]?.profile;
+  if (!profile) continue;
+  profile.entityType = profile.entityType === "Synthetic corporation" ? "Corporation" : profile.entityType;
+  profile.registrationStatus = profile.registrationStatus === "Active · synthetic" ? "Active" : profile.registrationStatus;
+  profile.registrationEffective = /^Synthetic|^Needs source review/i.test(profile.registrationEffective) ? "" : profile.registrationEffective;
+  profile.accountingSystem = profile.accountingSystem?.includes("CAS/CBA") ? "CAS / CBA" : profile.accountingSystem?.includes("Manual accounting") ? "Manual" : profile.accountingSystem;
+  profile.booksType = profile.booksType === "Loose-leaf" ? "Loose-leaf books" : profile.booksType === "Manual" ? "Manual books" : profile.booksType?.includes("CAS/CBA") ? "Computerized books" : profile.booksType;
+  profile.invoicing = profile.invoicing?.includes("ATP") ? "ATP receipts / invoices" : profile.invoicing === "Not configured" ? profile.invoicing : "Needs review";
+  if (profile.filingChannel === "eFPS" && profile.eFPSGroup && !/^Group [A-E]$|^Needs review$/i.test(profile.eFPSGroup)) profile.eFPSGroup = "Needs review";
+  if (!/^RDO[-\s]?\d{1,3}[A-Z]*$/i.test(profile.rdoOrLts) && profile.rdoOrLts !== "Needs review") profile.rdoOrLts = "Needs review";
+  profile.attention = profile.attention.map((item) => item.replaceAll("RDO/LTS", "RDO"));
+}
 
 type AssignmentRole = "preparer" | "checker" | "reviewer";
 const portfolioAssignmentMembers = fixtureOrgDirectoryMembers.filter((member) => member.active && member.tower !== "All A&T" && member.operatingModel !== "TAX_TEAM");

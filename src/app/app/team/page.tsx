@@ -40,6 +40,7 @@ export default function TeamPage() {
   const canEditStructure = canPerformTeamAction(workPerspective, "EDIT_STRUCTURE", accessMatrix);
   const canDeactivatePerson = canPerformTeamAction(workPerspective, "DEACTIVATE_PERSON", accessMatrix);
   const canManageAssignments = canPerformTeamAction(workPerspective, "MANAGE_ASSIGNMENTS", accessMatrix) && canViewClients;
+  const [liveCapabilities, setLiveCapabilities] = useState<readonly string[]>([]);
   const [assignmentLens, setAssignmentLens] = useState<AssignmentLens>("all");
   const [activeView, setActiveView] = useState<TeamView>("overview");
   const [viewHydrated, setViewHydrated] = useState(false);
@@ -58,6 +59,19 @@ export default function TeamPage() {
   const canViewLeadershipRollups = ["TOWER_LEADER", "CLUSTER_LEADER", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective) && accessLevelRank(teamAccessLevel) >= accessLevelRank("ACT");
   const canViewSpecialistCases = ["TAX_CONTROL", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective) && canAccessModule("tax_team");
   const canViewChangeHistory = canPerformTeamAction(workPerspective, "EDIT_STRUCTURE", accessMatrix);
+  const canManageStaffAccounts = !prototypeMode && liveCapabilities.includes("AdministerUsers");
+
+  useEffect(() => {
+    if (prototypeMode) return;
+    let cancelled = false;
+    fetch("/api/me/access", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload: { capabilities?: Array<{ capability_key?: string }> }) => {
+        if (!cancelled) setLiveCapabilities((payload.capabilities ?? []).map((item) => item.capability_key).filter((value): value is string => Boolean(value)));
+      })
+      .catch(() => { if (!cancelled) setLiveCapabilities([]); });
+    return () => { cancelled = true; };
+  }, [prototypeMode]);
 
   useEffect(() => {
     if (!prototypeMode) return;
@@ -282,8 +296,8 @@ export default function TeamPage() {
         <div className="module-header__right"><div className="module-actions">{canAddPerson && <button className="button button--primary button--small" onClick={() => openEditor(null)} type="button">Add employee</button>}</div></div>
       </header>
 
-      <nav aria-label="Team views" className="tower-tabs module-tabs team-module-tabs" data-testid="team-module-tabs">
-        {teamViews.map((view) => <button aria-pressed={activeView === view.id} className={activeView === view.id ? "tower-tab tower-tab--active" : "tower-tab"} key={view.id} onClick={() => setActiveView(view.id)} type="button"><span>{view.label}</span></button>)}
+      <nav aria-label="Team views" className="tower-tabs module-tabs team-module-tabs" data-testid="team-module-tabs" role="tablist">
+        {teamViews.map((view) => <button aria-selected={activeView === view.id} className={activeView === view.id ? "tower-tab tower-tab--active" : "tower-tab"} key={view.id} onClick={() => setActiveView(view.id)} role="tab" tabIndex={activeView === view.id ? 0 : -1} type="button"><span>{view.label}</span></button>)}
       </nav>
       {!prototypeMode && liveTeamLoading && <p className="team-note" role="status">Loading current people…</p>}
       {!prototypeMode && liveTeamError && <p className="team-note" role="alert">{liveTeamError}</p>}
@@ -347,13 +361,13 @@ export default function TeamPage() {
 
       {activeView === "organization" && <section aria-labelledby="team-organization-title" className="panel team-panel team-people-panel" id="team-organization">
         <SectionHeading title="Organization" />
-        <div className="team-people-toolbar"><div className="team-admin-actions">{canAddPerson && <button className="button button--primary button--small" onClick={() => openEditor(null)} type="button">Add employee</button>}{canEditStructure && selected && !editorOpen && <button className="button button--quiet button--small" onClick={() => openEditor(selected.id)} type="button">Edit selected person</button>}{canManageAssignments && <Link className="button button--quiet button--small" href="/app/clients">Manage client ownership in Clients</Link>}{canEditStructure && rosterEvents.length > 0 && <button className="button button--quiet button--small" onClick={resetPrototypeRoster} type="button">Reset prototype roster</button>}{!canEditStructure && <span className="team-note">This access view is read-only for people and structure.</span>}</div></div>
+        <div className="team-people-toolbar"><div className="team-admin-actions">{canAddPerson && <button className="button button--primary button--small" onClick={() => openEditor(null)} type="button">Add employee</button>}{canManageStaffAccounts && <Link className="button button--primary button--small" href="/app/admin?view=access">Onboard staff</Link>}{canEditStructure && selected && !editorOpen && <button className="button button--quiet button--small" onClick={() => openEditor(selected.id)} type="button">Edit selected person</button>}{canManageAssignments && <Link className="button button--quiet button--small" href="/app/clients">Manage client ownership in Clients</Link>}{canEditStructure && rosterEvents.length > 0 && <button className="button button--quiet button--small" onClick={resetPrototypeRoster} type="button">Reset prototype roster</button>}{!canEditStructure && !canManageStaffAccounts && <span className="team-note">This access view is read-only for people and structure.</span>}</div></div>
         <OrgChart nodes={orgChartNodes} onSelect={(node) => setSelectedMemberId(node.id)} />
       </section>}
 
       {activeView === "directory" && <section aria-labelledby="team-directory-title" className="panel team-panel team-people-panel" id="team-directory">
         <SectionHeading title="Directory" />
-        <div className="team-people-toolbar"><div className="team-admin-actions">{canAddPerson && <button className="button button--primary button--small" onClick={() => openEditor(null)} type="button">Add employee</button>}{canEditStructure && selected && !editorOpen && <button className="button button--quiet button--small" onClick={() => openEditor(selected.id)} type="button">Edit selected person</button>}{canManageAssignments && <Link className="button button--quiet button--small" href="/app/clients">Manage client ownership in Clients</Link>}{canEditStructure && rosterEvents.length > 0 && <button className="button button--quiet button--small" onClick={resetPrototypeRoster} type="button">Reset prototype roster</button>}{!canEditStructure && <span className="team-note">This access view is read-only for people and structure.</span>}</div></div>
+        <div className="team-people-toolbar"><div className="team-admin-actions">{canAddPerson && <button className="button button--primary button--small" onClick={() => openEditor(null)} type="button">Add employee</button>}{canManageStaffAccounts && <Link className="button button--primary button--small" href="/app/admin?view=access">Onboard staff</Link>}{canEditStructure && selected && !editorOpen && <button className="button button--quiet button--small" onClick={() => openEditor(selected.id)} type="button">Edit selected person</button>}{canManageAssignments && <Link className="button button--quiet button--small" href="/app/clients">Manage client ownership in Clients</Link>}{canEditStructure && rosterEvents.length > 0 && <button className="button button--quiet button--small" onClick={resetPrototypeRoster} type="button">Reset prototype roster</button>}{!canEditStructure && !canManageStaffAccounts && <span className="team-note">This access view is read-only for people and structure.</span>}</div></div>
         <div aria-label="Team directory table" className="team-directory" role="region" tabIndex={0}>
           <div className="team-directory__intro"><strong>{visibleMembers.length} people in view</strong></div>
           <div aria-label="Assignment workload lens" className="team-model-switch" role="group"><button aria-pressed={assignmentLens === "all"} className={assignmentLens === "all" ? "is-active" : ""} onClick={() => setAssignmentLens("all")} type="button">All people</button><button aria-pressed={assignmentLens === "engagement"} className={assignmentLens === "engagement" ? "is-active" : ""} onClick={() => setAssignmentLens("engagement")} type="button">Engagement teams</button><button aria-pressed={assignmentLens === "tax-team"} className={assignmentLens === "tax-team" ? "is-active" : ""} onClick={() => setAssignmentLens("tax-team")} type="button">Tax team</button></div>

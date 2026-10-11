@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import type { TaxProfilePersistencePayload } from "@/lib/domain/client-profile-persistence";
+import { clientProfileControlErrors } from "@/lib/domain/client-profile-options";
 import { apiErrorResponse, inferredApiErrorStatus } from "@/lib/server/api-error";
 import { requireApiCapability } from "@/lib/server/api-authorization";
 import { requireSameOrigin } from "@/lib/server/request-origin";
@@ -51,6 +52,8 @@ export async function POST(request: Request, context: RouteContext) {
     if (!rawPayload || !asRecord(rawPayload.profile) || !asRecord(rawPayload.assignment) || !isNonEmptyString(rawPayload.effectiveFrom) || !isNonEmptyString(rawPayload.reason)) {
       return NextResponse.json({ error: "A complete profile payload is required." }, { status: 400 });
     }
+    const controlErrors = clientProfileControlErrors(asRecord(rawPayload.profile) ?? {});
+    if (controlErrors.length > 0) return NextResponse.json({ error: "Profile contains unapproved controlled values.", details: controlErrors }, { status: 400 });
     const payload: TaxProfilePersistencePayload = {
       profile: asRecord(rawPayload.profile) ?? {},
       assignment: asRecord(rawPayload.assignment) ?? {},

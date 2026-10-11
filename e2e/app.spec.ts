@@ -94,7 +94,11 @@ test("BIR Center remains a read-only governed reference", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "BIR Center", exact: true })).toBeVisible();
   await expect(page.getByText("Governed reference", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Propose reference update", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Regulatory updates", exact: true }).click();
+  const taxMapTab = page.getByRole("tab", { name: "Tax map", exact: true });
+  await expect(taxMapTab).toHaveAttribute("aria-selected", "true");
+  await taxMapTab.press("ArrowRight");
+  await expect(page.getByRole("tab", { name: "BIR directory", exact: true })).toBeFocused();
+  await page.getByRole("tab", { name: "Regulatory updates", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Regulatory updates", exact: true })).toBeVisible();
   await expect(page.getByText("No published updates", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Propose reference update", exact: true })).toHaveCount(0);
@@ -190,7 +194,9 @@ test("Work follows the Due Register into step-by-step execution detail", async (
   await page.getByRole("link", { name: "Close return journey" }).press("Enter");
   await expect(page).toHaveURL(/\/app\/work$/);
   await page.locator(".work-register__row").filter({ hasText: "Harborline Services" }).click();
-  await page.getByText("Roles", { exact: true }).click();
+  const rolesDisclosure = page.getByText("Roles", { exact: true });
+  await rolesDisclosure.focus();
+  await rolesDisclosure.press("Enter");
   await expect(page.getByText("Preparer", { exact: true }).last()).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByText("Return journey", { exact: true })).toHaveCount(0);
@@ -399,17 +405,59 @@ test("primary screens pass an accessibility smoke audit", async ({ page }) => {
 
 test("calibration Master Admin can edit and reload a sanitized client profile", async ({ page }) => {
   await page.goto("/app/clients/fixture-client-01");
-  await expect(page.getByText(/Master Admin/)).toBeVisible();
+  await expect(page.getByLabel("Current access persona")).toContainText("Master Admin");
   await page.getByRole("tab", { name: "Registration", exact: true }).click();
   const editRegistration = page.getByRole("button", { name: "Edit registration facts" });
   await editRegistration.scrollIntoViewIfNeeded();
   await editRegistration.click({ force: true });
   const drawer = page.getByRole("dialog");
-  await drawer.getByLabel("RDO / LTS").fill("RDO 000 · calibration");
+  await drawer.getByLabel("RDO").selectOption("Needs review");
   await drawer.getByLabel("Reason for change").fill("Calibration review of sanitized profile");
-  await drawer.getByRole("button", { name: "Save registration facts" }).click();
+  const saveRegistration = drawer.getByRole("button", { name: "Save registration facts" });
+  await saveRegistration.focus();
+  await saveRegistration.press("Enter");
   await expect(page.getByRole("status")).toContainText("Saved for this sanitized calibration browser");
-  await expect(page.getByText("RDO 000 · calibration", { exact: true })).toBeVisible();
+  await expect(page.getByText("Needs review", { exact: true }).first()).toBeVisible();
   await page.reload();
-  await expect(page.getByText("RDO 000 · calibration", { exact: true })).toBeVisible();
+  await expect(page.getByText("Needs review", { exact: true }).first()).toBeVisible();
+});
+
+test("client overview Attention opens the first resolvable control", async ({ page }) => {
+  await page.goto("/app/clients/fixture-client-06#client-overview");
+  const attention = page.getByRole("button", { name: /Attention: \d+ items requiring action/ });
+  await expect(attention).toBeVisible();
+  await attention.click();
+  await expect(page).toHaveURL(/\/app\/clients\/fixture-client-06#client-team$/);
+  const setupDrawer = page.getByRole("dialog");
+  await expect(setupDrawer.getByRole("heading", { name: "Edit operating setup" })).toBeVisible();
+  await expect(setupDrawer.getByLabel("Preparer")).toBeVisible();
+});
+
+test("client required fields are visibly blocked", async ({ page }) => {
+  await page.goto("/app/clients");
+  await page.getByRole("button", { name: "Start client setup", exact: true }).click();
+  const drawer = page.getByRole("dialog");
+  for (const label of ["CRM no. / client code", "Client / account name", "Registered taxpayer name", "Go-live date"]) {
+    await expect(drawer.getByLabel(label)).toHaveCSS("border-color", "rgb(163, 43, 45)");
+  }
+  await drawer.locator("button.onboarding-step").nth(1).click();
+  for (const label of ["RDO", "Registration reference / OCN", "Registration date", "Tax year basis", "Accounting system", "Books", "Receipts / invoicing", "Filing channel", "Registered address"]) {
+    await expect(drawer.getByLabel(label)).toHaveCSS("border-color", "rgb(163, 43, 45)");
+  }
+  await drawer.locator("button.onboarding-step").nth(2).click();
+  await expect(drawer.getByLabel("eNATE setup")).toHaveCSS("border-color", "rgb(163, 43, 45)");
+  await expect(drawer.getByLabel("Payment route")).toHaveCSS("border-color", "rgb(163, 43, 45)");
+  await drawer.locator("button.onboarding-step").nth(3).click();
+  await expect(drawer.getByLabel("Permanent SharePoint file")).toHaveCSS("border-color", "rgb(163, 43, 45)");
+  await expect(drawer.locator(".onboarding-document--invalid select").first()).toHaveCSS("border-color", "rgb(163, 43, 45)");
+  await drawer.getByLabel("BIR Form 2303 / Certificate of Registration status").selectOption("unknown");
+  await expect(drawer.getByLabel("BIR Form 2303 / Certificate of Registration rationale")).toHaveCSS("border-color", "rgb(163, 43, 45)");
+});
+
+test("client register exports the current view as CSV", async ({ page }) => {
+  await page.goto("/app/clients");
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export current client list as CSV" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^taxmon-client-register-\d{4}-\d{2}-\d{2}\.csv$/);
 });
