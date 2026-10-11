@@ -134,7 +134,7 @@ test("Tax Team reports preserve period scope and produce a PDF snapshot", async 
   await expect(page.getByText("Awaiting review", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pulled transaction register" })).toBeVisible();
 
-  await page.getByRole("button", { name: "RCA", exact: true }).click();
+  await page.getByRole("tab", { name: "RCA", exact: true }).click();
   await expect(page.getByRole("heading", { name: "RCA overview" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "RCA register" })).toBeVisible();
   await expect(page.getByText("ordinary QA corrections stay in QA", { exact: false })).toBeVisible();
@@ -397,7 +397,7 @@ test("primary screens pass an accessibility smoke audit", async ({ page }) => {
     "/app/tax-team",
   ]) {
     await page.goto(route);
-    await page.locator("main h1").waitFor({ state: "visible" });
+    await page.getByRole("heading", { level: 1 }).first().waitFor({ state: "visible" });
     const results = await new AxeBuilder({ page }).disableRules(["color-contrast"]).analyze();
     expect(results.violations, route).toEqual([]);
   }
