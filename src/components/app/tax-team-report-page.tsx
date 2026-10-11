@@ -51,7 +51,7 @@ function TaxTeamOverview({ qaOpenCount, summary, onOpenReport, onOpenDeadlineCon
       <h2 id="tax-team-routes-title">Open a control view</h2>
       <div className="tax-team-landing__route-list">
         <button onClick={onOpenDeadlineControl} type="button"><strong>Deadline Control</strong><span>Review and publish governed annual operational deadlines.</span><b aria-hidden="true">→</b></button>
-        <button onClick={onOpenPeriodLocks} type="button"><strong>Period locks</strong><span>Freeze archived return packages after the final control boundary.</span><b aria-hidden="true">→</b></button>
+        <button onClick={onOpenPeriodLocks} type="button"><strong>Period locks</strong><span>Close an accounting period once; closed work becomes read-only.</span><b aria-hidden="true">→</b></button>
         {taxTeamReportTypes.map((report) => <button key={report.id} onClick={() => onOpenReport(report.id)} type="button"><strong>{report.label}</strong><span>{report.description}</span><b aria-hidden="true">→</b></button>)}
       </div>
     </section>

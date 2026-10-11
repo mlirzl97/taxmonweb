@@ -77,6 +77,8 @@ export type FixtureWorkItem = {
   /** Governed requirement context used to join live work to released calendar entries. */
   requirementId?: string;
   requirementVersionId?: string;
+  /** Stable accounting-period key used by the period-close boundary. */
+  periodKey?: string;
   clientId: string;
   client: string;
   entity: string;

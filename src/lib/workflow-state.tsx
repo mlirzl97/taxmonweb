@@ -61,6 +61,8 @@ export type WorkflowFinalCertification = {
 };
 export type WorkflowPeriodLock = {
   locked: boolean;
+  periodKey?: string;
+  periodLabel?: string;
   actor?: string;
   recordedAt?: string;
   reason?: string;
@@ -118,10 +120,24 @@ export type WorkAdminInput = {
   paymentAmount: number | null;
 };
 
+const periodMonths = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"] as const;
+
+export function workPeriodKey(work: Pick<FixtureWorkItem, "period" | "periodKey">) {
+  if (work.periodKey?.trim()) return work.periodKey.trim();
+  const month = work.period.match(/\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(20\d{2})\b/i);
+  if (month) {
+    const monthIndex = periodMonths.findIndex((name) => name.startsWith(month[1].toLowerCase().slice(0, 3)));
+    if (monthIndex >= 0) return `${month[2]}-${String(monthIndex + 1).padStart(2, "0")}`;
+  }
+  const year = work.period.match(/\b(20\d{2})\b/);
+  return year ? `FY-${year[1]}` : work.period.trim().toLowerCase().replace(/\s+/g, "-");
+}
+
 const workAdminStorageKey = "taxmonweb.prototype.work-register";
 const accessPerspectiveStorageKey = "taxmonweb.prototype.access-perspective";
 const accessMatrixStorageKey = "taxmonweb.prototype.access-matrix";
 const accessHistoryStorageKey = "taxmonweb.prototype.access-history";
+const periodLocksStorageKey = "taxmonweb.prototype.period-locks";
 
 export type AccessPolicyEvent = { id: string; actor: string; recordedAt: string; reason: string };
 
@@ -180,6 +196,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   const [recordsHydrated, setRecordsHydrated] = useState(() => !prototypeMode);
   const [workItemsHydrated, setWorkItemsHydrated] = useState(() => !prototypeMode);
   const [records, setRecords] = useState<Record<string, StoredWorkflowRecord>>({});
+  const [periodLocks, setPeriodLocks] = useState<Record<string, WorkflowPeriodLock>>({});
   const [clientRegistry, setClientRegistry] = useState<FixtureClient[]>(() => prototypeMode ? [...fixtureClients] : []);
   const [clientRegistryState, setClientRegistryState] = useState<"loading" | "connected" | "empty" | "error">(() => prototypeMode ? "connected" : "loading");
   const clientRegistryRequest = useRef<Promise<readonly FixtureClient[]> | null>(null);
@@ -329,12 +346,30 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
       if (Array.isArray(parsedWorkItems) && parsedWorkItems.every((item) => typeof item.id === "string" && typeof item.clientId === "string" && typeof item.title === "string")) {
         setWorkItems(parsedWorkItems);
       }
+      const storedPeriodLocks = window.sessionStorage.getItem(periodLocksStorageKey);
+      const parsedPeriodLocks = storedPeriodLocks ? JSON.parse(storedPeriodLocks) as Record<string, WorkflowPeriodLock> : null;
+      const nextPeriodLocks = parsedPeriodLocks && typeof parsedPeriodLocks === "object" && !Array.isArray(parsedPeriodLocks) ? { ...parsedPeriodLocks } : {};
+      const migrationWorkItems = Array.isArray(parsedWorkItems) ? parsedWorkItems : fixtureWork;
+      for (const item of migrationWorkItems) {
+        const legacyLock = parsedRecords?.[item.id]?.periodLock;
+        const key = workPeriodKey(item);
+        if (legacyLock?.locked && !nextPeriodLocks[key]) nextPeriodLocks[key] = { ...legacyLock, periodKey: key, periodLabel: item.period };
+      }
+      setPeriodLocks(nextPeriodLocks);
     } catch {
       // Keep the shipped fixture baseline when browser storage is unavailable or malformed.
     }
     setRecordsHydrated(true);
     setWorkItemsHydrated(true);
   }, [prototypeMode]);
+
+  useEffect(() => {
+    try {
+      if (prototypeMode && recordsHydrated) window.sessionStorage.setItem(periodLocksStorageKey, JSON.stringify(periodLocks));
+    } catch {
+      // Prototype period closes remain available for the current render when storage is unavailable.
+    }
+  }, [periodLocks, prototypeMode, recordsHydrated]);
 
   useEffect(() => {
     try {
@@ -356,7 +391,13 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     }
   }, [prototypeMode, workItems, workItemsHydrated]);
 
-  const getRecord = useCallback((work: FixtureWorkItem): WorkflowRecord => recordForWork(work, records[work.id]), [records]);
+  const getRecord = useCallback((work: FixtureWorkItem): WorkflowRecord => {
+    const record = recordForWork(work, records[work.id]);
+    const periodLock = periodLocks[workPeriodKey(work)];
+    if (!periodLock) return record;
+    const periodLockHistory = record.periodLockHistory.some((event) => event.recordedAt === periodLock.recordedAt) ? record.periodLockHistory : [...record.periodLockHistory, periodLock];
+    return { ...record, periodLock, periodLockHistory };
+  }, [periodLocks, records]);
 
   const getEffectiveWork = useCallback((work: FixtureWorkItem): FixtureWorkItem => {
     // Always project through the normalized initial record. Raw fixture state
@@ -460,29 +501,30 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (!prototypeMode) return { ok: false, error: "Authenticated work commands require the server-backed work repository." };
     const result = buildWorkItem(input);
     if (!result.work) return { ok: false, error: result.error };
+    if (periodLocks[workPeriodKey(result.work)]?.locked) return { ok: false, error: "This accounting period is closed by Tax Team and cannot accept new work." };
     setWorkItems((current) => [...current, result.work!]);
     return { ok: true, work: result.work };
-  }, [buildWorkItem, prototypeMode]);
+  }, [buildWorkItem, periodLocks, prototypeMode]);
 
   const updateWorkItem = useCallback((workId: string, input: WorkAdminInput) => {
     if (!prototypeMode) return { ok: false, error: "Authenticated work commands require the server-backed work repository." };
     const current = workItems.find((item) => item.id === workId);
     if (!current) return { ok: false, error: "That work item is no longer in the register." };
-    if (recordForWork(current, records[current.id]).periodLock.locked) return { ok: false, error: "This period is locked by Tax Team and cannot be edited." };
+    if (periodLocks[workPeriodKey(current)]?.locked || recordForWork(current, records[current.id]).periodLock.locked) return { ok: false, error: "This accounting period is closed by Tax Team and cannot be edited." };
     const result = buildWorkItem(input, current);
     if (!result.work) return { ok: false, error: result.error };
     setWorkItems((items) => items.map((item) => item.id === workId ? result.work! : item));
     return { ok: true, work: result.work };
-  }, [buildWorkItem, prototypeMode, records, workItems]);
+  }, [buildWorkItem, periodLocks, prototypeMode, records, workItems]);
 
   const deleteWorkItem = useCallback((workId: string) => {
     if (!prototypeMode) return { ok: false, error: "Authenticated work commands require the server-backed work repository." };
     if (!workItems.some((item) => item.id === workId)) return { ok: false, error: "That work item is no longer in the register." };
     const work = workItems.find((item) => item.id === workId)!;
-    if (recordForWork(work, records[work.id]).periodLock.locked) return { ok: false, error: "This period is locked by Tax Team and cannot be removed." };
+    if (periodLocks[workPeriodKey(work)]?.locked || recordForWork(work, records[work.id]).periodLock.locked) return { ok: false, error: "This accounting period is closed by Tax Team and cannot be removed." };
     setWorkItems((items) => items.filter((item) => item.id !== workId));
     return { ok: true };
-  }, [prototypeMode, records, workItems]);
+  }, [periodLocks, prototypeMode, records, workItems]);
 
   const isWorkVisible = useCallback((work: FixtureWorkItem) => workMatchesPerspective(work, workPerspective), [workPerspective]);
   const isClientVisible = useCallback((client: FixtureClient) => {
@@ -519,37 +561,41 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   const getPeriodLock = useCallback((work: FixtureWorkItem) => getRecord(work).periodLock, [getRecord]);
 
   const setPeriodLock = useCallback(async (work: FixtureWorkItem, locked: boolean, reason: string) => {
-    if (!prototypeMode) return executeLiveCommand(work, "period_lock", { locked, reason });
-    const record = recordForWork(work, records[work.id]);
-    if (!["TAX_CONTROL", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective)) return { ok: false, error: "Only Tax Team or an authorized Master Admin can lock or unlock a period." };
-    if (!reason.trim()) return { ok: false, error: "Add a short reason for this period lock change." };
-    if (locked) {
-      const priorStepsComplete = work.steps.filter((step) => step.id !== "evidence").every((step) => record.processStatuses[step.id] === "DONE" || record.processStatuses[step.id] === "NOT_APPLICABLE");
-      if (record.processStatuses.evidence !== "DONE" || !priorStepsComplete || !record.finalCertification) return { ok: false, error: "Complete Archiving and Reviewer final certification before locking this period." };
-    }
-    const periodLock: WorkflowPeriodLock = { locked, actor: rbacPersonaLabel(workPerspective), recordedAt: workflowTimestamp(record.periodLockHistory.length), reason: reason.trim(), elevatedOverride: workPerspective !== "TAX_CONTROL" };
-    setRecords((current) => ({ ...current, [work.id]: { ...record, periodLock, periodLockHistory: [...record.periodLockHistory, periodLock] } }));
+    const periodKey = workPeriodKey(work);
+    if (!prototypeMode) return executeLiveCommand(work, "period_lock", { locked, periodKey, periodLabel: work.period, reason });
+    if (!["TAX_CONTROL", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective)) return { ok: false, error: "Only Tax Team or an authorized Master Admin can close an accounting period." };
+    if (!locked) return { ok: false, error: "A closed accounting period cannot be reopened. Record any correction as a new controlled event." };
+    if (!reason.trim()) return { ok: false, error: "Add a short reason for closing this accounting period." };
+    if (periodLocks[periodKey]?.locked) return { ok: false, error: `${work.period} is already closed and cannot be reopened.` };
+    const periodWork = workItems.filter((item) => workPeriodKey(item) === periodKey);
+    const incomplete = periodWork.find((item) => {
+      const itemRecord = recordForWork(item, records[item.id]);
+      return itemRecord.processStatuses.evidence !== "DONE" || !itemRecord.finalCertification;
+    });
+    if (incomplete) return { ok: false, error: `Complete Archiving and Reviewer final certification for every ${work.period} work item before closing this period.` };
+    const periodLock: WorkflowPeriodLock = { locked: true, periodKey, periodLabel: work.period, actor: rbacPersonaLabel(workPerspective), recordedAt: workflowTimestamp(Object.keys(periodLocks).length), reason: reason.trim(), elevatedOverride: workPerspective !== "TAX_CONTROL" };
+    setPeriodLocks((current) => ({ ...current, [periodKey]: periodLock }));
     return { ok: true };
-  }, [executeLiveCommand, prototypeMode, records, workPerspective]);
+  }, [executeLiveCommand, periodLocks, prototypeMode, records, workItems, workPerspective]);
 
   const recordFinalCertification = useCallback(async (work: FixtureWorkItem, note: string, overrideReason = "") => {
     if (!prototypeMode) return executeLiveCommand(work, "final_certification", { note, overrideReason });
     const record = recordForWork(work, records[work.id]);
-    if (record.periodLock.locked) return { ok: false, error: "This period is locked by Tax Team and cannot be edited." };
+    if (periodLocks[workPeriodKey(work)]?.locked || record.periodLock.locked) return { ok: false, error: "This accounting period is closed by Tax Team and cannot be edited." };
     if (record.currentGate || record.processStatuses.evidence !== "DONE") return { ok: false, error: "Reviewer final certification is available only after all gates and Archiving are complete." };
     if (!note.trim()) return { ok: false, error: "Add a short final certification note." };
     if (!canUseElevatedOverride(workPerspective) && workPerspective !== "REVIEWER") return { ok: false, error: "Only Reviewer or an authorized elevated role can certify closure." };
     const elevatedOverride = canUseElevatedOverride(workPerspective) && Boolean(overrideReason.trim());
     if (elevatedOverride && !overrideReason.trim()) return { ok: false, error: "Record an override reason for elevated final certification." };
     const finalCertification: WorkflowFinalCertification = { actor: rbacPersonaLabel(workPerspective), recordedAt: workflowTimestamp(record.processHistory.length + record.attempts.length), note: note.trim(), elevatedOverride, overrideReason: elevatedOverride ? overrideReason.trim() : undefined };
-    setRecords((current) => ({ ...current, [work.id]: { ...record, finalCertification, patch: { ...record.patch, status: "GREEN", statusReason: "Reviewer final certification recorded.", nextAction: "Tax Team QA sample or period lock" } } }));
+    setRecords((current) => ({ ...current, [work.id]: { ...record, finalCertification, patch: { ...record.patch, status: "GREEN", statusReason: "Reviewer final certification recorded.", nextAction: "Tax Team QA sample or period close" } } }));
     return { ok: true };
-  }, [executeLiveCommand, prototypeMode, records, workPerspective]);
+  }, [executeLiveCommand, periodLocks, prototypeMode, records, workPerspective]);
 
   const setChecklistAnswer = useCallback(async (work: FixtureWorkItem, role: WorkflowRole, questionId: string, completed: boolean) => {
     if (!prototypeMode) return executeLiveCommand(work, "checklist", { role: role.toLowerCase(), questionId, completed });
     const record = recordForWork(work, records[work.id]);
-    if (record.periodLock.locked) return { ok: false, error: "This period is locked by Tax Team and cannot be edited." };
+    if (periodLocks[workPeriodKey(work)]?.locked || record.periodLock.locked) return { ok: false, error: "This accounting period is closed by Tax Team and cannot be edited." };
     if (!roleQuestions[role].some((question) => question.id === questionId)) return { ok: false, error: "That checklist item is not configured for this responsibility." };
     if (!canActOnWorkflow(role, work)) return { ok: false, error: `The ${rbacPersonaLabel(workPerspective)} access view cannot update this checklist for this taxpayer.` };
     const update: WorkflowChecklistUpdate = { id: `${work.id}-checklist-${record.checklistHistory.length + 1}`, role, questionId, completed, actor: rbacPersonaLabel(workPerspective), recordedAt: workflowTimestamp(record.checklistHistory.length) };
@@ -563,12 +609,12 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
       },
     }));
     return { ok: true };
-  }, [canActOnWorkflow, executeLiveCommand, prototypeMode, records, workPerspective]);
+  }, [canActOnWorkflow, executeLiveCommand, periodLocks, prototypeMode, records, workPerspective]);
 
   const setProcessStatus = useCallback(async (work: FixtureWorkItem, stepId: string, status: WorkflowProcessStatus, evidenceReference = "", overrideReason = "", sharepointUrl = "") => {
     if (!prototypeMode) return executeLiveCommand(work, "process_status", { stepCode: stepId, status: status.toLowerCase(), evidenceReference, overrideReason, sharepointUrl, role: workflowProcessRole(stepId).toLowerCase() });
     const record = recordForWork(work, records[work.id]);
-    if (record.periodLock.locked) return { ok: false, error: "This period is locked by Tax Team and cannot be edited." };
+    if (periodLocks[workPeriodKey(work)]?.locked || record.periodLock.locked) return { ok: false, error: "This accounting period is closed by Tax Team and cannot be edited." };
     const currentStep = work.steps.find((step) => step.state === "current" || step.state === "unresolved" || step.state === "blocked");
     const step = work.steps.find((candidate) => candidate.id === stepId);
     const isGateStep = stepId === "prepare" || stepId === "check" || stepId === "review";
@@ -615,12 +661,12 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
       },
     }));
     return { ok: true };
-  }, [canActOnProcessStep, executeLiveCommand, prototypeMode, records, workPerspective]);
+  }, [canActOnProcessStep, executeLiveCommand, periodLocks, prototypeMode, records, workPerspective]);
 
   const setPaymentApplicability = useCallback(async (work: FixtureWorkItem, applicability: FixturePaymentApplicability) => {
     if (!prototypeMode) return executeLiveCommand(work, "payment_profile", { paymentApplicability: applicability.toLowerCase(), paymentAmount: applicability === "NOT_APPLICABLE" ? null : work.paymentAmount ?? null });
     const record = recordForWork(work, records[work.id]);
-    if (record.periodLock.locked) return { ok: false, error: "This period is locked by Tax Team and cannot be edited." };
+    if (periodLocks[workPeriodKey(work)]?.locked || record.periodLock.locked) return { ok: false, error: "This accounting period is closed by Tax Team and cannot be edited." };
     if (!["REQUIRED", "NOT_APPLICABLE", "UNRESOLVED"].includes(applicability)) return { ok: false, error: "Choose a valid payment applicability state." };
     const actor = rbacPersonaLabel(workPerspective);
     const recordedAt = workflowTimestamp(record.processHistory.length + record.changeHistory.length);
@@ -634,12 +680,12 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
       },
     }));
     return { ok: true };
-  }, [executeLiveCommand, prototypeMode, records, workPerspective]);
+  }, [executeLiveCommand, periodLocks, prototypeMode, records, workPerspective]);
 
   const setPaymentAmount = useCallback(async (work: FixtureWorkItem, amount: number | null) => {
     if (!prototypeMode) return executeLiveCommand(work, "payment_profile", { paymentApplicability: work.paymentApplicability.toLowerCase(), paymentAmount: amount });
     const record = recordForWork(work, records[work.id]);
-    if (record.periodLock.locked) return { ok: false, error: "This period is locked by Tax Team and cannot be edited." };
+    if (periodLocks[workPeriodKey(work)]?.locked || record.periodLock.locked) return { ok: false, error: "This accounting period is closed by Tax Team and cannot be edited." };
     if (amount !== null && (!Number.isFinite(amount) || amount < 0)) return { ok: false, error: "Enter a valid non-negative payment amount." };
     const actor = rbacPersonaLabel(workPerspective);
     const recordedAt = workflowTimestamp(record.processHistory.length + record.changeHistory.length);
@@ -653,7 +699,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
       },
     }));
     return { ok: true };
-  }, [executeLiveCommand, prototypeMode, records, workPerspective]);
+  }, [executeLiveCommand, periodLocks, prototypeMode, records, workPerspective]);
 
   const submitDecision = useCallback(async (work: FixtureWorkItem, role: WorkflowRole, decision: WorkflowDecision, answers: Record<string, boolean>, note: string, overrideReason = "") => {
     if (!prototypeMode) {
@@ -661,7 +707,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
       return { ...result, nextGate: decision === "RETURN" ? "PREPARER" as WorkflowRole : role === "PREPARER" ? "CHECKER" as WorkflowRole : role === "CHECKER" ? "REVIEWER" as WorkflowRole : null };
     }
     const record = recordForWork(work, records[work.id]);
-    if (record.periodLock.locked) return { ok: false, error: "This period is locked by Tax Team and cannot be edited." };
+    if (periodLocks[workPeriodKey(work)]?.locked || record.periodLock.locked) return { ok: false, error: "This accounting period is closed by Tax Team and cannot be edited." };
     if (!canActOnWorkflow(role, work)) return { ok: false, error: `The ${rbacPersonaLabel(workPerspective)} access view cannot record this gate decision for this taxpayer.` };
     if (record.currentGate !== role) return { ok: false, error: `This work is not currently waiting for ${roleLabels[role]} certification.` };
     const questions = roleQuestions[role];
@@ -677,7 +723,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     const processUpdate: WorkflowProcessUpdate = { id: `${work.id}-process-${record.processHistory.length + 1}`, stepId: gateStepId, status: gateStatus, actor: rbacPersonaLabel(workPerspective), recordedAt: workflowTimestamp(record.processHistory.length), elevatedOverride, overrideReason: elevatedOverride ? overrideReason.trim() : undefined };
     setRecords((current) => ({ ...current, [work.id]: { ...record, currentGate: result.currentGate, patch: result.patch, attempts: [...record.attempts, attempt], processStatuses: { ...record.processStatuses, [gateStepId]: gateStatus }, processHistory: [...record.processHistory, processUpdate] } }));
     return { ok: true, nextGate: result.currentGate };
-  }, [canActOnWorkflow, executeLiveCommand, prototypeMode, records, workPerspective]);
+  }, [canActOnWorkflow, executeLiveCommand, periodLocks, prototypeMode, records, workPerspective]);
 
   const getModuleAccess = useCallback((module: ModuleKey) => moduleAccessForPersona(workPerspective, module, accessMatrix), [accessMatrix, workPerspective]);
   const canAccess = useCallback((module: ModuleKey, allowed: readonly AccessLevel[] = ["VIEW", "ACT", "APPROVE", "GOVERN", "OVERRIDE"]) => canAccessModule(workPerspective, module, allowed, accessMatrix), [accessMatrix, workPerspective]);

@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 const migrationPath = join(process.cwd(), "supabase/migrations/20261024000000_generated_work_foundation.sql");
 const migration = readFileSync(migrationPath, "utf8");
 const executionMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261108000000_work_execution_commands.sql"), "utf8");
+const periodCloseMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261118000000_accounting_period_close.sql"), "utf8");
+const periodCloseHardeningMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261118010000_harden_period_close_triggers.sql"), "utf8");
 
 describe("generated work persistence contract", () => {
   it("uses one generated-work source with idempotent identity", () => {
@@ -40,5 +42,15 @@ describe("generated work persistence contract", () => {
     expect(executionMigration).toContain("current_owner_user_id = actor_id");
     expect(executionMigration).toContain("Payment is required for this return and cannot be skipped.");
     expect(executionMigration).toContain("Archiving and Reviewer closure certification must be complete before locking the period.");
+  });
+
+  it("makes period close accounting-period scoped and one-way", () => {
+    expect(periodCloseMigration).toContain("generated_compliance_period_locks");
+    expect(periodCloseMigration).toContain("A closed accounting period cannot be reopened.");
+    expect(periodCloseMigration).toContain("Every active work item in the accounting period must be archived and closure-certified before close.");
+    expect(periodCloseMigration).toContain("generated_work_close_period_after_event");
+    expect(periodCloseMigration).toContain("generated_work_process_period_guard");
+    expect(periodCloseHardeningMigration).toContain("revoke execute on function public.block_closed_generated_work_change()");
+    expect(periodCloseHardeningMigration).toContain("set search_path = public");
   });
 });

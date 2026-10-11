@@ -55,6 +55,8 @@ function mapRepositoryRow(value: unknown): DeadlineControlRow {
     taxablePeriod: String(row.periodOrEvent ?? "Unresolved"),
     baseStatutoryDeadline: typeof row.baseStatutoryDeadline === "string" ? row.baseStatutoryDeadline : null,
     adjustedStatutoryDeadline: typeof row.adjustedStatutoryDeadline === "string" ? row.adjustedStatutoryDeadline : null,
+    officialPublishedDeadline: typeof row.officialPublishedDeadline === "string" ? row.officialPublishedDeadline : null,
+    officialCalendarReference: typeof row.officialCalendarReference === "string" ? row.officialCalendarReference : null,
     earliestApplicableDeadline: earliestApplicableDeadline([typeof row.adjustedStatutoryDeadline === "string" ? row.adjustedStatutoryDeadline : null]),
     publishedOperationalDeadline: typeof row.publishedOperationalDeadline === "string" ? row.publishedOperationalDeadline : null,
     tmfPackageTarget: typeof row.tmfPackageTarget === "string" ? row.tmfPackageTarget : null,

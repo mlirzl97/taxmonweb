@@ -6,6 +6,7 @@ export type LiveGeneratedWork = {
   requirement_id: string;
   requirement_version_id: string;
   period_label: string;
+  period_locked?: boolean;
   data_readiness: "not_ready" | "ready";
   lifecycle_stage: "preparation" | "checking" | "review" | "client_approval" | "filing" | "payment" | "other_submissions" | "complete";
   engagement_status: "open" | "complete" | "cancelled" | "superseded";
@@ -129,6 +130,7 @@ export async function listLiveGeneratedWork(): Promise<LiveGeneratedWork[]> {
       requirement_id,
       requirement_version_id,
       period_label,
+      period_locked,
       data_readiness,
       lifecycle_stage,
       engagement_status,

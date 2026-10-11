@@ -29,6 +29,14 @@ describe("deadline control projection", () => {
     expect(deadlineControlSummary(buildDeadlineControlRows(2027))).toEqual({ total: 85, published: 0, requiringReview: 9, unresolved: 76 });
   });
 
+  it("shows the official BIR calendar as evidence without making it operational", () => {
+    const row = buildDeadlineControlRows(2026).find((candidate) => candidate.formNumber === "0619-E");
+    expect(row?.officialPublishedDeadline).toBeNull();
+    expect(row?.officialCalendarReference).toContain("BIR 2026 Interactive Tax Calendar");
+    expect(row?.publicationStatus).toBe("unresolved");
+    expect(row?.publishedOperationalDeadline).toBeNull();
+  });
+
   it("exposes every governed return to global Tax Team control", () => {
     const formNumbers = new Set(buildDeadlineControlRows(2026).map((row) => row.formNumber));
     expect(formNumbers).toEqual(new Set(["0619-E", "0619-F", "1600", "1600WP", "1601-C", "1601-EQ", "1702-RT", "2550Q", "2551M", "2551Q"]));

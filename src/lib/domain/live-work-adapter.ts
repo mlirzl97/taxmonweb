@@ -101,7 +101,7 @@ function workflowSnapshotFor(work: LiveGeneratedWork, userNames: UserNameMap): F
     processStatuses,
     processHistory,
     changeHistory: [],
-    periodLock: lockHistory.at(-1) ?? { locked: false },
+    periodLock: lockHistory.at(-1) ?? (work.period_locked ? { locked: true, reason: "Accounting period closed by Tax Team." } : { locked: false }),
     periodLockHistory: lockHistory,
     ...(work.final_certified_at ? { finalCertification: { actor: actorName(work.final_certified_by, userNames), recordedAt: work.final_certified_at, note: work.final_certification_note ?? "Closure certified." } } : {}),
   };
@@ -152,6 +152,7 @@ export function adaptLiveGeneratedWork(work: LiveGeneratedWork, userNames: UserN
     registrationUnit: unit?.display_name ?? "Registration unit unresolved",
     title: requirement ? `${requirement.requirement_code} · ${requirement.requirement_name}` : "Requirement unresolved",
     period: work.period_label,
+    ...(work.period_key ? { periodKey: work.period_key } : {}),
     detail: work.engagement_status === "complete" ? "Complete" : work.lifecycle_stage.replaceAll("_", " "),
     stage: stageFromLifecycle(work.lifecycle_stage),
     nextAction: work.engagement_status === "complete" ? "No action" : `Continue ${work.lifecycle_stage.replaceAll("_", " ")}`,

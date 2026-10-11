@@ -29,6 +29,9 @@ export type DeadlineControlRow = {
   taxablePeriod: string;
   baseStatutoryDeadline: string | null;
   adjustedStatutoryDeadline: string | null;
+  /** Official BIR calendar evidence, kept separate from operational publication. */
+  officialPublishedDeadline: string | null;
+  officialCalendarReference: string | null;
   /**
    * The earliest applicable adjusted statutory component deadline. This is
    * the default master-control date; it is kept distinct from the internal
@@ -73,6 +76,7 @@ const quarterlyMonths = ["January", "April", "July", "October"] as const;
 const sourceLabels: Record<string, string> = {
   "BIR-EFPS-FAQ-DEADLINES": "BIR eFPS FAQ · source-backed timing pattern",
   "BIR-TAX-REMINDER-2026": "BIR Tax Reminder 2026 · row-level reconciliation required",
+  "BIR-2026-INTERACTIVE-TAX-CALENDAR": "BIR 2026 Interactive Tax Calendar · reference evidence",
   "BIR-FORMS-CATALOG": "BIR Forms catalog · form identity only",
 };
 
@@ -82,6 +86,7 @@ type RuleSeed = {
   policy?: DeadlinePolicyVersion;
   sourceCode: string;
   adjustmentReason: string;
+  officialCalendarReference?: string;
 };
 
 const ruleSeeds: Record<string, RuleSeed> = {
@@ -118,8 +123,23 @@ const ruleSeeds: Record<string, RuleSeed> = {
   "1601-C": {
     ruleVersionId: "rule-version-1601-c-channel-group-v1",
     verificationStatus: "unresolved",
-    sourceCode: "BIR-TAX-REMINDER-2026",
-    adjustmentReason: "The supplied source indicates channel/eFPS-group variation; no row-level rule is asserted here.",
+    sourceCode: "BIR-2026-INTERACTIVE-TAX-CALENDAR",
+    adjustmentReason: "The official BIR calendar publishes channel/eFPS-group rows. The exact row must be reconciled to the client context before publication.",
+    officialCalendarReference: "BIR 2026 Interactive Tax Calendar · 1601-C and/or 0619-E and/or 0619-F rows vary by filing channel and eFPS group.",
+  },
+  "0619-E": {
+    ruleVersionId: "rule-version-0619-e-bir-calendar-reference",
+    verificationStatus: "unresolved",
+    sourceCode: "BIR-2026-INTERACTIVE-TAX-CALENDAR",
+    adjustmentReason: "The official BIR calendar includes 0619-E in combined 1601-C/0619-E/0619-F rows. The exact channel/eFPS-group row must be reconciled before publication.",
+    officialCalendarReference: "BIR 2026 Interactive Tax Calendar · combined 1601-C and/or 0619-E and/or 0619-F rows; exact date varies by filing channel/eFPS group.",
+  },
+  "0619-F": {
+    ruleVersionId: "rule-version-0619-f-bir-calendar-reference",
+    verificationStatus: "unresolved",
+    sourceCode: "BIR-2026-INTERACTIVE-TAX-CALENDAR",
+    adjustmentReason: "The official BIR calendar includes 0619-F in combined 1601-C/0619-E/0619-F rows. The exact channel/eFPS-group row must be reconciled before publication.",
+    officialCalendarReference: "BIR 2026 Interactive Tax Calendar · combined 1601-C and/or 0619-E and/or 0619-F rows; exact date varies by filing channel/eFPS group.",
   },
   "1601-EQ": {
     ruleVersionId: "rule-version-1601-eq-quarterly-v1",
@@ -217,6 +237,8 @@ function calculateRow(formNumber: string, year: number, period: ReturnType<typeo
     taxablePeriod: period.taxablePeriod,
     baseStatutoryDeadline: calculation?.baseStatutoryDeadline ?? null,
     adjustedStatutoryDeadline: adjusted,
+    officialPublishedDeadline: null,
+    officialCalendarReference: seed.officialCalendarReference ?? null,
     earliestApplicableDeadline: earliest,
     publishedOperationalDeadline: status === "published" ? adjusted : null,
     tmfPackageTarget: packageTarget,
