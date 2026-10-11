@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { queueTemporary2303Processing } from "@/lib/server/portfolio-repository";
+import { queueTemporary2303Processing } from "@/lib/server/temporary-document-repository";
 import { uuidPattern } from "@/lib/domain/temporary-document";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 

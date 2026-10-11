@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 import { getSupabaseConfig } from "./config";
 
@@ -30,16 +31,37 @@ export async function createSupabaseServerClient() {
   });
 }
 
-export async function getAuthenticatedUser() {
+export const getAuthenticatedRequestContext = cache(async () => {
   const client = await createSupabaseServerClient();
 
   if (!client) {
-    return null;
+    return { client: null, user: null };
   }
 
   const {
     data: { user },
   } = await client.auth.getUser();
 
-  return user;
-}
+  return { client, user };
+});
+
+export const getAuthenticatedUser = cache(async () => (await getAuthenticatedRequestContext()).user);
+
+export const getAuthenticatedUserProfile = cache(async () => {
+  const { client, user } = await getAuthenticatedRequestContext();
+
+  if (!client || !user) {
+    return null;
+  }
+
+  const { data: appUser } = await client
+    .from("app_users")
+    .select("display_name")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  return {
+    user,
+    displayName: appUser?.display_name?.trim() || user.user_metadata?.display_name?.trim() || user.email || "Authenticated user",
+  };
+});

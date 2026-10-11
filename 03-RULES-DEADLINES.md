@@ -51,6 +51,8 @@ The BIR Requirement Master is the sole legal/control catalog. BIR Form Master, T
 
 Regulatory Issuance / Authority is a reusable provenance record. A requirement or Rule Version may cite multiple issuances and precise page/section references, with publication, effectivity, retrieval, verification, and supersession metadata. A repeated URL is not sufficient provenance.
 
+Deadline rules, holiday adjustment policies, and calendar generation/reconciliation/release are restricted governed configuration capabilities. They do not belong in the shared BIR Center reference surface. BIR Center may expose source-backed reference information and released results, but it must not author or release deadline logic.
+
 ### 3.1 Obligation Definition
 
 An Obligation Definition, if retained, is generation/execution configuration referencing a BIR Requirement Master version. It is not a second legal catalog. If it adds no behavior beyond Requirement + Rules + Components, it must be merged or removed.
@@ -329,6 +331,12 @@ The package-target calculation may use a configured Philippine working-day calen
 If the package target cannot be calculated because an adjusted deadline or working-day context is unresolved, the system must show an unresolved target rather than silently using a calendar-day approximation.
 
 Component-level or milestone-specific TMF Internal Targets may exist where approved, but they remain distinct from the TMF Package Target.
+
+### 7.4A Published Operational Deadline
+
+The system-calculated Base Statutory Deadline and Adjusted Statutory Deadline are candidates until the governed calendar process has reconciled them and Tax Team has confirmed and released the applicable operational row. The Published Operational Deadline is the released projection used by client Service Calendars and, once all other generation gates are satisfied, downstream compliance work.
+
+Publication must retain the rule/version, source/provenance, date explanation, reviewer/approver context, actor, timestamp, and any amendment or supersession history. A row with unresolved rule, provenance, applicability, or calendar mismatch remains unavailable for authoritative client use. Publishing never collapses the statutory date into the TMF Package Target; the package target remains the one-Philippine-working-day-before internal control date.
 
 ### 7.5 One-Day-Before exceptions
 

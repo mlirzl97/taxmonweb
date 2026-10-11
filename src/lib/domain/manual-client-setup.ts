@@ -1,3 +1,5 @@
+import { clientDeadlineModes, clientDeadlinePolicyErrors, isValidClientDeadlineLeadDays, normalizeClientDeadlinePolicy, type ClientDeadlinePolicy } from "@/lib/domain/client-deadline-policy";
+
 const referenceCodePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -18,11 +20,44 @@ export type ManualClientSetupInput = {
   sourceReference: string;
   sourceSystem: (typeof manualClientSetupSourceSystems)[number];
   sourceNotes?: string;
+  profileData?: {
+    rdoOrLts?: string;
+    registeredAddress?: string;
+    taxYearBasis?: string;
+    fiscalYearEnd?: string;
+    accountingSystem?: string;
+    filingChannel?: string;
+    eFPSGroup?: string;
+    registeredTaxTypes?: string[];
+    registeredTaxTypesRaw?: string;
+    sourceNotes?: string;
+    deadlinePolicy?: ClientDeadlinePolicy;
+  };
+  contractData?: {
+    recordType?: string;
+    referenceCode?: string;
+    sourceReference?: string;
+  };
+  sourcePack?: Array<{
+    type: string;
+    status: "not_captured" | "received" | "not_applicable" | "unknown";
+    sourceReference?: string;
+    notes?: string;
+  }>;
 };
 
 export type ManualClientSetupResult =
   | { ok: true; value: ManualClientSetupInput }
   | { ok: false; errors: string[] };
+
+/**
+ * Fixture writes are only valid inside the explicitly sanitized prototype.
+ * Production and authenticated source-backed setup must never accept them.
+ */
+export function isManualClientSetupSourceAllowed(sourceSystem: ManualClientSetupInput["sourceSystem"], prototypeMode: boolean): boolean {
+  if (sourceSystem === "synthetic_fixture") return prototypeMode;
+  return !prototypeMode;
+}
 
 function readText(input: Record<string, unknown>, key: string, required = true): string | undefined {
   const raw = input[key];
@@ -96,6 +131,88 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
   const sourceNotes = optionalText(source, "sourceNotes", errors, 500);
   const unitKind = readText(source, "unitKind");
   const sourceSystem = readText(source, "sourceSystem");
+  const profileSource = source.profileData;
+  const profileData = profileSource && typeof profileSource === "object" && !Array.isArray(profileSource)
+    ? profileSource as Record<string, unknown>
+    : undefined;
+
+  const profileText = (key: string, maxLength: number) => {
+    if (!profileData) return undefined;
+    const value = profileData[key];
+    if (value === undefined || value === null || value === "") return undefined;
+    if (typeof value !== "string" || value.trim().length > maxLength) {
+      errors.push(`profileData.${key} must be text with ${maxLength} characters or fewer.`);
+      return undefined;
+    }
+    return value.trim() || undefined;
+  };
+
+  const registeredTaxTypes = profileData?.registeredTaxTypes;
+  if (registeredTaxTypes !== undefined && (!Array.isArray(registeredTaxTypes) || registeredTaxTypes.some((value) => typeof value !== "string" || value.trim().length > 160))) {
+    errors.push("profileData.registeredTaxTypes must be an array of short text values.");
+  }
+
+  const deadlinePolicySource = profileData?.deadlinePolicy;
+  if (deadlinePolicySource !== undefined && (!deadlinePolicySource || typeof deadlinePolicySource !== "object" || Array.isArray(deadlinePolicySource))) {
+    errors.push("profileData.deadlinePolicy must be an object when supplied.");
+  }
+  const deadlinePolicy = deadlinePolicySource && typeof deadlinePolicySource === "object" && !Array.isArray(deadlinePolicySource)
+    ? normalizeClientDeadlinePolicy(deadlinePolicySource)
+    : undefined;
+  if (deadlinePolicySource && typeof deadlinePolicySource === "object" && !Array.isArray(deadlinePolicySource)) {
+    const rawPolicy = deadlinePolicySource as Record<string, unknown>;
+    if (!clientDeadlineModes.includes(rawPolicy.mode as typeof clientDeadlineModes[number])) {
+      errors.push("profileData.deadlinePolicy.mode must be follow_group or client_defined.");
+    }
+    for (const key of ["clientProvideLeadDays", "clientApprovalLeadDays", "tmfPackageLeadDays", "estimatedFilingLeadDays", "estimatedPaymentLeadDays"] as const) {
+      if (rawPolicy[key] !== undefined && !isValidClientDeadlineLeadDays(rawPolicy[key])) {
+        errors.push(`profileData.deadlinePolicy.${key} must be a whole number from 0 to 365.`);
+      }
+    }
+  }
+  if (deadlinePolicy) errors.push(...clientDeadlinePolicyErrors(deadlinePolicy).map((error) => `profileData.deadlinePolicy: ${error}`));
+
+  const contractSource = source.contractData;
+  if (contractSource !== undefined && (!contractSource || typeof contractSource !== "object" || Array.isArray(contractSource))) {
+    errors.push("contractData must be an object when supplied.");
+  }
+  const contractData = contractSource && typeof contractSource === "object" && !Array.isArray(contractSource)
+    ? contractSource as Record<string, unknown>
+    : undefined;
+  const contractText = (key: string, maxLength: number) => {
+    if (!contractData) return undefined;
+    const value = contractData[key];
+    if (value === undefined || value === null || value === "") return undefined;
+    if (typeof value !== "string" || value.trim().length > maxLength) {
+      errors.push(`contractData.${key} must be text with ${maxLength} characters or fewer.`);
+      return undefined;
+    }
+    return value.trim() || undefined;
+  };
+
+  const sourcePackSource = source.sourcePack;
+  if (sourcePackSource !== undefined && !Array.isArray(sourcePackSource)) {
+    errors.push("sourcePack must be an array when supplied.");
+  }
+  const sourcePack = Array.isArray(sourcePackSource) ? sourcePackSource.flatMap((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      errors.push(`sourcePack[${index}] must be an object.`);
+      return [];
+    }
+    const record = item as Record<string, unknown>;
+    const type = typeof record.type === "string" ? record.type.trim() : "";
+    const status = typeof record.status === "string" ? record.status.trim() : "";
+    const sourceReference = typeof record.sourceReference === "string" ? record.sourceReference.trim() : "";
+    const notes = typeof record.notes === "string" ? record.notes.trim() : "";
+    if (!type || !status || !["not_captured", "received", "not_applicable", "unknown"].includes(status)) {
+      errors.push(`sourcePack[${index}] must include a supported type and status.`);
+      return [];
+    }
+    if (status === "received" && !sourceReference) errors.push(`sourcePack.${type} requires a source reference when received.`);
+    if ((status === "unknown" || status === "not_applicable") && !notes) errors.push(`sourcePack.${type} requires a rationale.`);
+    if (sourceReference.length > 240 || notes.length > 500) errors.push(`sourcePack.${type} contains text that is too long.`);
+    return [{ type, status: status as "not_captured" | "received" | "not_applicable" | "unknown", sourceReference: sourceReference || undefined, notes: notes || undefined }];
+  }) : undefined;
 
   if (clientReferenceCode && !referenceCodePattern.test(clientReferenceCode)) {
     errors.push("clientReferenceCode contains unsupported characters.");
@@ -141,6 +258,25 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
       sourceReference,
       sourceSystem: sourceSystem as ManualClientSetupInput["sourceSystem"],
       sourceNotes,
+      profileData: profileData ? {
+        rdoOrLts: profileText("rdoOrLts", 160),
+        registeredAddress: profileText("registeredAddress", 500),
+        taxYearBasis: profileText("taxYearBasis", 80),
+        fiscalYearEnd: profileText("fiscalYearEnd", 80),
+        accountingSystem: profileText("accountingSystem", 160),
+        filingChannel: profileText("filingChannel", 80),
+        eFPSGroup: profileText("eFPSGroup", 160),
+        registeredTaxTypes: Array.isArray(registeredTaxTypes) ? registeredTaxTypes.map((value) => String(value).trim()).filter(Boolean) : undefined,
+        registeredTaxTypesRaw: profileText("registeredTaxTypesRaw", 1000),
+        sourceNotes: profileText("sourceNotes", 500),
+        deadlinePolicy,
+      } : undefined,
+      contractData: contractData ? {
+        recordType: contractText("recordType", 32),
+        referenceCode: contractText("referenceCode", 160),
+        sourceReference: contractText("sourceReference", 240),
+      } : undefined,
+      sourcePack,
     },
   };
 }

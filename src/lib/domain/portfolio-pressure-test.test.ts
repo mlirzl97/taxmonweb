@@ -30,15 +30,17 @@ describe("client portfolio pressure-test fixture", () => {
     expect(superLight.filter((client) => client.entities[0]?.profile.sourceFinalWeight === 0)).toHaveLength(3);
   });
 
-  it("marks every client with an explicit recurring or ad hoc service type", () => {
-    const counts = fixtureClients.reduce<Record<"Engagement" | "Tax Ad Hoc", number>>((result, client) => {
-      result[client.serviceType] += 1;
-      return result;
-    }, { Engagement: 0, "Tax Ad Hoc": 0 });
-
-    expect(counts.Engagement).toBeGreaterThan(0);
-    expect(counts["Tax Ad Hoc"]).toBeGreaterThan(0);
-    expect(counts.Engagement + counts["Tax Ad Hoc"]).toBe(112);
+  it("keeps the approved Contract Repository tree distinct from the Client", () => {
+    expect(fixtureClients).toHaveLength(112);
+    expect(fixtureClients.every((client) => client.contractRepository.id && client.contractRepository.referenceCode)).toBe(true);
+    expect(fixtureClients.every((client) => client.contractRepository.masterEngagement?.title === "Master Agreement (MSA)" && client.contractRepository.masterEngagement.documents.some((document) => document.kind === "MSA") || !client.contractRepository.masterEngagement)).toBe(true);
+    expect(fixtureClients.every((client) => client.contractRepository.masterEngagement?.documents.every((document) => ["MSA", "LSA", "Addendum"].includes(document.kind)) ?? true)).toBe(true);
+    expect(fixtureClients.flatMap((client) => client.contractRepository.masterEngagement?.documents ?? []).find((document) => document.kind === "LSA")?.title).toBe("Local Service Agreement");
+    expect(fixtureClients.flatMap((client) => client.contractRepository.masterEngagement?.documents ?? []).some((document) => document.title === "Letter of Service Agreement")).toBe(false);
+    expect(fixtureClients.filter((client) => client.contractRepository.masterEngagement).every((client) => client.contractRepository.masterEngagement?.documents.filter((document) => document.isCurrent).length === 1)).toBe(true);
+    expect(fixtureClients.flatMap((client) => client.contractRepository.additionalEngagements).every((engagement) => engagement.kind === "Change Request Form")).toBe(true);
+    expect(fixtureClients.some((client) => client.contractRepository.additionalEngagements.some((engagement) => engagement.kind === "Change Request Form"))).toBe(true);
+    expect(fixtureClients.flatMap((client) => client.contractRepository.additionalEngagements).every((engagement) => !engagement.referenceCode.startsWith("NOTE-"))).toBe(true);
   });
 
   it("produces a deterministic assignment reconciliation with controlled gaps", () => {
@@ -67,12 +69,12 @@ describe("client portfolio pressure-test fixture", () => {
   it("uses the current Team directory as the tower population", () => {
     const towers = reconcileAssignmentsByTower(fixtureClients);
     expect(towers.map((tower) => [tower.tower, tower.taxpayerCount, tower.aggregateWeight])).toEqual([
-      ["Tower Central", 37, 76],
-      ["Tower North", 37, 74],
-      ["Tower South", 38, 75],
+      ["Tower A", 37, 74],
+      ["Tower B", 37, 76],
+      ["Tower C", 38, 75],
     ]);
-    expect(fixtureOrgDirectoryMembers.filter((member) => member.tower === "Tower North")).toHaveLength(23);
-    expect(fixtureOrgDirectoryMembers.filter((member) => member.tower === "Tower Central")).toHaveLength(22);
-    expect(fixtureOrgDirectoryMembers.filter((member) => member.tower === "Tower South")).toHaveLength(22);
+    expect(fixtureOrgDirectoryMembers.filter((member) => member.tower === "Tower A")).toHaveLength(23);
+    expect(fixtureOrgDirectoryMembers.filter((member) => member.tower === "Tower B")).toHaveLength(22);
+    expect(fixtureOrgDirectoryMembers.filter((member) => member.tower === "Tower C")).toHaveLength(22);
   });
 });

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import type { TaxProfilePersistencePayload } from "@/lib/domain/client-profile-persistence";
-import { getLatestTaxProfileVersion, saveTaxProfileVersion, validateTaxProfileVersion } from "@/lib/server/portfolio-repository";
+import { getLatestTaxProfileVersion, saveTaxProfileVersion, validateTaxProfileVersion } from "@/lib/server/tax-profile-repository";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 
 type RouteContext = { params: Promise<{ clientId: string }> };

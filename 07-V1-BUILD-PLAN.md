@@ -29,24 +29,28 @@ The frozen implementation spine is:
 
 Generated Compliance Work means the work/control object created by TaxMonWeb. It does not mean that TaxMonWeb prepares or computes the tax return.
 
-## 1.1 Module-by-module development boundary
+## 1.1 Workspace and Lego development boundary
 
-After the core-domain freeze, product development proceeds one module at a time:
+The user-facing product is organized into six workspaces:
 
-1. People & Portfolio Foundation;
-2. Client Registry & Tax Profile;
-3. BIR Requirement Master, Rules & Calendar;
-4. Compliance Setup;
-5. Tax Run / Filing Execution;
-6. Control Tower & My Work;
-7. Tax Team QA;
-8. Gamification & Management.
+1. Control Tower — what is happening and what needs intervention;
+2. Team — who is delivering it;
+3. Clients — who TMF is servicing;
+4. Work — what work needs to move;
+5. BIR Center — a shared, read-only encyclopedia-style reference for the governed BIR data TaxMonWeb relies on;
+6. Admin — who may access or change the system, and what happened.
 
-Each module follows:
+Each workspace has a compact landing view and focused submodules/tabs. Due Register and Calendar are Work submodules. Tax Team/QA and Super Admin are restricted views over shared truth, not additional ordinary workspaces.
 
-`HOD operational interview → module requirements → UX/interaction design → pressure test → build → HOD testing → corrections → module freeze`
+BIR Center is available as a read-only reference to all authenticated users. It is not a rules editor, calendar-release surface, obligation generator, or second source of truth. Deadline rules and calendar release remain restricted governed configuration capabilities outside BIR Center.
 
-Downstream modules must not be elaborated or implemented merely because their eventual concepts are known.
+Development is Lego-first, not a fixed numbered-module sequence. A Lego is the smallest complete capability that includes its user-visible projection, owning commands/queries, authorization boundary, effective-dated/history behavior, audit trail, tests, and relevant responsive/accessibility behavior. Legos may be implemented in dependency order and connected across workspaces without creating duplicate trackers or sources of truth.
+
+The review loop for each Lego is:
+
+`HOD operational input → concise requirements → UX/interaction pressure test → build → QA → HOD testing → correction → Lego freeze`
+
+The earlier Module 01/Module 02 sequence is retired. Do not create or plan a separate “Module 02” merely because a future capability is conceptually known.
 
 ## 2. Build guardrails
 
@@ -114,7 +118,8 @@ No slice is complete until it has:
 - approved ant/TaxMonWeb identity and semantic design tokens;
 - login and authenticated application shell;
 - Control Tower as the primary navigation label;
-- My Work, Clients, Calendar, and Control/Exceptions entry points;
+- Team, Clients, Work, BIR Center, and authorized Admin entry points;
+- Due Register and Calendar inside Work;
 - responsive desktop/tablet/mobile shell behavior;
 - sanitized fixture mechanism;
 - representative leadership and staff views populated from fixtures.
@@ -158,9 +163,9 @@ Use only enough representative obligation definitions, Control Templates, and ap
 
 **Review gate:** The domain owner can answer whether the system supports real daily work without becoming eNate, Planner, Excel-in-a-browser, or a generic ticketing system.
 
-## 4. Ordered implementation slices
+## 4. Active Lego backlog and dependency slices
 
-The slices below are ordered by dependency and review value. They are not separate services. A slice may touch several modules while remaining one coherent application change.
+The slices below are dependency-oriented implementation Legos, not a numbered product-module sequence and not separate services. A Lego may touch several workspaces while remaining one coherent application change. Reprioritize the active Lego backlog when HOD review exposes a more valuable dependency, while preserving the frozen domain and control invariants.
 
 ### Slice 01 — Product foundation and preview shell
 
@@ -178,7 +183,7 @@ The slices below are ordered by dependency and review value. They are not separa
 
 **Commands/queries:** Sign-in/sign-out/session query; fixture read query only.
 
-**UI:** Login, authenticated shell, Control Tower, My Work, Clients, Calendar, Control/Exceptions placeholders with useful fixture states, responsive navigation, loading/error/empty states.
+**UI:** Login, authenticated shell, Control Tower, Team, Clients, Work, BIR Center, authorized Admin entry point, responsive navigation, useful fixture states, and loading/error/empty states. Due Register and Calendar are reached inside Work.
 
 **Authorization/RLS:** Authentication foundation; deny unauthenticated application data access. No sensitive data. Hidden UI is not treated as security.
 
@@ -252,7 +257,7 @@ The slices below are ordered by dependency and review value. They are not separa
 
 **Commands/queries:** Scope-aware Control Tower query, My Work query, client hierarchy query, calendar projection placeholder, Control/Exceptions fixture query.
 
-**UI:** Control Tower, My Work, Clients, Calendar, Control/Exceptions; due/attention cards; filters; concise status language; responsive monitoring views.
+**UI:** Control Tower, Team, Clients, Work, BIR Center, and authorized Admin entry points; Work contains My Work, Due Register, Calendar, and control/exception views; concise status language, filters, and responsive monitoring views.
 
 **Authorization/RLS:** Query results constrained by visibility scope; actions shown only when the user may perform them, while server authorization remains authoritative.
 
@@ -835,19 +840,19 @@ Production AI vendor selection, production region, real-client retention, malwar
 
 ### Critical path to Prototype 0
 
-`Slice 01 → Slice 02 → Slice 03 → Gate 1`
+`Foundation Lego → workspace shell → first reviewable workspace projections → Gate 1`
 
 The shell must not wait for live extraction, complete rules, or the full domain schema.
 
 ### Critical path to the Golden Path
 
-`Prototype 0 → Slice 04 → Slice 05 → Slice 06 → Slice 07 → Slice 08 → Slice 09 → Gate 2/3/4`
+`Prototype 0 → registration/profile Lego → BIR knowledge/configuration Lego → compliance-setup Lego → generated-work Lego → Gate 2/3/4`
 
 The MockDocumentExtractionProvider is the critical-path extraction dependency. Production AI selection is not.
 
 ### Critical path to the Operational Pressure Test
 
-`Golden Path → Slice 10 → Slice 11 → Slice 12 → Slice 13 → Gate 5`
+`Golden Path → execution/component Lego → control/RAG/exception Lego → SoD/reassignment/audit Lego → Gate 5`
 
 The primary risk is not infrastructure scale; it is preserving actor history, evidence strength, component independence, and authorization under realistic exceptions.
 

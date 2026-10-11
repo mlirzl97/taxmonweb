@@ -10,6 +10,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "fixtures:import": "tsx scripts/import-sanitized-fixtures.ts",
+    "fixtures:audit": "tsx scripts/import-sanitized-fixtures.ts --audit --include-tax-profiles",
     "test:watch": "vitest",
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
@@ -17,6 +19,7 @@
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.78.0",
     "next": "^16.3.8",
+    "pdf-lib": "^1.17.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
@@ -29,6 +32,7 @@
     "eslint": "^9.38.0",
     "eslint-config-next": "^16.3.8",
     "jsdom": "^27.0.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vitest": "^5.0.3"
   }

@@ -1,10 +1,31 @@
+import { fixtureOrganizationScopes, fixtureScopeFilterOptions, towerForScopeFilter, type FixtureTower, type OrganizationScopeFilter } from "@/lib/domain/organization-catalog";
+
+export type ScopeFilter = OrganizationScopeFilter;
+
+export const scopeOptions = [
+  { id: "all", label: "All A&T", scopeValue: null },
+  ...fixtureOrganizationScopes.map((scope) => ({ id: scope.filterId, label: scope.cluster, scopeValue: scope.tower })),
+] as const satisfies ReadonlyArray<{ id: ScopeFilter; label: string; scopeValue: string | null }>;
+
+export function scopeValueForFilter(filter: ScopeFilter): FixtureTower | null {
+  return towerForScopeFilter(filter);
+}
+
+export function scopeLabelForValue(value: string): string {
+  return scopeOptions.find((option) => option.scopeValue === value)?.label ?? value;
+}
+
+export function scopeFilterForValue(value: string | null | undefined): ScopeFilter {
+  return scopeOptions.find((option) => option.scopeValue === value)?.id ?? "all";
+}
+
 export type TowerView = "overview" | "due" | "calendar";
 export type TowerPreset = "all" | "today" | "attention" | "blocked" | "statutory";
-export type TowerScope = "all" | "north" | "central" | "south";
+export type TowerScope = ScopeFilter;
 
 const validViews: readonly TowerView[] = ["overview", "due", "calendar"];
 const validPresets: readonly TowerPreset[] = ["all", "today", "attention", "blocked", "statutory"];
-const validScopes: readonly TowerScope[] = ["all", "north", "central", "south"];
+const validScopes: readonly TowerScope[] = fixtureScopeFilterOptions;
 
 export type ControlTowerUrlState = { view: TowerView; preset: TowerPreset; scope: TowerScope; date: string | null };
 

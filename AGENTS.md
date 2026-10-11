@@ -57,7 +57,7 @@ The tax-knowledge foundation has one legal source of truth: `BIR Requirement Mas
 
 Coverage Integrity is a derived projection `Expected → Generated → Executed → Evidenced`; detect gaps early, but classify severity from lifecycle/timing/legal context. Material rule/profile/universe changes must use impact analysis and an authorized, audited decision before rebase/regeneration/cancellation/supersession. Component statutory deadlines remain distinct from the TMF Package Target.
 
-Operational monthly calendars require `Generate → Reconcile → Human Review → Approve → Release`. Released versions are immutable, maker-checker controlled, and may be partial only when unresolved populations are explicit and excluded from authoritative use. The future BIR Center is a projection over canonical masters, not a second source of truth. BIR Officer identity and effective-dated office assignments are factual, source-backed reference data only; never add subjective officer ratings or unsupported allegations.
+Operational monthly calendars require `Generate → Reconcile → Human Review → Approve → Release`. Released versions are immutable, maker-checker controlled, and may be partial only when unresolved populations are explicit and excluded from authoritative use. BIR Center is a shared, read-only encyclopedia/reference projection over canonical masters, not a second source of truth. All authenticated users may view it, but it does not author deadline rules, release calendars, generate obligations, or replace restricted Tax Configuration/Admin controls. BIR Officer identity and effective-dated office assignments are factual, source-backed reference data only; never add subjective officer ratings or unsupported allegations.
 
 These distinctions are mandatory:
 
@@ -81,9 +81,9 @@ Elevated Override is exceptional, reason-required, visibly marked, and audited. 
 
 Never rely on UI visibility for security. Enforce authentication, RLS, organizational scope, server-side command authorization, actual-actor SoD, and elevated authority as applicable. Deny by default.
 
-System Administration does not automatically grant tax-control authority. Never expose a Supabase service-role credential to the browser.
+System Administration does not automatically grant tax-control authority. Super Admin is the explicit combined authority and may access all modules and technical/tax-control surfaces, but remains audited and cannot fabricate external facts, erase history, or erase actual-actor SoD. Never expose a Supabase service-role credential to the browser.
 
-Current calibration exception: the sanitized prototype may present HOD as `Master Admin` and enable an explicit open-edit mode for Module 01 fixture/profile context. This mode is temporary, browser-persisted, and must never be treated as production authorization or used with real client data. Master Admin still cannot fabricate external facts, bypass validation truth, or erase actor/SoD history.
+Current calibration exception: the sanitized prototype may present HOD as `Master Admin` and enable an explicit open-edit mode for Client/Profile fixture context. This mode is temporary, browser-persisted, and must never be treated as production authorization or used with real client data. Master Admin still cannot fabricate external facts, bypass validation truth, or erase actor/SoD history.
 
 ## 7. Data safety
 
@@ -117,7 +117,7 @@ Mobile/tablet experiences prioritize monitoring, intervention, review, and safe 
 
 ## 11. Build discipline
 
-Follow `07-V1-BUILD-PLAN.md` slice order unless a concrete dependency requires deviation. Implement the smallest complete vertical slice; do not prebuild future architecture.
+Follow the active Lego backlog and the dependency order in `07-V1-BUILD-PLAN.md` unless a concrete dependency requires deviation. Implement the smallest complete capability inside its owning workspace; do not prebuild future architecture or create numbered “Module 02” work by assumption.
 
 Before each slice:
 
@@ -137,7 +137,7 @@ After each slice:
 
 Do not silently proceed past a review gate.
 
-After the core freeze, work module by module in this order: People & Portfolio Foundation; Client Registry & Tax Profile; BIR Requirement Master, Rules & Calendar; Compliance Setup; Tax Run / Filing Execution; Control Tower & My Work; Tax Team QA; Gamification & Management. Each module requires HOD operational interview, module requirements, UX/interaction design, pressure test, build, HOD testing, corrections, and module freeze. People & Portfolio is intentionally a simple operational first Lego, not an HRIS or a replacement for the full RBAC control model. Do not elaborate downstream modules prematurely.
+After the core freeze, organize work around the six user-facing workspaces: Control Tower, Team, Clients, Work, BIR Center, and Admin. Each workspace has a mini-dashboard/landing view and focused submodules or tabs. Build in Lego-sized capabilities: each Lego must include its user-visible projection, owning commands/queries, authorization boundary, effective-dated/history behavior, audit trail, and tests. Review each Lego with the HOD before extending it. People/Portfolio, Client Registry, BIR knowledge, Compliance Setup, Tax Run, QA, and management are capabilities placed in these workspaces—not a mandatory numbered module sequence. Due Register and Calendar belong to Work; Tax Team/QA and Super Admin are restricted views over shared truth. Do not elaborate downstream capabilities merely because they may eventually exist.
 
 ## 12. Database and change discipline
 

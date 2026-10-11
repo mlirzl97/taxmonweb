@@ -6,7 +6,7 @@ import {
   createTemporary2303Document,
   failTemporary2303Upload,
   uploadTemporary2303Object,
-} from "@/lib/server/portfolio-repository";
+} from "@/lib/server/temporary-document-repository";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 
 export async function POST(request: Request, { params }: { params: Promise<{ registrationUnitId: string }> }) {

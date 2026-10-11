@@ -2,6 +2,11 @@ node_modules/
 .next/
 .next-e2e/
 .next-qa/
+.next-audit/
+.next-verify/
+.next-cache-backup-*/
+.next-build-cache-backup-*/
+.playwright-cli/
 test-results/
 out/
 coverage/

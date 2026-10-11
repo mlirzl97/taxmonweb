@@ -31,6 +31,17 @@ One operational truth powers My Work, Control Tower, Clients, Team, Due Register
 
 ## V1 shape
 
-V1 is a managed/serverless-first Next.js/TypeScript modular monolith deployed primarily through Vercel and Supabase. Initial module order is Client Registry & Tax Profile, Compliance Setup, BIR Requirement Master/Rules/Calendar, Tax Run/Filing Execution, Control Tower/My Work, Tax Team QA, and Gamification/Management.
+V1 is a managed/serverless-first Next.js/TypeScript modular monolith deployed primarily through Vercel and Supabase. The user-facing product is organized as six coherent workspaces:
+
+1. **Control Tower** — what is happening and what needs intervention;
+2. **Team** — who is delivering it;
+3. **Clients** — who TMF is servicing;
+4. **Work** — what work needs to move;
+5. **BIR Center** — which governed BIR reference data TaxMonWeb relies on;
+6. **Admin** — who may access or change the system, and what happened.
+
+Each workspace has a compact landing view and focused submodules/tabs. Due Register and Calendar belong inside Work; Tax Team/QA and Super Admin are restricted capability views over the same records, not additional ordinary top-level workspaces.
+
+Development follows a Lego approach rather than a fixed numbered-module sequence: build the smallest complete capability, connect it to the owning workspace and shared projections, add the required CRUD, authorization, effective history, and audit trail, then review and extend it. “Module 02” and the earlier sequential module order are retired delivery labels, not product boundaries.
 
 Locked decisions in the Decision Register and approved domain, workflow, RBAC, UX, technical architecture, and build-plan documents take precedence over this concise restatement and over implementation convenience.

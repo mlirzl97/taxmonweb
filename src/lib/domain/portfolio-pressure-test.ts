@@ -4,6 +4,7 @@ import {
   type FixtureSourceWeightClassification,
   type FixtureTeamMember,
 } from "@/lib/fixtures";
+import { fixtureOrganizationScopes } from "./organization-catalog";
 
 export type PortfolioWeightReconciliation = {
   sourceWeightedProfiles: number;
@@ -88,7 +89,11 @@ export function reconcileAssignments(clients: readonly FixtureClient[], members:
 }
 
 export function reconcileAssignmentsByTower(clients: readonly FixtureClient[]): TowerAssignmentReconciliation[] {
-  const towers = Array.from(new Set(clients.map((client) => client.assignment.tower))).sort();
+  const towers = Array.from(new Set(clients.map((client) => client.assignment.tower))).sort((left, right) => {
+    const leftIndex = fixtureOrganizationScopes.findIndex((scope) => scope.tower === left);
+    const rightIndex = fixtureOrganizationScopes.findIndex((scope) => scope.tower === right);
+    return leftIndex - rightIndex;
+  });
 
   return towers.map((tower) => {
     const towerClients = clients.filter((client) => client.assignment.tower === tower);

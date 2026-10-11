@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   createTemporary2303SignedUrl,
   getTemporary2303Document,
-} from "@/lib/server/portfolio-repository";
+} from "@/lib/server/temporary-document-repository";
 import { uuidPattern } from "@/lib/domain/temporary-document";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 

@@ -52,15 +52,18 @@ The governing UX principles are:
 
 ## B. Information architecture
 
-### B.1 Minimal primary navigation
+### B.1 Workspace navigation
 
-The primary application navigation should remain small:
+The primary application navigation is organized as six workspaces:
 
-1. **Control Tower**
-2. **My Work**
-3. **Clients**
-4. **Calendar**
-5. **Control / Exceptions**
+1. **Control Tower** — what is happening;
+2. **Team** — who is delivering it;
+3. **Clients** — who TMF is servicing;
+4. **Work** — what work needs to move;
+5. **BIR Center** — governed BIR reference;
+6. **Admin** — access, configuration, and audit.
+
+Each workspace opens with a compact dashboard/landing view and exposes focused tabs or submodules. Due Register and Calendar are Work views, not global navigation. Tax Team/QA and Super Admin are restricted capability views over the same records, not ordinary top-level navigation.
 
 The information architecture should not create navigation items merely because a domain object exists.
 
@@ -210,9 +213,9 @@ Useful row context includes:
 - risk/RAG;
 - exception indicator.
 
-## E. My Work
+## E. Work and My Work
 
-My Work should answer:
+The Work workspace should answer what work needs to move. Its My Work view should answer:
 
 > What do I need to do today?
 
@@ -924,18 +927,15 @@ The first meaningful vertical slice should demonstrate:
 
 1. Login
 2. Control Tower
-3. My Work
-4. Client list/search
-5. Client workspace
-6. Registration Unit context
-7. Upload 2303
-8. AI-assisted extraction review
-9. Tax Profile validation
-10. Expected Compliance review/approval
-11. Generated obligation detail
-12. Progress through a representative obligation
-13. Tax Service Calendar projection
-14. Control / Exceptions view
+3. Team
+4. Clients
+5. Work
+6. BIR Center
+7. Admin (authorized users only)
+8. Client/profile setup and 2303 review
+9. Work detail and execution projection
+10. Tax Service Calendar projection inside Work
+11. Control/QA views for authorized users
 
 Contextual or later prototype surfaces may include:
 
@@ -947,7 +947,7 @@ Contextual or later prototype surfaces may include:
 - Tax Audit Mode;
 - administration.
 
-These should not become separate top-level experiences unless user research proves they need that prominence.
+These should remain submodules or restricted views unless user research proves that a new workspace is necessary. Do not create a numbered module sequence merely because a capability has its own data.
 
 ## P. Prototype sample data
 

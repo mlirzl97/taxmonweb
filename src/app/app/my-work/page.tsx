@@ -1,22 +1,13 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useState } from "react";
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-import { WorkRegisterView } from "@/components/app/control-tower-views";
-import { FixturePageFrame, PageHeader, ScopeSwitcher, type ScopeFilter } from "@/components/app/workspace-components";
-
-export default function MyWorkPage() {
-  const [scope, setScope] = useState<ScopeFilter>("all");
-
-  return (
-    <FixturePageFrame>
-      <PageHeader title="My Work" description="The execution view behind the Due Register: see the next step, control gates, and evidence still needed." />
-
-      <div className="page-toolbar page-toolbar--stackable my-work-toolbar">
-        <ScopeSwitcher onChange={setScope} value={scope} />
-      </div>
-
-      <WorkRegisterView scope={scope} />
-    </FixturePageFrame>
-  );
+export default async function LegacyMyWorkRoute({ searchParams }: { searchParams: SearchParams }) {
+  const params = await searchParams;
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string") query.set(key, value);
+    else if (Array.isArray(value) && value[0]) query.set(key, value[0]);
+  }
+  redirect(`/app/work${query.toString() ? `?${query.toString()}` : ""}`);
 }

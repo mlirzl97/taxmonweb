@@ -1,3 +1,6 @@
+import type { FixtureTower } from "@/lib/domain/organization-catalog";
+import type { ClientDeadlinePolicy } from "@/lib/domain/client-deadline-policy";
+
 export const fixtureEnvironment = {
   label: "REVIEW MODE",
   description: "Demonstration data only. No live client information or source documents are included.",
@@ -9,15 +12,17 @@ export const fixtureClock = {
   year: 2026,
   month: 9,
   label: "5 October 2026",
+  timestampLabel: "5 October 2026 · 9:00 AM (Asia/Manila)",
 } as const;
 
-export type FixtureScope = "Tower North" | "Tower Central" | "Tower South";
+export type FixtureScope = FixtureTower;
 export type FixtureStatus = "GREEN" | "AMBER" | "RED" | "UNRESOLVED";
 export type FixtureSourceWeightClassification = "Extremely Heavy" | "Heavy" | "Moderate" | "Light" | "Super Light";
 export type FixtureSource = "source_weighted_portfolio" | "synthetic_portfolio_test";
-export type FixtureOperatingModel = "DELIVERY" | "SPECIALIST_CASE";
-/** Sanitized commercial scope used to distinguish recurring engagements from ad hoc tax work. */
-export type FixtureServiceType = "Engagement" | "Tax Ad Hoc";
+export type FixtureOperatingModel = "ENGAGEMENT_AGILE" | "ENGAGEMENT_DEDICATED" | "TAX_TEAM";
+export type FixtureContractRecordStatus = "Active" | "Pending review" | "Closed";
+export type FixtureMasterEngagementDocumentKind = "MSA" | "LSA" | "Addendum";
+export type FixtureAdditionalEngagementKind = "Change Request Form";
 export type FixtureWorkStepState = "complete" | "current" | "waiting" | "blocked" | "not-started" | "unresolved";
 
 export type FixtureWorkStep = {
@@ -28,16 +33,19 @@ export type FixtureWorkStep = {
 };
 
 export type FixtureWorkComponent = {
-  label: "Submission" | "Payment" | "Evidence";
+  label: "Submission" | "Payment" | "Attachments" | "Evidence";
   state: string;
   detail: string;
 };
+
+export type FixturePaymentApplicability = "REQUIRED" | "NOT_APPLICABLE" | "UNRESOLVED";
 
 export type FixtureWorkItem = {
   id: string;
   clientId: string;
   client: string;
   entity: string;
+  registrationUnitId?: string;
   registrationUnit: string;
   title: string;
   period: string;
@@ -50,6 +58,10 @@ export type FixtureWorkItem = {
   deadlineType: "TMF internal target" | "Client / service milestone" | "Control milestone";
   owner: string;
   scope: FixtureScope;
+  /** Normalized organizational projection; unresolved until a canonical cluster is linked. */
+  cluster?: string;
+  paymentApplicability: FixturePaymentApplicability;
+  paymentAmount?: number | null;
   steps: readonly FixtureWorkStep[];
   components: readonly FixtureWorkComponent[];
   returnedFrom?: string;
@@ -84,6 +96,9 @@ export type FixtureAuditExposure = {
   asOf: string;
   context: string;
   source: string;
+  officerName?: string;
+  officerRole?: string;
+  officerContact?: string;
 };
 
 export type FixtureTaxProfile = {
@@ -102,10 +117,13 @@ export type FixtureTaxProfile = {
   filingContext: string;
   eFPSGroup?: string;
   registeredTaxTypes: readonly string[];
+  taxYearBasis?: "Calendar year" | "Fiscal year";
   fiscalYearEnd?: string;
+  accountingSystem?: string;
   booksType?: string;
   invoicing?: string;
   paymentRoute: "Client Pays" | "TMF Pays" | "Not configured";
+  deadlinePolicy?: ClientDeadlinePolicy;
   /** Numeric source workload value. Zero is preserved when the supplied source total requires it. */
   weight: number;
   weightLabel: string;
@@ -146,6 +164,70 @@ export type FixtureAssignment = {
   effectiveFrom: string;
 };
 
+export type FixtureContractDocument = {
+  id: string;
+  kind: FixtureMasterEngagementDocumentKind;
+  isCurrent: boolean;
+  referenceCode: string;
+  title: string;
+  status: FixtureContractRecordStatus;
+  effectiveFrom: string;
+  sourceReference: string;
+};
+
+export type FixtureMasterEngagement = {
+  id: string;
+  referenceCode: string;
+  title: string;
+  status: FixtureContractRecordStatus;
+  effectiveFrom: string;
+  documents: readonly FixtureContractDocument[];
+};
+
+export type FixtureAdditionalEngagement = {
+  id: string;
+  kind: FixtureAdditionalEngagementKind;
+  referenceCode: string;
+  title: string;
+  status: FixtureContractRecordStatus;
+  effectiveFrom: string;
+  sourceReference: string;
+  scopeSummary: string;
+};
+
+export type FixtureChangeRequestFormType = "Tax audit support" | "Additional tax service" | "Registration remediation" | "Other";
+export type FixtureChangeRequestFormStatus = "Draft" | "Pending review" | "Approved" | "Active" | "Closed";
+
+/**
+ * CRF is the prototype projection of an additional engagement. It remains
+ * linked to the client's single Contract Repository; it is not a second
+ * taxpayer, Tax Profile, or audit-case record.
+ */
+export type FixtureChangeRequestForm = {
+  id: string;
+  referenceCode: string;
+  clientId: string;
+  contractRepositoryId: string;
+  clientName: string;
+  title: string;
+  type: FixtureChangeRequestFormType;
+  status: FixtureChangeRequestFormStatus;
+  requestedOn: string;
+  requestedBy: string;
+  owner: string;
+  scopeSummary: string;
+  sourceReference: string;
+  templateVersion: "CRF v1";
+  auditContext?: FixtureAuditExposure;
+};
+
+export type FixtureContractRepository = {
+  id: string;
+  referenceCode: string;
+  masterEngagement?: FixtureMasterEngagement;
+  additionalEngagements: readonly FixtureAdditionalEngagement[];
+};
+
 export type FixtureTeamMember = {
   id: string;
   name: string;
@@ -155,11 +237,17 @@ export type FixtureTeamMember = {
   cluster: string;
   active: boolean;
   email: string;
+  organizationUnitId?: string | null;
   operatingModel: FixtureOperatingModel;
   specialistTeam?: "Tax Team";
   careerServiceLevel?: string;
   reportsToOrgNodeId?: string | null;
+  reportingLineExceptionReason?: string;
   assignmentAliases?: readonly string[];
+  /** Effective date for the current fixture roster state. Production commands must audit this. */
+  effectiveFrom?: string;
+  /** Human-entered context only; does not change assignment or workload semantics. */
+  remarks?: string;
 };
 
 // The supplied org-chart photo and the domain-owner corrections provide the
@@ -184,39 +272,39 @@ const fixtureOrgChartSeedNodes: readonly FixtureOrgChartNode[] = [
   { id: "org-liezl", name: "Synthetic chart node 01", careerServiceLevel: "5.2", title: "Senior Manager · HOD", role: "HOD", parentId: null, cluster: "All A&T", workloadPercent: 64, rag: "GREEN", statusReason: "Overall team load is within the current operating range.", sourceStatus: "confirmed" },
   { id: "org-luiza", name: "Synthetic chart node 02", careerServiceLevel: "5.1", title: "Manager · Operations", role: "Operations Manager", parentId: "org-liezl", cluster: "All A&T", workloadPercent: 76, rag: "AMBER", statusReason: "Cross-cluster coordination and promotion review are being monitored.", sourceStatus: "confirmed" },
 
-  { id: "org-c1-leader", name: "Synthetic chart node 03", careerServiceLevel: "4.2", title: "Assistant Manager · Barangay Atilano", role: "Cluster Leader", parentId: "org-luiza", cluster: "Barangay Atilano", workloadPercent: 82, rag: "AMBER", statusReason: "Cluster workload is elevated.", sourceStatus: "confirmed" },
-  { id: "org-c2-leader", name: "Synthetic chart node 04", careerServiceLevel: "4.2", title: "Assistant Manager · Barangay Beato", role: "Cluster Leader", parentId: "org-luiza", cluster: "Barangay Beato", workloadPercent: 58, rag: "GREEN", statusReason: "Cluster load is currently within the operating range.", sourceStatus: "confirmed" },
-  { id: "org-c3-leader", name: "Synthetic chart node 05", careerServiceLevel: "4.2", title: "Assistant Manager · Barangay de Vera", role: "Cluster Leader", parentId: "org-luiza", cluster: "Barangay de Vera", workloadPercent: 88, rag: "RED", statusReason: "Cluster workload is above the current intervention threshold.", sourceStatus: "confirmed" },
+  { id: "org-c1-leader", name: "Synthetic chart node 03", careerServiceLevel: "4.2", title: "Assistant Manager · Cluster A", role: "Cluster Leader", parentId: "org-luiza", cluster: "Cluster A", workloadPercent: 82, rag: "AMBER", statusReason: "Cluster workload is elevated.", sourceStatus: "confirmed" },
+  { id: "org-c2-leader", name: "Synthetic chart node 04", careerServiceLevel: "4.2", title: "Assistant Manager · Cluster B", role: "Cluster Leader", parentId: "org-luiza", cluster: "Cluster B", workloadPercent: 58, rag: "GREEN", statusReason: "Cluster load is currently within the operating range.", sourceStatus: "confirmed" },
+  { id: "org-c3-leader", name: "Synthetic chart node 05", careerServiceLevel: "4.2", title: "Assistant Manager · Cluster C", role: "Cluster Leader", parentId: "org-luiza", cluster: "Cluster C", workloadPercent: 88, rag: "RED", statusReason: "Cluster workload is above the current intervention threshold.", sourceStatus: "confirmed" },
 
-  { id: "org-c1-senior-supervisor", name: "Synthetic chart node 06", careerServiceLevel: "4.1", title: "Senior Supervisor · Barangay Atilano", role: "Senior 4.1", parentId: "org-c1-leader", cluster: "Barangay Atilano", workloadPercent: 72, rag: "AMBER", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
-  { id: "org-c1-team-lead", name: "Synthetic chart node 07", careerServiceLevel: "3.2", title: "Experienced Team Lead · Barangay Atilano", role: "Experienced 3.2", parentId: "org-c1-leader", cluster: "Barangay Atilano", workloadPercent: 61, rag: "GREEN", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
-  { id: "org-c1-junior-supervisor", name: "Barangay Atilano · Supervisor", careerServiceLevel: "4.1", title: "Junior Supervisor", role: "Junior 4.1", parentId: "org-c1-senior-supervisor", cluster: "Barangay Atilano", workloadPercent: 67, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
-  { id: "org-c1-senior-associate", name: "Barangay Atilano · Senior Associate", careerServiceLevel: "3.1", title: "Senior Associate", role: "Senior Associate", parentId: "org-c1-senior-supervisor", cluster: "Barangay Atilano", workloadPercent: 54, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
-  { id: "org-c1-associate-a", name: "Barangay Atilano · Associate A", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c1-junior-supervisor", cluster: "Barangay Atilano", workloadPercent: 49, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
-  { id: "org-c1-associate-b", name: "Barangay Atilano · Associate B", careerServiceLevel: "2.1", title: "Associate", role: "Associate", parentId: "org-c1-junior-supervisor", cluster: "Barangay Atilano", workloadPercent: 77, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
-  { id: "org-c1-junior-associate", name: "Barangay Atilano · Junior Associate", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c1-team-lead", cluster: "Barangay Atilano", workloadPercent: 44, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c1-senior-supervisor", name: "Synthetic chart node 06", careerServiceLevel: "4.1", title: "Supervisor · Cluster A", role: "Supervisor", parentId: "org-c1-leader", cluster: "Cluster A", workloadPercent: 72, rag: "AMBER", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
+  { id: "org-c1-team-lead", name: "Synthetic chart node 07", careerServiceLevel: "3.2", title: "Team Lead · Cluster A", role: "Team Lead", parentId: "org-c1-senior-supervisor", cluster: "Cluster A", workloadPercent: 61, rag: "GREEN", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
+  { id: "org-c1-junior-supervisor", name: "Cluster A · Supervisor", careerServiceLevel: "4.1", title: "Junior Supervisor", role: "Junior 4.1", parentId: "org-c1-senior-supervisor", cluster: "Cluster A", workloadPercent: 67, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c1-senior-associate", name: "Cluster A · Senior Associate", careerServiceLevel: "3.1", title: "Senior Associate", role: "Senior Associate", parentId: "org-c1-team-lead", cluster: "Cluster A", workloadPercent: 54, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c1-associate-a", name: "Cluster A · Associate A", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c1-senior-associate", cluster: "Cluster A", workloadPercent: 49, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c1-associate-b", name: "Cluster A · Associate B", careerServiceLevel: "2.1", title: "Associate", role: "Associate", parentId: "org-c1-senior-associate", cluster: "Cluster A", workloadPercent: 77, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c1-junior-associate", name: "Cluster A · Junior Associate", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c1-senior-associate", cluster: "Cluster A", workloadPercent: 44, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
 
-  { id: "org-c2-senior-supervisor", name: "Synthetic chart node 08", careerServiceLevel: "4.1", title: "Supervisor · Barangay Beato", role: "4.1 Supervisor", parentId: "org-c2-leader", cluster: "Barangay Beato", workloadPercent: 69, rag: "AMBER", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
-  { id: "org-c2-team-lead", name: "Synthetic chart node 09", careerServiceLevel: "4.1", title: "Supervisor · Barangay Beato", role: "4.1 Supervisor", parentId: "org-c2-leader", cluster: "Barangay Beato", workloadPercent: 47, rag: "GREEN", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
-  { id: "org-c2-junior-supervisor", name: "Barangay Beato · Supervisor", careerServiceLevel: "4.1", title: "Junior Supervisor", role: "Junior 4.1", parentId: "org-c2-senior-supervisor", cluster: "Barangay Beato", workloadPercent: 73, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
-  { id: "org-c2-senior-associate", name: "Barangay Beato · Senior Associate", careerServiceLevel: "3.1", title: "Senior Associate", role: "Senior Associate", parentId: "org-c2-senior-supervisor", cluster: "Barangay Beato", workloadPercent: 39, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
-  { id: "org-c2-associate-a", name: "Barangay Beato · Associate A", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c2-junior-supervisor", cluster: "Barangay Beato", workloadPercent: 63, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
-  { id: "org-c2-associate-b", name: "Barangay Beato · Associate B", careerServiceLevel: "2.1", title: "Associate", role: "Associate", parentId: "org-c2-junior-supervisor", cluster: "Barangay Beato", workloadPercent: 35, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
-  { id: "org-c2-junior-associate", name: "Barangay Beato · Junior Associate", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c2-team-lead", cluster: "Barangay Beato", workloadPercent: 71, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c2-senior-supervisor", name: "Synthetic chart node 08", careerServiceLevel: "4.1", title: "Supervisor · Cluster B", role: "Supervisor", parentId: "org-c2-leader", cluster: "Cluster B", workloadPercent: 69, rag: "AMBER", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
+  { id: "org-c2-team-lead", name: "Synthetic chart node 09", careerServiceLevel: "3.2", title: "Team Lead · Cluster B", role: "Team Lead", parentId: "org-c2-senior-supervisor", cluster: "Cluster B", workloadPercent: 47, rag: "GREEN", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
+  { id: "org-c2-junior-supervisor", name: "Cluster B · Supervisor", careerServiceLevel: "4.1", title: "Junior Supervisor", role: "Junior 4.1", parentId: "org-c2-senior-supervisor", cluster: "Cluster B", workloadPercent: 73, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c2-senior-associate", name: "Cluster B · Senior Associate", careerServiceLevel: "3.1", title: "Senior Associate", role: "Senior Associate", parentId: "org-c2-team-lead", cluster: "Cluster B", workloadPercent: 39, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c2-associate-a", name: "Cluster B · Associate A", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c2-senior-associate", cluster: "Cluster B", workloadPercent: 63, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c2-associate-b", name: "Cluster B · Associate B", careerServiceLevel: "2.1", title: "Associate", role: "Associate", parentId: "org-c2-senior-associate", cluster: "Cluster B", workloadPercent: 35, rag: "GREEN", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c2-junior-associate", name: "Cluster B · Junior Associate", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c2-senior-associate", cluster: "Cluster B", workloadPercent: 71, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
 
-  { id: "org-c3-senior-supervisor", name: "Synthetic chart node 10", careerServiceLevel: "4.1", title: "Supervisor · Barangay de Vera", role: "4.1 Supervisor", parentId: "org-c3-leader", cluster: "Barangay de Vera", workloadPercent: 91, rag: "RED", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
-  { id: "org-c3-team-lead", name: "Synthetic chart node 11", careerServiceLevel: "4.1", title: "Supervisor · Barangay de Vera", role: "4.1 Supervisor", parentId: "org-c3-leader", cluster: "Barangay de Vera", workloadPercent: 84, rag: "RED", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
-  { id: "org-c3-junior-supervisor", name: "Barangay de Vera · Supervisor", careerServiceLevel: "4.1", title: "Junior Supervisor", role: "Junior 4.1", parentId: "org-c3-senior-supervisor", cluster: "Barangay de Vera", workloadPercent: 78, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
-  { id: "org-c3-senior-associate", name: "Barangay de Vera · Senior Associate", careerServiceLevel: "3.1", title: "Senior Associate", role: "Senior Associate", parentId: "org-c3-senior-supervisor", cluster: "Barangay de Vera", workloadPercent: 86, rag: "RED", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
-  { id: "org-c3-associate-a", name: "Barangay de Vera · Associate A", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c3-junior-supervisor", cluster: "Barangay de Vera", workloadPercent: 74, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
-  { id: "org-c3-associate-b", name: "Barangay de Vera · Associate B", careerServiceLevel: "2.1", title: "Associate", role: "Associate", parentId: "org-c3-junior-supervisor", cluster: "Barangay de Vera", workloadPercent: 92, rag: "RED", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
-  { id: "org-c3-junior-associate", name: "Barangay de Vera · Junior Associate", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c3-team-lead", cluster: "Barangay de Vera", workloadPercent: 66, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c3-senior-supervisor", name: "Synthetic chart node 10", careerServiceLevel: "4.1", title: "Supervisor · Cluster C", role: "Supervisor", parentId: "org-c3-leader", cluster: "Cluster C", workloadPercent: 91, rag: "RED", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
+  { id: "org-c3-team-lead", name: "Synthetic chart node 11", careerServiceLevel: "3.2", title: "Team Lead · Cluster C", role: "Team Lead", parentId: "org-c3-senior-supervisor", cluster: "Cluster C", workloadPercent: 84, rag: "RED", statusReason: "Current charted direct report.", sourceStatus: "confirmed" },
+  { id: "org-c3-junior-supervisor", name: "Cluster C · Supervisor", careerServiceLevel: "4.1", title: "Junior Supervisor", role: "Junior 4.1", parentId: "org-c3-senior-supervisor", cluster: "Cluster C", workloadPercent: 78, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c3-senior-associate", name: "Cluster C · Senior Associate", careerServiceLevel: "3.1", title: "Senior Associate", role: "Senior Associate", parentId: "org-c3-team-lead", cluster: "Cluster C", workloadPercent: 86, rag: "RED", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c3-associate-a", name: "Cluster C · Associate A", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c3-senior-associate", cluster: "Cluster C", workloadPercent: 74, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c3-associate-b", name: "Cluster C · Associate B", careerServiceLevel: "2.1", title: "Associate", role: "Associate", parentId: "org-c3-senior-associate", cluster: "Cluster C", workloadPercent: 92, rag: "RED", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
+  { id: "org-c3-junior-associate", name: "Cluster C · Junior Associate", careerServiceLevel: "2.2", title: "Junior Associate", role: "Associate", parentId: "org-c3-senior-associate", cluster: "Cluster C", workloadPercent: 66, rag: "AMBER", statusReason: "Name pending further drill-down.", sourceStatus: "illustrative" },
 ] as const;
 
 const orgChartClusters = [
-  { key: "c1", label: "Barangay Atilano", prefix: "Atilano", leadParentId: "org-c1-team-lead", seniorAssociateParentId: "org-c1-senior-associate" },
-  { key: "c2", label: "Barangay Beato", prefix: "Beato", leadParentId: "org-c2-team-lead", seniorAssociateParentId: "org-c2-senior-associate" },
-  { key: "c3", label: "Barangay de Vera", prefix: "de Vera", leadParentId: "org-c3-team-lead", seniorAssociateParentId: "org-c3-senior-associate" },
+  { key: "c1", label: "Cluster A", prefix: "Cluster A", leadParentId: "org-c1-team-lead", seniorAssociateParentId: "org-c1-senior-associate" },
+  { key: "c2", label: "Cluster B", prefix: "Cluster B", leadParentId: "org-c2-team-lead", seniorAssociateParentId: "org-c2-senior-associate" },
+  { key: "c3", label: "Cluster C", prefix: "Cluster C", leadParentId: "org-c3-team-lead", seniorAssociateParentId: "org-c3-senior-associate" },
 ] as const;
 
 const illustratedOrgNode = (
@@ -266,12 +354,12 @@ const generatedOrgChartNodes: FixtureOrgChartNode[] = orgChartClusters.flatMap((
 
 // One additional intern completes the requested 70-person roster once the
 // cross-portfolio Tax Control seat is included in the directory.
-generatedOrgChartNodes.push(illustratedOrgNode("org-c1-intern-02", "Atilano Intern 02", "1.1", "org-c1-senior-associate", "Barangay Atilano", 99));
+generatedOrgChartNodes.push(illustratedOrgNode("org-c1-intern-02", "Cluster A Intern 02", "1.1", "org-c1-senior-associate", "Cluster A", 99));
 
 const syntheticFilipinoNames = [
-  "Ana Villanueva", "Miguel Santos", "Camille Reyes", "Paolo Bautista", "Janelle Garcia", "Rafael Mendoza", "Bianca Cruz", "Carlo Navarro", "Marissa Aquino", "Diego Flores",
-  "Katrina Ramos", "Enrico Mercado", "Liana Castillo", "Tomas Salazar", "Patricia Soriano", "Nico Valencia", "Clarisse Pascual", "Gabriel Cabrera", "Alyssa Dominguez", "Mateo Pineda",
-  "Beatriz Santiago", "Joaquin Dela Cruz", "Reina Ocampo", "Luis de Leon", "Monica Alvarado", "Emilio David", "Hazel Evangelista", "Andres Legaspi", "Celeste Tolentino", "Marco Villarama",
+  "Liezl Maigue", "Luiza Jimenez", "Maricel Marcelo Atilano", "Lourdes Ann Mandigma Eleato", "Evangeline De Vera", "Reignerwin", "Trinity", "Carlo Navarro", "Marissa Aquino", "Diego Flores",
+  "Katrina Ramos", "Enrico Mercado", "Minezka", "April Roes", "Patricia Soriano", "Nico Valencia", "Clarisse Pascual", "Gabriel Cabrera", "Alyssa Dominguez", "Mark Renzel",
+  "Viengeline", "Joaquin Dela Cruz", "Reina Ocampo", "Luis de Leon", "Monica Alvarado", "Emilio David", "Hazel Evangelista", "Andres Legaspi", "Celeste Tolentino", "Marco Villarama",
   "Nina Galang", "Ramon Fajardo", "Isabel Magbanua", "Julian Dizon", "Joyce Marquez", "Adrian Natividad", "Lara Peralta", "Oscar Yap", "Sofia Manalo", "Victor Macapagal",
   "Elena Robles", "Benedict Lim", "Celine Soriano", "Dennis Flores", "Erika Ramos", "Felix Mercado", "Grace Castillo", "Hector Salazar", "Irene Valencia", "Jonas Pascual",
   "Karen Cabrera", "Leandro Dominguez", "Mara Pineda", "Noel Santiago", "Olivia Dela Cruz", "Pedro Villareal", "Queenie Ocampo", "Rico de Leon", "Sheila Alvarado", "Toby David",
@@ -287,9 +375,9 @@ if (rawFixtureOrgChartNodes.length !== syntheticFilipinoNames.length) {
 export const fixtureOrgChartNodes = rawFixtureOrgChartNodes.map((node, index) => ({ ...node, name: syntheticFilipinoNames[index] }));
 
 const orgNodeTower = (cluster: string): FixtureTeamMember["tower"] => {
-  if (cluster === "Barangay Atilano") return "Tower North";
-  if (cluster === "Barangay Beato") return "Tower Central";
-  if (cluster === "Barangay de Vera") return "Tower South";
+  if (cluster === "Cluster A") return "Tower A";
+  if (cluster === "Cluster B") return "Tower B";
+  if (cluster === "Cluster C") return "Tower C";
   return "All A&T";
 };
 
@@ -310,13 +398,14 @@ export const fixtureOrgDirectoryMembers: readonly FixtureTeamMember[] = [
     cluster: node.cluster,
     active: true,
     email: `${node.id}@example.invalid`,
-    operatingModel: node.id === "org-c2-team-lead" ? "SPECIALIST_CASE" : "DELIVERY",
+    operatingModel: node.id === "org-c2-team-lead" ? "TAX_TEAM" : "ENGAGEMENT_AGILE",
     ...(node.id === "org-c2-team-lead" ? { specialistTeam: "Tax Team" as const } : {}),
     careerServiceLevel: node.careerServiceLevel,
     reportsToOrgNodeId: node.parentId,
     assignmentAliases: [],
+    effectiveFrom: fixtureClock.today,
   })),
-  { id: "member-tax-control", name: "Tax Control", title: "Cross-portfolio Tax Control", role: "Reviewer", tower: "All A&T", cluster: "Tax Control", active: true, email: "tax.control@example.invalid", operatingModel: "SPECIALIST_CASE", specialistTeam: "Tax Team", careerServiceLevel: undefined, reportsToOrgNodeId: null, assignmentAliases: [] },
+  { id: "member-tax-control", name: "Tax Control", title: "Cross-portfolio Tax Control", role: "Reviewer", tower: "All A&T", cluster: "Tax Control", active: true, email: "tax.control@example.invalid", operatingModel: "TAX_TEAM", specialistTeam: "Tax Team", careerServiceLevel: undefined, reportsToOrgNodeId: null, assignmentAliases: [], effectiveFrom: fixtureClock.today },
 ];
 
 export function fixtureTeamMemberName(memberId: string): string {
@@ -329,14 +418,67 @@ export type FixtureClient = {
   entitySummary: string;
   profileSummary: string;
   clientGroup?: string;
-  serviceType: FixtureServiceType;
+  contractRepository: FixtureContractRepository;
   scope: FixtureScope;
   assignment: FixtureAssignment;
   entities: FixtureTaxpayerEntity[];
+  /** Production projection of effective-dated assignments; omitted in prototype fixtures. */
+  teamHistory?: readonly FixtureTeamHistory[];
 };
 
 export function getClientWorkloadWeight(client: FixtureClient): number {
   return client.entities[0]?.profile.sourceFinalWeight ?? 0;
+}
+
+export function getClientContractSummary(client: FixtureClient): string {
+  const repository = client.contractRepository;
+  const additionalCount = repository.additionalEngagements.length;
+  if (repository.masterEngagement && additionalCount > 0) return `Main contract · ${additionalCount} CRF/CRN`;
+  if (repository.masterEngagement) return "Main contract";
+  return additionalCount > 0 ? `${additionalCount} CRF/CRN` : "Contract repository incomplete";
+}
+
+type FixtureContractRepositoryOptions = {
+  masterStatus?: FixtureContractRecordStatus;
+  documentKinds?: readonly FixtureMasterEngagementDocumentKind[];
+  additionalEngagements?: readonly { kind: FixtureAdditionalEngagementKind; title: string; status?: FixtureContractRecordStatus; scopeSummary: string }[];
+};
+
+function buildFixtureContractRepository(referenceCode: string, options: FixtureContractRepositoryOptions = {}): FixtureContractRepository {
+  const documentKinds = options.documentKinds ?? ["MSA", "LSA"];
+  const masterEngagement = {
+    id: `fixture-master-engagement-${referenceCode.toLowerCase()}`,
+    referenceCode: `ME-${referenceCode}`,
+    title: "Master Agreement (MSA)",
+    status: options.masterStatus ?? "Active",
+    effectiveFrom: "Synthetic effective date",
+    documents: documentKinds.map((kind, index) => ({
+      id: `fixture-contract-document-${referenceCode.toLowerCase()}-${kind.toLowerCase()}`,
+      kind,
+      isCurrent: index === 0,
+      referenceCode: `${kind}-${referenceCode}`,
+      title: kind === "MSA" ? "Master Services Agreement" : kind === "LSA" ? "Local Service Agreement" : "Addendum to master engagement",
+      status: options.masterStatus ?? "Active",
+      effectiveFrom: "Synthetic effective date",
+      sourceReference: `synthetic-contract-source-${referenceCode.toLowerCase()}-${kind.toLowerCase()}`,
+    })),
+  } satisfies FixtureMasterEngagement;
+
+  return {
+    id: `fixture-contract-repository-${referenceCode.toLowerCase()}`,
+    referenceCode: `CONTRACT-REPO-${referenceCode}`,
+    masterEngagement,
+    additionalEngagements: (options.additionalEngagements ?? []).map((additional, index) => ({
+      id: `fixture-additional-engagement-${referenceCode.toLowerCase()}-${index + 1}`,
+      kind: additional.kind,
+      referenceCode: `CRF-${referenceCode}-${String(index + 1).padStart(2, "0")}`,
+      title: additional.title,
+      status: additional.status ?? "Active",
+      effectiveFrom: "Synthetic effective date",
+      sourceReference: `synthetic-additional-engagement-${referenceCode.toLowerCase()}-${index + 1}`,
+      scopeSummary: additional.scopeSummary,
+    })),
+  };
 }
 
 const sanitized2303Fields: readonly FixtureExtractionField[] = [
@@ -383,13 +525,13 @@ export const fixtureClients: FixtureClient[] = [
     entitySummary: "1 taxpayer entity · 1 head office",
     profileSummary: "Active profile · 2303 structure reviewed",
     clientGroup: "Lakeshore Holdings (synthetic)",
-    serviceType: "Engagement",
-    scope: "Tower North",
-    assignment: { preparer: fixtureTeamMemberName("org-c1-team-lead"), checker: fixtureTeamMemberName("org-c1-junior-associate"), reviewer: fixtureTeamMemberName("org-c1-leader"), tower: "Tower North", cluster: "Barangay Atilano", effectiveFrom: "Current assignment" },
+    contractRepository: buildFixtureContractRepository("LAK-001", { documentKinds: ["MSA", "LSA", "Addendum"] }),
+    scope: "Tower A",
+    assignment: { preparer: fixtureTeamMemberName("org-c1-team-lead"), checker: fixtureTeamMemberName("org-c1-junior-associate"), reviewer: fixtureTeamMemberName("org-c1-leader"), tower: "Tower A", cluster: "Cluster A", effectiveFrom: "Current assignment" },
     entities: [{
       name: "Lakeshore Apparel Manufacturing Inc. (synthetic)",
       profile: {
-        registeredTaxpayerName: "Lakeshore Apparel Manufacturing Inc. (synthetic)", tinDisplay: "000-000-000-000", branchCode: "000", rdoOrLts: "Requires approved source", entityType: "Synthetic corporation", registeredAddress: "Synthetic industrial address · Laguna", lineOfBusiness: "Synthetic apparel manufacturing", registrationEffective: "Synthetic date · 2022", registrationStatus: "Pending validation", registeredActivities: "Synthetic manufacturing activity", tradeName: "Lakeshore Apparel (synthetic)", filingChannel: "eFPS", filingContext: "eFPS filing · synthetic setup", eFPSGroup: "Synthetic eFPS group", registeredTaxTypes: ["Income Tax · illustrative", "Value Added Tax · illustrative", "Withholding Tax · illustrative"], fiscalYearEnd: "Requires approved setup", booksType: "Loose-leaf", invoicing: "Loose-leaf receipts · synthetic permit context", paymentRoute: "TMF Pays", weight: 4, weightLabel: "Heavy", weightNote: "Multiple registration and authority touchpoints.", sourceWeightClassification: "Heavy", sourceFinalWeight: 4, fixtureSource: "source_weighted_portfolio", enateSetup: "Yes", profileState: "Ready for validation", sourceLabel: "Sanitized BIR Form 2303 structural fixture", sourceKind: "2303-derived", lastValidated: undefined, validator: undefined, authorities: [activeAuthority], auditExposures: [], attention: ["Tax Profile validation required before activation", "RDO/LTS requires approved supplementary source", "Fiscal year-end requires approved setup"], extractionFields: sanitized2303Fields,
+        registeredTaxpayerName: "Lakeshore Apparel Manufacturing Inc. (synthetic)", tinDisplay: "000-000-000-000", branchCode: "000", rdoOrLts: "Requires approved source", entityType: "Synthetic corporation", registeredAddress: "Synthetic industrial address · Laguna", lineOfBusiness: "Synthetic apparel manufacturing", registrationEffective: "Synthetic date · 2022", registrationStatus: "Pending validation", registeredActivities: "Synthetic manufacturing activity", tradeName: "Lakeshore Apparel (synthetic)", filingChannel: "eFPS", filingContext: "eFPS filing · synthetic setup", eFPSGroup: "Synthetic eFPS group", registeredTaxTypes: ["Income Tax · illustrative", "Value Added Tax · illustrative", "Withholding Tax · illustrative"], taxYearBasis: undefined, fiscalYearEnd: "Requires approved setup", accountingSystem: "Not configured", booksType: "Loose-leaf", invoicing: "Loose-leaf receipts · synthetic permit context", paymentRoute: "TMF Pays", weight: 4, weightLabel: "Heavy", weightNote: "Multiple registration and authority touchpoints.", sourceWeightClassification: "Heavy", sourceFinalWeight: 4, fixtureSource: "source_weighted_portfolio", enateSetup: "Yes", profileState: "Ready for validation", sourceLabel: "Sanitized BIR Form 2303 structural fixture", sourceKind: "2303-derived", lastValidated: undefined, validator: undefined, authorities: [activeAuthority], auditExposures: [], attention: ["Tax Profile validation required before activation", "RDO/LTS requires approved supplementary source", "Fiscal year-end requires approved setup", "Accounting system missing"], extractionFields: sanitized2303Fields,
       },
       units: [],
     }],
@@ -400,12 +542,12 @@ export const fixtureClients: FixtureClient[] = [
     entitySummary: "1 taxpayer entity · 1 head office",
     profileSummary: "Active profile · open audit context",
     clientGroup: "Northstar Group (synthetic)",
-    serviceType: "Engagement",
-    scope: "Tower North",
-    assignment: { preparer: fixtureTeamMemberName("org-c1-senior-associate"), checker: fixtureTeamMemberName("org-c1-junior-associate"), reviewer: fixtureTeamMemberName("org-c1-leader"), tower: "Tower North", cluster: "Barangay Atilano", effectiveFrom: "Current assignment" },
+    contractRepository: buildFixtureContractRepository("NOR-001", { additionalEngagements: [{ kind: "Change Request Form", title: "BIR audit support outside master engagement", scopeSummary: "Additional audit-support engagement · synthetic scope" }] }),
+    scope: "Tower A",
+    assignment: { preparer: fixtureTeamMemberName("org-c1-senior-associate"), checker: fixtureTeamMemberName("org-c1-junior-associate"), reviewer: fixtureTeamMemberName("org-c1-leader"), tower: "Tower A", cluster: "Cluster A", effectiveFrom: "Current assignment" },
     entities: [{
       name: "Northstar Services Taxpayer (synthetic)",
-      profile: { registeredTaxpayerName: "Northstar Services Taxpayer (synthetic)", tinDisplay: "000-000-000-202", branchCode: "000", rdoOrLts: "Illustrative RDO/LTS", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · Central district", lineOfBusiness: "Illustrative services activity", registrationEffective: "Synthetic effective date", registrationStatus: "Active · synthetic", registeredActivities: "Illustrative services activity", tradeName: "Northstar Services (synthetic)", filingChannel: "eBIRForms", filingContext: "Electronic filing · synthetic setup", registeredTaxTypes: ["Income Tax · illustrative"], fiscalYearEnd: "Calendar year · illustrative", booksType: "Manual", invoicing: "Registration detail on file · synthetic", paymentRoute: "Client Pays", weight: 2, weightLabel: "Light", sourceWeightClassification: "Light", sourceFinalWeight: 2, fixtureSource: "source_weighted_portfolio", enateSetup: "No", profileState: "Active", sourceLabel: "Approved registration source · synthetic", sourceKind: "approved registration source", lastValidated: "Synthetic validation date", validator: "Tax Control · synthetic", authorities: [], auditExposures: [{ id: "audit-01", taxableYear: "2024", matter: "BIR audit exposure", status: "Open", asOf: "Synthetic as-of date", context: "High-level exposure context only.", source: "Approved audit source · synthetic" }, { id: "audit-02", taxableYear: "2023", matter: "BIR assessment context", status: "Under review", asOf: "Synthetic as-of date", context: "Technical case details are outside this profile.", source: "Approved audit source · synthetic" }], attention: [],
+      profile: { registeredTaxpayerName: "Northstar Services Taxpayer (synthetic)", tinDisplay: "000-000-000-202", branchCode: "000", rdoOrLts: "RDO-50", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · Central district", lineOfBusiness: "Illustrative services activity", registrationEffective: "Synthetic effective date", registrationStatus: "Active · synthetic", registeredActivities: "Illustrative services activity", tradeName: "Northstar Services (synthetic)", filingChannel: "eBIRForms", filingContext: "Electronic filing · synthetic setup", registeredTaxTypes: ["Income Tax · illustrative"], taxYearBasis: "Calendar year", fiscalYearEnd: "Calendar year · illustrative", accountingSystem: "Manual accounting system · illustrative", booksType: "Manual", invoicing: "Registration detail on file · synthetic", paymentRoute: "Client Pays", weight: 2, weightLabel: "Light", sourceWeightClassification: "Light", sourceFinalWeight: 2, fixtureSource: "source_weighted_portfolio", enateSetup: "No", profileState: "Active", sourceLabel: "Approved registration source · synthetic", sourceKind: "approved registration source", lastValidated: "Synthetic validation date", validator: "Tax Control · synthetic", authorities: [], auditExposures: [{ id: "audit-01", taxableYear: "2024", matter: "BIR audit exposure", status: "Open", asOf: "Synthetic as-of date", context: "High-level exposure context only.", source: "Approved audit source · synthetic", officerName: "A. Reyes", officerRole: "Revenue Officer", officerContact: "Contact recorded in approved source" }, { id: "audit-02", taxableYear: "2023", matter: "BIR assessment context", status: "Under review", asOf: "Synthetic as-of date", context: "Technical case details are outside this profile.", source: "Approved audit source · synthetic", officerName: "M. Santos", officerRole: "Review Officer", officerContact: "Contact recorded in approved source" }, { id: "audit-03", taxableYear: "2022", matter: "BIR audit exposure", status: "Closed", asOf: "Synthetic closure date", context: "Closed fixture history; no live case action is implied.", source: "Approved audit source · synthetic", officerName: "A. Reyes", officerRole: "Revenue Officer", officerContact: "Contact recorded in approved source" }], attention: [],
       },
       units: [],
     }],
@@ -415,12 +557,12 @@ export const fixtureClients: FixtureClient[] = [
     name: "Harborline Services (synthetic)",
     entitySummary: "1 taxpayer entity · 1 head office",
     profileSummary: "Ready for validation · attention required",
-    serviceType: "Tax Ad Hoc",
-    scope: "Tower Central",
-    assignment: { preparer: fixtureTeamMemberName("org-c2-senior-associate"), checker: fixtureTeamMemberName("org-c2-junior-associate"), reviewer: fixtureTeamMemberName("org-c2-leader"), tower: "Tower Central", cluster: "Barangay Beato", effectiveFrom: "Current assignment" },
+    contractRepository: buildFixtureContractRepository("HAR-001", { masterStatus: "Pending review", additionalEngagements: [{ kind: "Change Request Form", title: "Registration remediation request", status: "Pending review", scopeSummary: "Additional registration-support engagement · synthetic scope" }] }),
+    scope: "Tower B",
+    assignment: { preparer: fixtureTeamMemberName("org-c2-senior-associate"), checker: fixtureTeamMemberName("org-c2-junior-associate"), reviewer: fixtureTeamMemberName("org-c2-leader"), tower: "Tower B", cluster: "Cluster B", effectiveFrom: "Current assignment" },
     entities: [{
       name: "Harborline Taxpayer (synthetic)",
-      profile: { registeredTaxpayerName: "Harborline Taxpayer (synthetic)", tinDisplay: "000-000-000-303", branchCode: "000", rdoOrLts: "Needs review", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · Central district", lineOfBusiness: "Illustrative services activity", registrationEffective: "Needs source review", registrationStatus: "Pending validation", registeredActivities: "Review required", tradeName: "Harborline (synthetic)", filingChannel: "eFPS", filingContext: "Channel extracted; group unresolved", eFPSGroup: "Needs review", registeredTaxTypes: ["Income Tax · illustrative", "Withholding Tax · illustrative"], fiscalYearEnd: undefined, booksType: "Not configured", invoicing: "Not configured", paymentRoute: "Not configured", weight: 3, weightLabel: "Medium", sourceWeightClassification: "Moderate", sourceFinalWeight: 3, fixtureSource: "source_weighted_portfolio", enateSetup: "Unknown", profileState: "Ready for validation", sourceLabel: "Sanitized 2303 review fixture", sourceKind: "2303-derived", authorities: [], auditExposures: [], attention: ["RDO/LTS missing", "Fiscal year-end missing", "Payment route missing", "eNATE setup unknown"], extractionFields: sanitized2303Fields.map((field) => field.label === "Tax Type" ? { ...field, confidence: "Review required" as const } : field),
+      profile: { registeredTaxpayerName: "Harborline Taxpayer (synthetic)", tinDisplay: "000-000-000-303", branchCode: "000", rdoOrLts: "Needs review", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · Central district", lineOfBusiness: "Illustrative services activity", registrationEffective: "Needs source review", registrationStatus: "Pending validation", registeredActivities: "Review required", tradeName: "Harborline (synthetic)", filingChannel: "eFPS", filingContext: "Channel extracted; group unresolved", eFPSGroup: "Needs review", registeredTaxTypes: ["Income Tax · illustrative", "Withholding Tax · illustrative"], taxYearBasis: undefined, fiscalYearEnd: undefined, accountingSystem: "Not configured", booksType: "Not configured", invoicing: "Not configured", paymentRoute: "Not configured", weight: 3, weightLabel: "Medium", sourceWeightClassification: "Moderate", sourceFinalWeight: 3, fixtureSource: "source_weighted_portfolio", enateSetup: "Unknown", profileState: "Ready for validation", sourceLabel: "Sanitized 2303 review fixture", sourceKind: "2303-derived", authorities: [], auditExposures: [], attention: ["RDO/LTS missing", "Tax year basis missing", "Fiscal year-end missing", "Accounting system missing", "Payment route missing", "eNATE setup unknown"], extractionFields: sanitized2303Fields.map((field) => field.label === "Tax Type" ? { ...field, confidence: "Review required" as const } : field),
       },
       units: [],
     }],
@@ -430,12 +572,12 @@ export const fixtureClients: FixtureClient[] = [
     name: "Cedarfield Holdings (synthetic)",
     entitySummary: "1 taxpayer entity · 2 registration units",
     profileSummary: "Active profile · multiple-unit edge case",
-    serviceType: "Engagement",
-    scope: "Tower South",
-    assignment: { preparer: fixtureTeamMemberName("org-c3-senior-associate"), checker: fixtureTeamMemberName("org-c3-junior-associate"), reviewer: fixtureTeamMemberName("org-c3-leader"), tower: "Tower South", cluster: "Barangay de Vera", effectiveFrom: "Current assignment" },
+    contractRepository: buildFixtureContractRepository("CED-001"),
+    scope: "Tower C",
+    assignment: { preparer: fixtureTeamMemberName("org-c3-senior-associate"), checker: fixtureTeamMemberName("org-c3-junior-associate"), reviewer: fixtureTeamMemberName("org-c3-leader"), tower: "Tower C", cluster: "Cluster C", effectiveFrom: "Current assignment" },
     entities: [{
       name: "Cedarfield Taxpayer (synthetic)",
-      profile: { registeredTaxpayerName: "Cedarfield Taxpayer (synthetic)", tinDisplay: "000-000-000-404", branchCode: "000", rdoOrLts: "Illustrative RDO/LTS", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · South district", lineOfBusiness: "Illustrative holding activity", registrationEffective: "Synthetic effective date", registrationStatus: "Active · synthetic", registeredActivities: "Illustrative holding activity", tradeName: "Cedarfield (synthetic)", filingChannel: "eFPS", filingContext: "Electronic filing · synthetic setup", registeredTaxTypes: ["Value Added Tax · illustrative"], fiscalYearEnd: "Calendar year · illustrative", booksType: "CAS/CBA · illustrative", invoicing: "Synthetic invoicing registration context", paymentRoute: "Client Pays", weight: 3, weightLabel: "Medium", sourceWeightClassification: "Moderate", sourceFinalWeight: 3, fixtureSource: "source_weighted_portfolio", enateSetup: "No", profileState: "Active", sourceLabel: "Approved registration source · synthetic", sourceKind: "approved registration source", authorities: [], auditExposures: [], attention: [],
+      profile: { registeredTaxpayerName: "Cedarfield Taxpayer (synthetic)", tinDisplay: "000-000-000-404", branchCode: "000", rdoOrLts: "RDO-50", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · South district", lineOfBusiness: "Illustrative holding activity", registrationEffective: "Synthetic effective date", registrationStatus: "Active · synthetic", registeredActivities: "Illustrative holding activity", tradeName: "Cedarfield (synthetic)", filingChannel: "eFPS", filingContext: "Electronic filing · synthetic setup", registeredTaxTypes: ["Value Added Tax · illustrative"], taxYearBasis: "Calendar year", fiscalYearEnd: "Calendar year · illustrative", accountingSystem: "CAS/CBA · illustrative", booksType: "CAS/CBA · illustrative", invoicing: "Synthetic invoicing registration context", paymentRoute: "Client Pays", weight: 3, weightLabel: "Medium", sourceWeightClassification: "Moderate", sourceFinalWeight: 3, fixtureSource: "source_weighted_portfolio", enateSetup: "No", profileState: "Active", sourceLabel: "Approved registration source · synthetic", sourceKind: "approved registration source", authorities: [], auditExposures: [{ id: "audit-cedarfield-01", taxableYear: "2021", matter: "BIR audit exposure", status: "Closed", asOf: "Synthetic closure date", context: "Closed fixture history; no live case action is implied.", source: "Approved audit source · synthetic", officerName: "J. Navarro", officerRole: "Revenue Officer", officerContact: "Contact recorded in approved source" }], attention: [],
       },
       units: [],
     }],
@@ -446,12 +588,12 @@ export const fixtureClients: FixtureClient[] = [
     entitySummary: "1 taxpayer entity · 1 head office",
     profileSummary: "Active profile · sister company",
     clientGroup: "Northstar Group (synthetic)",
-    serviceType: "Tax Ad Hoc",
-    scope: "Tower Central",
-    assignment: { preparer: fixtureTeamMemberName("org-c2-team-lead"), checker: fixtureTeamMemberName("org-c2-junior-associate"), reviewer: fixtureTeamMemberName("org-c2-leader"), tower: "Tower Central", cluster: "Barangay Beato", effectiveFrom: "Current assignment" },
+    contractRepository: buildFixtureContractRepository("NOR-002", { additionalEngagements: [{ kind: "Change Request Form", title: "Withholding support request", scopeSummary: "Additional withholding-support engagement · synthetic scope" }] }),
+    scope: "Tower B",
+    assignment: { preparer: fixtureTeamMemberName("org-c2-senior-supervisor"), checker: fixtureTeamMemberName("org-c2-junior-associate"), reviewer: fixtureTeamMemberName("org-c2-leader"), tower: "Tower B", cluster: "Cluster B", effectiveFrom: "Current assignment" },
     entities: [{
       name: "Northstar Services Support Inc. (synthetic)",
-      profile: { registeredTaxpayerName: "Northstar Services Support Inc. (synthetic)", tinDisplay: "000-000-000-505", branchCode: "000", rdoOrLts: "Illustrative LTS context", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · Manila district", lineOfBusiness: "Illustrative support services", registrationEffective: "Synthetic effective date", registrationStatus: "Active · synthetic", registeredActivities: "Illustrative support services", tradeName: "Northstar Support (synthetic)", filingChannel: "eFPS", filingContext: "Electronic filing · synthetic setup", registeredTaxTypes: ["Withholding Tax · illustrative"], fiscalYearEnd: "Calendar year · illustrative", booksType: "Loose-leaf", invoicing: "Synthetic invoicing context", paymentRoute: "TMF Pays", weight: 1, weightLabel: "Super Light", sourceWeightClassification: "Super Light", sourceFinalWeight: 1, fixtureSource: "source_weighted_portfolio", enateSetup: "Yes", profileState: "Active", sourceLabel: "Manual baseline · approved synthetic source", sourceKind: "manual validation", authorities: [], auditExposures: [], attention: [],
+      profile: { registeredTaxpayerName: "Northstar Services Support Inc. (synthetic)", tinDisplay: "000-000-000-505", branchCode: "000", rdoOrLts: "Illustrative LTS context", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · Manila district", lineOfBusiness: "Illustrative support services", registrationEffective: "Synthetic effective date", registrationStatus: "Active · synthetic", registeredActivities: "Illustrative support services", tradeName: "Northstar Support (synthetic)", filingChannel: "eFPS", filingContext: "Electronic filing · synthetic setup", registeredTaxTypes: ["Withholding Tax · illustrative"], taxYearBasis: "Calendar year", fiscalYearEnd: "Calendar year · illustrative", accountingSystem: "Manual accounting system · illustrative", booksType: "Loose-leaf", invoicing: "Synthetic invoicing context", paymentRoute: "TMF Pays", weight: 1, weightLabel: "Super Light", sourceWeightClassification: "Super Light", sourceFinalWeight: 1, fixtureSource: "source_weighted_portfolio", enateSetup: "Yes", profileState: "Active", sourceLabel: "Manual baseline · approved synthetic source", sourceKind: "manual validation", authorities: [], auditExposures: [{ id: "audit-northstar-01", taxableYear: "2025", matter: "BIR audit exposure", status: "Open", asOf: "Synthetic as-of date", context: "High-level exposure context only; technical case details are outside this profile.", source: "CRF-002 · approved synthetic audit source", officerName: "R. Dela Cruz", officerRole: "Revenue Officer" }, { id: "audit-northstar-02", taxableYear: "2023", matter: "BIR assessment context", status: "Closed", asOf: "Synthetic closure date", context: "Closed fixture history; no live case action is implied.", source: "CRF-001 · approved synthetic audit source", officerName: "L. Bautista", officerRole: "Review Officer" }], attention: ["Open BIR audit exposure recorded"],
       },
       units: [],
     }],
@@ -462,12 +604,12 @@ export const fixtureClients: FixtureClient[] = [
     entitySummary: "1 taxpayer entity · 1 head office",
     profileSummary: "Setup incomplete · assignment conflict",
     clientGroup: "Cedarfield Group (synthetic)",
-    serviceType: "Tax Ad Hoc",
-    scope: "Tower South",
-    assignment: { preparer: "Unassigned", checker: fixtureTeamMemberName("org-c3-senior-supervisor"), reviewer: fixtureTeamMemberName("org-c3-senior-supervisor"), tower: "Tower South", cluster: "Barangay de Vera", effectiveFrom: "Pending setup" },
+    contractRepository: buildFixtureContractRepository("CED-002", { additionalEngagements: [{ kind: "Change Request Form", title: "Setup remediation request", status: "Pending review", scopeSummary: "Additional setup-support engagement · synthetic scope" }] }),
+    scope: "Tower C",
+    assignment: { preparer: "Unassigned", checker: fixtureTeamMemberName("org-c3-senior-supervisor"), reviewer: fixtureTeamMemberName("org-c3-senior-supervisor"), tower: "Tower C", cluster: "Cluster C", effectiveFrom: "Pending setup" },
     entities: [{
       name: "Cedarfield Operations Inc. (synthetic)",
-      profile: { registeredTaxpayerName: "Cedarfield Operations Inc. (synthetic)", tinDisplay: "000-000-000-606", branchCode: "000", rdoOrLts: "Illustrative RDO/LTS", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · South district", lineOfBusiness: "Illustrative operations activity", registrationEffective: "Needs source review", registrationStatus: "Pending validation", registeredActivities: "Review required", tradeName: "Cedarfield Operations (synthetic)", filingChannel: "Not configured", filingContext: "Needs setup", registeredTaxTypes: ["Requires review"], fiscalYearEnd: undefined, booksType: "Not configured", invoicing: "Not configured", paymentRoute: "Client Pays", weight: 5, weightLabel: "Super Heavy", weightNote: "Setup fixture only.", sourceWeightClassification: "Extremely Heavy", sourceFinalWeight: 5, fixtureSource: "source_weighted_portfolio", enateSetup: "Unknown", profileState: "Setup incomplete", sourceLabel: "Manual baseline · synthetic", sourceKind: "manual validation", authorities: [], auditExposures: [], attention: ["Assignment incomplete", "Checker and Reviewer conflict", "Filing channel missing", "eNATE setup unknown"],
+      profile: { registeredTaxpayerName: "Cedarfield Operations Inc. (synthetic)", tinDisplay: "000-000-000-606", branchCode: "000", rdoOrLts: "Illustrative RDO/LTS", entityType: "Synthetic corporation", registeredAddress: "Synthetic registered address · South district", lineOfBusiness: "Illustrative operations activity", registrationEffective: "Needs source review", registrationStatus: "Pending validation", registeredActivities: "Review required", tradeName: "Cedarfield Operations (synthetic)", filingChannel: "Not configured", filingContext: "Needs setup", registeredTaxTypes: ["Requires review"], taxYearBasis: undefined, fiscalYearEnd: undefined, accountingSystem: "Not configured", booksType: "Not configured", invoicing: "Not configured", paymentRoute: "Client Pays", weight: 5, weightLabel: "Super Heavy", weightNote: "Setup fixture only.", sourceWeightClassification: "Extremely Heavy", sourceFinalWeight: 5, fixtureSource: "source_weighted_portfolio", enateSetup: "Unknown", profileState: "Setup incomplete", sourceLabel: "Manual baseline · synthetic", sourceKind: "manual validation", authorities: [], auditExposures: [], attention: ["Assignment incomplete", "Checker and Reviewer conflict", "Filing channel missing", "Tax year basis missing", "Fiscal year-end missing", "Accounting system missing", "Filing channel missing", "eNATE setup unknown"],
       },
       units: [],
     }],
@@ -515,11 +657,11 @@ const generatedPortfolioGroups = [
   "Aurelia Group", "Westhaven Group", "Brightwater Group", "Stonecrest Group", "Clearpoint Group", "Highland Group",
 ] as const;
 
-const portfolioTowers: readonly FixtureScope[] = ["Tower North", "Tower Central", "Tower South"];
+const portfolioTowers: readonly FixtureScope[] = ["Tower A", "Tower B", "Tower C"];
 const portfolioClusters: Record<FixtureScope, string> = {
-  "Tower North": "Barangay Atilano",
-  "Tower Central": "Barangay Beato",
-  "Tower South": "Barangay de Vera",
+  "Tower A": "Cluster A",
+  "Tower B": "Cluster B",
+  "Tower C": "Cluster C",
 };
 
 const sourceWeightClasses = Object.keys(portfolioWeightReconciliationTarget) as FixtureSourceWeightClassification[];
@@ -570,6 +712,7 @@ function generatedPortfolioProfile(
   sourceFinalWeight: number | null,
   fixtureSource: FixtureSource,
 ): FixtureTaxProfile {
+  const certificateStructureFixture = fixtureSource === "source_weighted_portfolio" && clientIndex === 54;
   const needs2303Review = fixtureSource === "source_weighted_portfolio" && clientIndex % 16 === 0;
   const needsRdoSource = fixtureSource === "source_weighted_portfolio" && clientIndex % 17 === 2;
   const missingFiscalYear = fixtureSource === "source_weighted_portfolio" && clientIndex % 13 === 4;
@@ -582,12 +725,16 @@ function generatedPortfolioProfile(
   const filingChannel = missingFilingSetup ? "Not configured" : eFPS ? "eFPS" : clientIndex % 3 === 1 ? "eBIRForms" : "eSubmission";
   const profileState: FixtureTaxProfile["profileState"] = fixtureSource === "synthetic_portfolio_test"
     ? "Setup incomplete"
-    : needs2303Review || needsRdoSource ? "Ready for validation" : missingFilingSetup || missingFiscalYear ? "Setup incomplete" : "Active";
+    : certificateStructureFixture || needs2303Review || needsRdoSource ? "Ready for validation" : missingFilingSetup || missingFiscalYear ? "Setup incomplete" : "Active";
   const attention: string[] = [];
 
+  if (certificateStructureFixture) attention.push("Sanitized 2303 registration structure captured; human validation required");
   if (needs2303Review) attention.push("Source review pending; no binary document is stored");
   if (needsRdoSource) attention.push("RDO/LTS requires approved supplementary source");
   if (missingFiscalYear) attention.push("Fiscal year-end missing");
+  if (missingFiscalYear) attention.push("Tax year basis missing");
+  const taxYearBasis: FixtureTaxProfile["taxYearBasis"] = missingFiscalYear ? undefined : clientIndex % 5 === 0 ? "Fiscal year" : "Calendar year";
+  const accountingSystem = clientIndex % 4 === 0 ? "CAS/CBA · illustrative" : clientIndex % 4 === 1 ? "ERP · illustrative" : clientIndex % 4 === 2 ? "Manual accounting system · illustrative" : "Not configured";
   if (missingFilingSetup) attention.push("Filing channel missing");
   if (incompleteEFPSContext) attention.push("eFPS context requires source review");
   if (paymentRoute === "TMF Pays" && clientIndex % 29 === 0) attention.push("Funding confirmation required before TMF payment");
@@ -604,8 +751,8 @@ function generatedPortfolioProfile(
 
   if (hasAuditExposure) attention.push("Open BIR audit exposure recorded");
 
-  const sourceKind: FixtureTaxProfile["sourceKind"] = needs2303Review ? "2303-derived" : clientIndex % 4 === 0 ? "approved registration source" : "manual validation";
-  const extractionFields = needs2303Review ? sanitized2303Fields.map((field) => ({ ...field, confidence: field.label === "RDO / LTS" ? "Missing" as const : field.confidence })) : undefined;
+  const sourceKind: FixtureTaxProfile["sourceKind"] = needs2303Review || certificateStructureFixture ? "2303-derived" : clientIndex % 4 === 0 ? "approved registration source" : "manual validation";
+  const extractionFields = needs2303Review || certificateStructureFixture ? sanitized2303Fields.map((field) => ({ ...field, confidence: field.label === "RDO / LTS" ? "Missing" as const : field.confidence })) : undefined;
   const syntheticTinSeed = String(100000000 + clientIndex * 7919).padStart(9, "0").slice(-9);
 
   return {
@@ -623,13 +770,19 @@ function generatedPortfolioProfile(
     filingChannel,
     filingContext: missingFilingSetup ? "Needs setup" : `${filingChannel} context · row-level applicability remains unresolved`,
     eFPSGroup: eFPS ? incompleteEFPSContext ? "Needs review" : "eFPS group · source configuration pending" : undefined,
-    registeredTaxTypes: [
+    registeredTaxTypes: certificateStructureFixture ? [
+      "Income Tax · source-derived; validation pending",
+      "Value Added Tax · source-derived; validation pending",
+      "Withholding Tax · source-derived; validation pending",
+    ] : [
       ["Income Tax · illustrative"],
       ["Value Added Tax · illustrative", "Withholding Tax · illustrative"],
       ["Withholding Tax · illustrative"],
       ["Income Tax · illustrative", "Value Added Tax · illustrative"],
     ][clientIndex % 4],
-    fiscalYearEnd: missingFiscalYear ? undefined : clientIndex % 5 === 0 ? "Fiscal year-end · source context" : "Calendar year · source context",
+    taxYearBasis,
+    fiscalYearEnd: taxYearBasis === "Fiscal year" ? "Fiscal year-end · source context" : undefined,
+    accountingSystem,
     booksType: clientIndex % 3 === 0 ? "Loose-leaf · illustrative" : clientIndex % 3 === 1 ? "Manual · illustrative" : "Not configured",
     invoicing: clientIndex % 4 === 0 ? "Registration context on file · synthetic" : "Not configured",
     paymentRoute,
@@ -641,7 +794,7 @@ function generatedPortfolioProfile(
     fixtureSource,
     enateSetup: fixtureSource === "synthetic_portfolio_test" ? "Unknown" : clientIndex % 3 === 0 ? "Yes" : clientIndex % 3 === 1 ? "No" : "Unknown",
     profileState,
-    sourceLabel: needs2303Review ? "Sanitized 2303 review fixture · no binary document stored" : "Sanitized structured registration baseline · source document not stored",
+    sourceLabel: needs2303Review || certificateStructureFixture ? "Sanitized 2303 registration structure · source values redacted" : "Sanitized structured registration baseline · source document not stored",
     sourceKind,
     lastValidated: profileState === "Active" ? "Synthetic validation date" : undefined,
     validator: profileState === "Active" ? "Tax Control · synthetic" : undefined,
@@ -670,7 +823,14 @@ function generatedPortfolioClient(clientIndex: number, plan?: { classification: 
     entitySummary: `1 taxpayer entity · ${units.length} ${units.length === 1 ? "head office" : "registration units"}`,
     profileSummary: profile.profileState === "Active" ? "Active profile · sanitized portfolio test" : `${profile.profileState} · attention required`,
     clientGroup: generatedPortfolioGroups[clientIndex % generatedPortfolioGroups.length],
-    serviceType: plan ? (clientIndex % 6 === 0 || clientIndex % 11 === 0 ? "Tax Ad Hoc" : "Engagement") : clientIndex === 1001 ? "Tax Ad Hoc" : "Engagement",
+    contractRepository: buildFixtureContractRepository(`PORT-${String(clientIndex).padStart(3, "0")}`, {
+      documentKinds: clientIndex % 5 === 0 ? ["MSA", "LSA", "Addendum"] : clientIndex % 2 === 0 ? ["MSA", "LSA"] : ["MSA"],
+      additionalEngagements: plan
+        ? [
+          ...(clientIndex % 6 === 0 ? [{ kind: "Change Request Form" as const, title: "Additional tax support request", scopeSummary: "Ad hoc tax-support engagement · synthetic scope" }] : []),
+        ]
+        : clientIndex === 1001 ? [{ kind: "Change Request Form" as const, title: "Synthetic portfolio-test request", scopeSummary: "Synthetic additional engagement · excluded from source reconciliation" }] : [],
+    }),
     scope,
     assignment: { preparer: "Unassigned", checker: "Unassigned", reviewer: "Unassigned", tower: scope, cluster: portfolioClusters[scope], effectiveFrom: "Current assignment" },
     entities: [{ name: registeredName, profile, units }],
@@ -686,7 +846,7 @@ const generatedPortfolioClients = [
 fixtureClients.push(...generatedPortfolioClients);
 
 type AssignmentRole = "preparer" | "checker" | "reviewer";
-const portfolioAssignmentMembers = fixtureOrgDirectoryMembers.filter((member) => member.active && member.tower !== "All A&T" && member.operatingModel === "DELIVERY");
+const portfolioAssignmentMembers = fixtureOrgDirectoryMembers.filter((member) => member.active && member.tower !== "All A&T" && member.operatingModel !== "TAX_TEAM");
 const assignmentRolePools: Record<AssignmentRole, readonly FixtureTeamMember[]> = {
   preparer: portfolioAssignmentMembers.filter((member) => member.role === "Team Member"),
   checker: portfolioAssignmentMembers.filter((member) => member.role === "Team Member" || member.role === "HOD / Leader"),
@@ -764,6 +924,48 @@ function assignPortfolioClients() {
 }
 
 assignPortfolioClients();
+
+function changeRequestTypeForTitle(title: string): FixtureChangeRequestFormType {
+  if (/audit/i.test(title)) return "Tax audit support";
+  if (/registration|setup/i.test(title)) return "Registration remediation";
+  if (/support|withholding/i.test(title)) return "Additional tax service";
+  return "Other";
+}
+
+function changeRequestStatus(status: FixtureContractRecordStatus): FixtureChangeRequestFormStatus {
+  if (status === "Active") return "Active";
+  if (status === "Closed") return "Closed";
+  return "Pending review";
+}
+
+/** Central CRF repository projection over each client's Additional Engagement branch. */
+export function getFixtureChangeRequestForms(clients: readonly FixtureClient[] = fixtureClients): FixtureChangeRequestForm[] {
+  return clients.flatMap((client) => {
+    const auditContext = client.entities[0]?.profile.auditExposures[0];
+    return client.contractRepository.additionalEngagements.map((engagement) => {
+      const type = changeRequestTypeForTitle(engagement.title);
+      return {
+        id: engagement.id,
+        referenceCode: engagement.referenceCode,
+        clientId: client.id,
+        contractRepositoryId: client.contractRepository.id,
+        clientName: client.name,
+        title: engagement.title,
+        type,
+        status: changeRequestStatus(engagement.status),
+        requestedOn: engagement.effectiveFrom,
+        requestedBy: type === "Tax audit support" ? "Internal review" : "Client request",
+        owner: client.assignment.reviewer === "Unassigned" ? client.assignment.preparer : client.assignment.reviewer,
+        scopeSummary: engagement.scopeSummary,
+        sourceReference: engagement.sourceReference,
+        templateVersion: "CRF v1",
+        ...(type === "Tax audit support" && auditContext ? { auditContext: { ...auditContext } } : {}),
+      };
+    });
+  });
+}
+
+export const fixtureChangeRequestForms = getFixtureChangeRequestForms();
 
 /**
  * Controlled Team fixture boundary for specialist work. This is intentionally
@@ -845,7 +1047,7 @@ export const fixtureCompliance: FixtureComplianceItem[] = [
     deadlineState: "configured",
     statusLabel: "Awaiting client approval",
     status: "AMBER",
-    owner: fixtureTeamMemberName("org-c1-team-lead"),
+    owner: fixtureTeamMemberName("org-c1-extra-senior-associate-child-1"),
     attentionKind: "Blocker",
     workId: "work-01",
     componentSummary: { submission: "Ready after approval", payment: "Not applicable", attachments: "None indicated", evidence: "Pending after submission" },
@@ -888,8 +1090,8 @@ export const fixtureCompliance: FixtureComplianceItem[] = [
     attentionKind: "Exception",
     workId: "work-02",
     componentSummary: { submission: "Reported submitted", payment: "Awaiting confirmation", attachments: "None indicated", evidence: "Verification pending" },
-    nextAction: "Verify the available submission evidence",
-    statusReason: "A submission result has been reported, but control evidence is not verified.",
+    nextAction: "Complete Archiving",
+    statusReason: "The return package is awaiting final Archiving and evidence check.",
   },
   {
     id: "compliance-04",
@@ -904,7 +1106,7 @@ export const fixtureCompliance: FixtureComplianceItem[] = [
     deadlineState: "unresolved",
     statusLabel: "Ready for checking",
     status: "UNRESOLVED",
-    owner: fixtureTeamMemberName("org-c3-senior-supervisor"),
+    owner: fixtureTeamMemberName("org-c3-extra-senior-associate-child-4"),
     attentionKind: "Exception",
     workId: "work-03",
     componentSummary: { submission: "Preparation recorded", payment: "No payment assertion", attachments: "None indicated", evidence: "Not started" },
@@ -924,7 +1126,7 @@ export const fixtureCompliance: FixtureComplianceItem[] = [
     deadlineState: "configured",
     statusLabel: "Preparation in progress",
     status: "GREEN",
-    owner: fixtureTeamMemberName("org-c3-senior-supervisor"),
+    owner: fixtureTeamMemberName("org-c3-extra-senior-associate-child-4"),
     componentSummary: { submission: "In preparation", payment: "Not applicable", attachments: "Pending review", evidence: "Not started" },
     nextAction: "Complete preparation and send for checking",
     statusReason: "This return belongs to a taxpayer with multiple registration units.",
@@ -992,11 +1194,11 @@ export type FixtureTeamHistory = {
 };
 
 export const fixtureTeamHistory: FixtureTeamHistory[] = [
-  { id: "team-history-01", clientId: "fixture-client-01", effectivePeriod: "Current assignment", preparer: fixtureTeamMemberName("org-c1-team-lead"), checker: fixtureTeamMemberName("org-c1-junior-associate"), reviewer: fixtureTeamMemberName("org-c1-leader"), tower: "Tower North", cluster: "North Cluster", reason: "Current assignment" },
-  { id: "team-history-02", clientId: "fixture-client-01", effectivePeriod: "Prior assignment", preparer: fixtureTeamMemberName("org-c1-leader"), checker: fixtureTeamMemberName("org-c1-senior-supervisor"), reviewer: fixtureTeamMemberName("org-c2-senior-supervisor"), tower: "Tower North", cluster: "North Cluster", reason: "Workload rebalance" },
-  { id: "team-history-03", clientId: "fixture-client-02", effectivePeriod: "Current assignment", preparer: fixtureTeamMemberName("org-c2-team-lead"), checker: fixtureTeamMemberName("org-c2-junior-associate"), reviewer: fixtureTeamMemberName("org-c2-leader"), tower: "Tower Central", cluster: "Central Cluster", reason: "Current assignment" },
-  { id: "team-history-04", clientId: "fixture-client-03", effectivePeriod: "Current assignment", preparer: fixtureTeamMemberName("org-c3-team-lead"), checker: fixtureTeamMemberName("org-c3-junior-associate"), reviewer: fixtureTeamMemberName("org-c3-leader"), tower: "Tower South", cluster: "South Cluster", reason: "Current assignment" },
-  { id: "team-history-05", clientId: "fixture-client-04", effectivePeriod: "Current assignment", preparer: fixtureTeamMemberName("org-c1-leader"), checker: fixtureTeamMemberName("org-c1-senior-supervisor"), reviewer: fixtureTeamMemberName("org-c2-senior-supervisor"), tower: "Tower North", cluster: "North Cluster", reason: "Current assignment" },
+  { id: "team-history-01", clientId: "fixture-client-01", effectivePeriod: "Current assignment", preparer: fixtureTeamMemberName("org-c1-team-lead"), checker: fixtureTeamMemberName("org-c1-junior-associate"), reviewer: fixtureTeamMemberName("org-c1-leader"), tower: "Tower A", cluster: "Cluster A", reason: "Current assignment" },
+  { id: "team-history-02", clientId: "fixture-client-01", effectivePeriod: "Prior assignment", preparer: fixtureTeamMemberName("org-c1-leader"), checker: fixtureTeamMemberName("org-c1-senior-supervisor"), reviewer: fixtureTeamMemberName("org-c2-senior-supervisor"), tower: "Tower A", cluster: "Cluster A", reason: "Workload rebalance" },
+  { id: "team-history-03", clientId: "fixture-client-02", effectivePeriod: "Current assignment", preparer: fixtureTeamMemberName("org-c2-senior-supervisor"), checker: fixtureTeamMemberName("org-c2-junior-associate"), reviewer: fixtureTeamMemberName("org-c2-leader"), tower: "Tower B", cluster: "Cluster B", reason: "Current assignment" },
+  { id: "team-history-04", clientId: "fixture-client-03", effectivePeriod: "Current assignment", preparer: fixtureTeamMemberName("org-c3-team-lead"), checker: fixtureTeamMemberName("org-c3-junior-associate"), reviewer: fixtureTeamMemberName("org-c3-leader"), tower: "Tower C", cluster: "Cluster C", reason: "Current assignment" },
+  { id: "team-history-05", clientId: "fixture-client-04", effectivePeriod: "Current assignment", preparer: fixtureTeamMemberName("org-c1-leader"), checker: fixtureTeamMemberName("org-c1-senior-supervisor"), reviewer: fixtureTeamMemberName("org-c2-senior-supervisor"), tower: "Tower A", cluster: "Cluster A", reason: "Current assignment" },
 ];
 
 for (const history of fixtureTeamHistory) {
@@ -1024,7 +1226,7 @@ export const fixtureWork: FixtureWorkItem[] = [
     entity: "Lakeshore Apparel Manufacturing Inc. (synthetic)",
     registrationUnit: "Head Office (synthetic)",
     title: "Recurring compliance review",
-    period: "Current period · synthetic",
+    period: "September 2026",
     detail: "Waiting for client approval",
     stage: "CLIENT",
     nextAction: "Follow up on client approval",
@@ -1032,19 +1234,26 @@ export const fixtureWork: FixtureWorkItem[] = [
     statusReason: "Internal review is complete; client approval is still outstanding.",
     deadline: "Today · 3:00 PM",
     deadlineType: "Client / service milestone",
-    owner: fixtureTeamMemberName("org-c1-team-lead"),
-    scope: "Tower North",
+    owner: fixtureTeamMemberName("org-c1-extra-senior-associate-child-1"),
+    scope: "Tower A",
+    paymentApplicability: "NOT_APPLICABLE",
+    paymentAmount: null,
     steps: [
       { id: "prepare", label: "Preparation", state: "complete", detail: "Preparation and reconciliation recorded." },
       { id: "check", label: "Checking", state: "complete", detail: "Internal checking recorded." },
       { id: "review", label: "Review", state: "complete", detail: "Internal review recorded." },
       { id: "client-approval", label: "Client approval", state: "blocked", detail: "Approval is still outstanding before filing." },
-      { id: "filing", label: "Filing / submission", state: "not-started", detail: "Not ready until client approval is received." },
-      { id: "evidence", label: "Evidence / archiving", state: "not-started", detail: "Evidence is captured with the relevant action." },
+      { id: "filing", label: "Filing", state: "not-started", detail: "File the approved return through the configured submission channel." },
+      { id: "payment", label: "Payment endorsement", state: "not-started", detail: "Endorse payment separately from filing when payment is applicable." },
+      { id: "payment-client-approval", label: "Payment client approval", state: "not-started", detail: "Record the client's payment approval separately from return approval." },
+      { id: "payment-confirmation", label: "Payment confirmation", state: "not-started", detail: "Record confirmation only from the external payment result." },
+      { id: "esubmission", label: "eSubmission email", state: "not-started", detail: "Generate and validate the DAT, send it to BIR, and retain the acknowledgment and validation emails." },
+      { id: "evidence", label: "Archiving", state: "not-started", detail: "Compile and save the complete return package, including filing, payment, and eSubmission evidence." },
     ],
     components: [
       { label: "Submission", state: "Not ready", detail: "Client approval gate is open." },
-      { label: "Payment", state: "Not configured", detail: "Payment requirement is not shown in this fixture." },
+      { label: "Payment", state: "Not applicable", detail: "No payment process is configured for this return package." },
+      { label: "Attachments", state: "Not configured", detail: "Attachment requirements are not shown in this fixture." },
       { label: "Evidence", state: "Not started", detail: "Evidence will follow the relevant action." },
     ],
     blocker: { category: "CLIENT APPROVAL", reason: "Client response is outstanding after internal review." },
@@ -1055,31 +1264,38 @@ export const fixtureWork: FixtureWorkItem[] = [
     client: "Harborline Services (synthetic)",
     entity: "Harborline Taxpayer (synthetic)",
     registrationUnit: "Head Office (synthetic)",
-    title: "Submission evidence check",
-    period: "Current period · synthetic",
+    title: "WHT 1601EQ return package",
+    period: "September 2026",
     detail: "Evidence needs verification",
     stage: "POST-FILING",
-    nextAction: "Verify the available submission evidence",
+    nextAction: "Complete Archiving",
     status: "RED",
-    statusReason: "A submission result has been reported, but control evidence is not verified.",
+    statusReason: "The return package is awaiting final Archiving and evidence check.",
     deadline: "Overdue · control milestone",
     deadlineType: "Control milestone",
     owner: fixtureTeamMemberName("org-c2-senior-supervisor"),
-    scope: "Tower Central",
+    scope: "Tower B",
+    paymentApplicability: "REQUIRED",
+    paymentAmount: null,
     steps: [
       { id: "prepare", label: "Preparation", state: "complete", detail: "Preparation record is retained." },
       { id: "check", label: "Checking", state: "complete", detail: "Checking record is retained." },
       { id: "review", label: "Review", state: "complete", detail: "Review record is retained." },
       { id: "client-approval", label: "Client approval", state: "complete", detail: "Client approval is recorded for the work item." },
-      { id: "filing", label: "Filing / submission", state: "complete", detail: "A submission result was reported; acceptance is not inferred." },
-      { id: "evidence", label: "Evidence / archiving", state: "current", detail: "Verify the available submission evidence." },
+      { id: "filing", label: "Filing", state: "complete", detail: "A filing result was reported; acceptance is not inferred." },
+      { id: "payment", label: "Payment endorsement", state: "not-started", detail: "Payment is tracked separately from filing." },
+      { id: "payment-client-approval", label: "Payment client approval", state: "not-started", detail: "Payment client approval is separate from return approval." },
+      { id: "payment-confirmation", label: "Payment confirmation", state: "not-started", detail: "Payment confirmation is not established by this fixture." },
+      { id: "esubmission", label: "eSubmission email", state: "complete", detail: "The eSubmission email result is recorded for this return when applicable." },
+      { id: "evidence", label: "Archiving", state: "current", detail: "Compile and save the complete return package, including filing, payment, and eSubmission evidence." },
     ],
     components: [
       { label: "Submission", state: "Reported", detail: "Reported result is retained; acceptance remains unverified." },
-      { label: "Payment", state: "Not shown", detail: "Payment is independent and is not established by this fixture." },
+      { label: "Payment", state: "Required · amount not recorded", detail: "Payment applies, but the amount remains unresolved in this synthetic fixture." },
+      { label: "Attachments", state: "None indicated", detail: "No attachment requirement is asserted by this fixture." },
       { label: "Evidence", state: "Needs verification", detail: "Evidence is not yet verified." },
     ],
-    returnedFrom: "Evidence check",
+    returnedFrom: "Archiving",
   },
   {
     id: "work-03",
@@ -1096,21 +1312,67 @@ export const fixtureWork: FixtureWorkItem[] = [
     statusReason: "Preparation is recorded and the next internal control step is available.",
     deadline: "Tomorrow · 5:00 PM",
     deadlineType: "TMF internal target",
-    owner: fixtureTeamMemberName("org-c3-senior-supervisor"),
-    scope: "Tower South",
+    owner: fixtureTeamMemberName("org-c3-extra-senior-associate-child-4"),
+    scope: "Tower C",
+    paymentApplicability: "UNRESOLVED",
+    paymentAmount: null,
     steps: [
       { id: "prepare", label: "Preparation", state: "complete", detail: "Preparation is recorded and ready for checking." },
       { id: "check", label: "Checking", state: "current", detail: "Open the checking queue and complete the internal check." },
       { id: "review", label: "Review", state: "not-started", detail: "Review follows successful checking." },
       { id: "client-approval", label: "Client approval", state: "not-started", detail: "Client approval follows internal review." },
-      { id: "filing", label: "Filing / submission", state: "not-started", detail: "Not ready until required gates are complete." },
-      { id: "evidence", label: "Evidence / archiving", state: "not-started", detail: "Evidence follows the relevant action." },
+      { id: "filing", label: "Filing", state: "not-started", detail: "Not ready until required gates are complete." },
+      { id: "payment", label: "Payment endorsement", state: "not-started", detail: "Endorse payment separately from filing when payment is applicable." },
+      { id: "payment-client-approval", label: "Payment client approval", state: "not-started", detail: "Record the client's payment approval separately from return approval." },
+      { id: "payment-confirmation", label: "Payment confirmation", state: "not-started", detail: "Record confirmation only from the external payment result." },
+      { id: "esubmission", label: "eSubmission email", state: "not-started", detail: "Generate and validate the DAT, send it to BIR, and retain the acknowledgment and validation emails." },
+      { id: "evidence", label: "Archiving", state: "not-started", detail: "Compile and save the complete return package, including filing, payment, and eSubmission evidence." },
     ],
     components: [
       { label: "Submission", state: "Not started", detail: "Required internal control gates are not complete." },
-      { label: "Payment", state: "Not configured", detail: "Payment requirement is not shown in this fixture." },
+      { label: "Payment", state: "Applicability unresolved", detail: "Do not skip the payment branch until the approved setup is resolved." },
+      { label: "Attachments", state: "Not configured", detail: "Attachment requirements are not shown in this fixture." },
       { label: "Evidence", state: "Not started", detail: "Evidence will follow the relevant action." },
     ],
+  },
+  {
+    id: "work-04",
+    clientId: "fixture-client-05",
+    client: "Northstar Services Support",
+    entity: "Northstar Services Support Inc.",
+    registrationUnit: "Head Office",
+    title: "Monthly withholding preparation",
+    period: "September 2026",
+    detail: "Required source data is not yet complete.",
+    stage: "PREPARE",
+    nextAction: "Request missing source data before preparation",
+    status: "AMBER",
+    statusReason: "Preparation is waiting for client data before it can be certified.",
+    deadline: "This week · 4:00 PM",
+    deadlineType: "TMF internal target",
+    owner: fixtureTeamMemberName("org-c2-senior-supervisor"),
+    scope: "Tower B",
+    paymentApplicability: "UNRESOLVED",
+    paymentAmount: null,
+    steps: [
+      { id: "prepare", label: "Preparation", state: "current", detail: "Confirm the required source data before starting preparation." },
+      { id: "check", label: "Checking", state: "not-started", detail: "Checking follows preparation." },
+      { id: "review", label: "Review", state: "not-started", detail: "Review follows checking." },
+      { id: "client-approval", label: "Client approval", state: "not-started", detail: "Client approval follows internal review." },
+      { id: "filing", label: "Filing", state: "not-started", detail: "Filing follows the required control gates." },
+      { id: "payment", label: "Payment endorsement", state: "not-started", detail: "Endorse payment separately from filing when payment is applicable." },
+      { id: "payment-client-approval", label: "Payment client approval", state: "not-started", detail: "Record the client's payment approval separately from return approval." },
+      { id: "payment-confirmation", label: "Payment confirmation", state: "not-started", detail: "Record confirmation only from the external payment result." },
+      { id: "esubmission", label: "eSubmission email", state: "not-started", detail: "Generate and validate the DAT, send it to BIR, and retain the acknowledgment and validation emails." },
+      { id: "evidence", label: "Archiving", state: "not-started", detail: "Compile and save the complete return package, including filing, payment, and eSubmission evidence." },
+    ],
+    components: [
+      { label: "Submission", state: "Not started", detail: "Preparation has not been certified." },
+      { label: "Payment", state: "Applicability unresolved", detail: "Payment applicability must be resolved before the branch can be skipped." },
+      { label: "Attachments", state: "Source data pending", detail: "Confirm required source support before preparation." },
+      { label: "Evidence", state: "Not started", detail: "Evidence follows the relevant action." },
+    ],
+    blocker: { category: "CLIENT DATA", reason: "Required source data has not been received." },
   },
 ];
 
@@ -1141,7 +1403,7 @@ export const fixtureExceptions: FixtureException[] = [
     detail: "The internal review is complete; client response is outstanding.",
     severity: "AMBER",
     aging: "Aging: 1 day",
-    owner: fixtureTeamMemberName("org-c1-team-lead"),
+    owner: fixtureTeamMemberName("org-c1-extra-senior-associate-child-1"),
     nextAction: "Follow up on client approval",
   },
   {
@@ -1152,11 +1414,11 @@ export const fixtureExceptions: FixtureException[] = [
     clientId: "fixture-client-02",
     client: "Harborline Services (synthetic)",
     workId: "work-02",
-    detail: "A reported submission result exists, but evidence verification is pending.",
+    detail: "The return package is awaiting final Archiving and evidence check.",
     severity: "RED",
     aging: "Open: 2 days",
     owner: fixtureTeamMemberName("org-c2-senior-supervisor"),
-    nextAction: "Verify the available submission evidence",
+    nextAction: "Complete Archiving",
   },
   {
     id: "exception-03",
@@ -1183,7 +1445,7 @@ export const fixtureExceptions: FixtureException[] = [
     detail: "The approved service milestone is approaching while client approval is outstanding.",
     severity: "AMBER",
     aging: "Target today",
-    owner: fixtureTeamMemberName("org-c1-team-lead"),
+    owner: fixtureTeamMemberName("org-c1-extra-senior-associate-child-1"),
     nextAction: "Review the client dependency",
   },
 ];
@@ -1203,7 +1465,7 @@ export const fixtureCalendar = [
     serviceMilestone: "Awaiting approval",
     client: "Lakeshore Apparel Services",
     clientId: "fixture-client-01",
-    scope: "Tower North" as FixtureScope,
+    scope: "Tower A" as FixtureScope,
     workId: "work-01",
     type: "Client / service milestone",
     status: "AMBER" as FixtureStatus,
@@ -1223,7 +1485,7 @@ export const fixtureCalendar = [
     serviceMilestone: "Ready for checking",
     client: "Cedarfield Holdings",
     clientId: "fixture-client-03",
-    scope: "Tower South" as FixtureScope,
+    scope: "Tower C" as FixtureScope,
     workId: "work-03",
     type: "TMF internal target",
     status: "GREEN" as FixtureStatus,
@@ -1234,16 +1496,16 @@ export const fixtureCalendar = [
     calendarDate: "2026-10-09",
     dateGroup: "This week",
     date: "This week",
-    milestone: "Evidence and archiving",
+    milestone: "Archiving package",
     returnKey: "WHT-QAP-2026-09",
     returnLabel: "WHT · QAP",
     period: "September 2026",
     statutoryDeadline: "Rule unresolved",
     internalDeadline: "Overdue · control target",
-    serviceMilestone: "Evidence open",
+    serviceMilestone: "Archiving open",
     client: "Harborline Services",
     clientId: "fixture-client-02",
-    scope: "Tower Central" as FixtureScope,
+    scope: "Tower B" as FixtureScope,
     workId: "work-02",
     type: "Control milestone",
     status: "RED" as FixtureStatus,
@@ -1263,11 +1525,31 @@ export const fixtureCalendar = [
     serviceMilestone: "In preparation",
     client: "Harborline Services",
     clientId: "fixture-client-02",
-    scope: "Tower Central" as FixtureScope,
+    scope: "Tower B" as FixtureScope,
     workId: "work-02",
     type: "TMF internal target",
     status: "GREEN" as FixtureStatus,
     detail: "Preparation is in progress before the next internal control step.",
+  },
+  {
+    id: "calendar-05",
+    calendarDate: "2026-10-08",
+    dateGroup: "This week",
+    date: "This week · 4:00 PM",
+    milestone: "Preparation target",
+    returnKey: "WHT-1601EQ-2026-09",
+    returnLabel: "WHT · 1601EQ",
+    period: "September 2026",
+    statutoryDeadline: "Rule unresolved",
+    internalDeadline: "This week · 4:00 PM",
+    serviceMilestone: "Source data pending",
+    client: "Northstar Services Support",
+    clientId: "fixture-client-05",
+    scope: "Tower B" as FixtureScope,
+    workId: "work-04",
+    type: "TMF internal target",
+    status: "AMBER" as FixtureStatus,
+    detail: "Preparation cannot be certified until required source data is received.",
   },
 ];
 

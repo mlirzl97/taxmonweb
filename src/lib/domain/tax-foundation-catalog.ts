@@ -30,6 +30,9 @@ export interface FormSeed {
   formNumber: string;
   title: string;
   taxTypeCodes: string[];
+  usualTiming: string;
+  usualTimingStatus: VerificationStatus;
+  usualTimingSourceCode: string;
   verificationStatus: VerificationStatus;
   sourceCode: string;
   note: string;
@@ -196,6 +199,14 @@ export const regulatorySources: RegulatorySourceSeed[] = [
     verificationStatus: 'partially_verified',
     note: 'Official BIR reminder surface used as a validation/reference dataset; it is not the sole rules engine.',
   },
+  {
+    code: 'BIR-EFPS-FAQ-DEADLINES',
+    type: 'bir_web_page',
+    title: 'eFPS FAQ — form deadline reference',
+    sourceUrl: 'https://efps.bir.gov.ph/eFPSFAQ.html',
+    verificationStatus: 'verified',
+    note: 'Official eFPS reference for selected statutory deadline patterns. Channel, taxpayer, period, and exception rules remain governed elsewhere.',
+  },
 ];
 
 export const taxTypes: TaxTypeSeed[] = [
@@ -215,17 +226,17 @@ export const filingChannels: FilingChannelSeed[] = [
 ];
 
 export const forms: FormSeed[] = [
-  { formNumber: '0605', title: 'Payment Form', taxTypeCodes: [], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Cross-category payment form; it is not assigned to one operating tax type.' },
-  { formNumber: '0619-E', title: 'Monthly Remittance Form of Creditable Income Taxes Withheld (Expanded)', taxTypeCodes: ['WHT'], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; applicability and deadline rules remain governed by the Requirement Master.' },
-  { formNumber: '0619-F', title: 'Monthly Remittance Form of Final Income Taxes Withheld', taxTypeCodes: ['WHT'], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; applicability and deadline rules remain governed by the Requirement Master.' },
-  { formNumber: '1600', title: 'Monthly Remittance Return of VAT and Other Percentage Taxes Withheld', taxTypeCodes: ['WHT'], verificationStatus: 'partially_verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form listing; current requirement relationship and scope remain under reconciliation.' },
-  { formNumber: '1600WP', title: 'Remittance Return of Percentage Tax on Winnings and Prizes Withheld', taxTypeCodes: ['WHT'], verificationStatus: 'partially_verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form listing; current requirement relationship and scope remain under reconciliation.' },
-  { formNumber: '1601-C', title: 'Monthly Remittance Return of Income Taxes Withheld on Compensation', taxTypeCodes: ['WHT'], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; applicability and deadline rules remain governed by the Requirement Master.' },
-  { formNumber: '1601-EQ', title: 'Quarterly Remittance Return of Creditable Income Taxes Withheld (Expanded)', taxTypeCodes: ['WHT'], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; applicability and deadline rules remain governed by the Requirement Master.' },
-  { formNumber: '1702-RT', title: 'Annual Income Tax Return for Corporation, Partnership and Other Non-Individual Taxpayer Subject Only to Regular Income Tax Rate', taxTypeCodes: ['CIT'], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; applicability and deadline rules remain governed by the Requirement Master.' },
-  { formNumber: '2550Q', title: 'Quarterly Value-Added Tax (VAT) Return', taxTypeCodes: ['VAT'], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; applicability and deadline rules remain governed by the Requirement Master.' },
-  { formNumber: '2551M', title: 'Monthly Percentage Tax Return', taxTypeCodes: ['PERCENTAGE_TAX'], verificationStatus: 'partially_verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form listing; current requirement relationship and scope remain under reconciliation.' },
-  { formNumber: '2551Q', title: 'Quarterly Percentage Tax Return', taxTypeCodes: ['PERCENTAGE_TAX'], verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; applicability and deadline rules remain governed by the Requirement Master.' },
+  { formNumber: '0605', title: 'Payment Form', taxTypeCodes: [], usualTiming: 'Event or payment-specific; calendar rule required', usualTimingStatus: 'unresolved', usualTimingSourceCode: 'BIR-TAX-REMINDER-2026', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Cross-category payment form; it is not assigned to one operating tax type.' },
+  { formNumber: '0619-E', title: 'Monthly Remittance Form of Creditable Income Taxes Withheld (Expanded)', taxTypeCodes: ['WHT'], usualTiming: 'Monthly · date varies by eFPS group/channel', usualTimingStatus: 'partially_verified', usualTimingSourceCode: 'BIR-TAX-REMINDER-2026', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; the published reminder shows channel/group-specific monthly dates.' },
+  { formNumber: '0619-F', title: 'Monthly Remittance Form of Final Income Taxes Withheld', taxTypeCodes: ['WHT'], usualTiming: 'Monthly · date varies by eFPS group/channel', usualTimingStatus: 'partially_verified', usualTimingSourceCode: 'BIR-TAX-REMINDER-2026', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; the published reminder shows channel/group-specific monthly dates.' },
+  { formNumber: '1600', title: 'Monthly Remittance Return of VAT and Other Percentage Taxes Withheld', taxTypeCodes: ['WHT'], usualTiming: 'Monthly · applicable calendar date', usualTimingStatus: 'unresolved', usualTimingSourceCode: 'BIR-TAX-REMINDER-2026', verificationStatus: 'partially_verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form listing; current requirement relationship and scope remain under reconciliation.' },
+  { formNumber: '1600WP', title: 'Remittance Return of Percentage Tax on Winnings and Prizes Withheld', taxTypeCodes: ['WHT'], usualTiming: 'Event/month-specific · applicable calendar date', usualTimingStatus: 'partially_verified', usualTimingSourceCode: 'BIR-TAX-REMINDER-2026', verificationStatus: 'partially_verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form listing; exact applicability and deadline remain rule-governed.' },
+  { formNumber: '1601-C', title: 'Monthly Remittance Return of Income Taxes Withheld on Compensation', taxTypeCodes: ['WHT'], usualTiming: 'Monthly · date varies by eFPS group/channel', usualTimingStatus: 'partially_verified', usualTimingSourceCode: 'BIR-TAX-REMINDER-2026', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; the published reminder shows channel/group-specific monthly dates.' },
+  { formNumber: '1601-EQ', title: 'Quarterly Remittance Return of Creditable Income Taxes Withheld (Expanded)', taxTypeCodes: ['WHT'], usualTiming: 'Quarterly · applicable calendar date', usualTimingStatus: 'partially_verified', usualTimingSourceCode: 'BIR-TAX-REMINDER-2026', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; exact deadline depends on the governed requirement and applicable context.' },
+  { formNumber: '1702-RT', title: 'Annual Income Tax Return for Corporation, Partnership and Other Non-Individual Taxpayer Subject Only to Regular Income Tax Rate', taxTypeCodes: ['CIT'], usualTiming: 'Annual · 15th day of the 4th month after fiscal year-end', usualTimingStatus: 'verified', usualTimingSourceCode: 'BIR-EFPS-FAQ-DEADLINES', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'The eFPS reference states the annual deadline pattern; exact dates remain period and rule derived.' },
+  { formNumber: '2550Q', title: 'Quarterly Value-Added Tax (VAT) Return', taxTypeCodes: ['VAT'], usualTiming: 'Quarterly · within 25 days after quarter-end', usualTimingStatus: 'verified', usualTimingSourceCode: 'BIR-EFPS-FAQ-DEADLINES', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'The eFPS reference states the quarterly deadline pattern; adjusted dates remain calendar-derived.' },
+  { formNumber: '2551M', title: 'Monthly Percentage Tax Return', taxTypeCodes: ['PERCENTAGE_TAX'], usualTiming: 'Monthly · coverage/deadline requires verification', usualTimingStatus: 'unresolved', usualTimingSourceCode: 'BIR-TAX-REMINDER-2026', verificationStatus: 'partially_verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form listing; current requirement relationship and scope remain under reconciliation.' },
+  { formNumber: '2551Q', title: 'Quarterly Percentage Tax Return', taxTypeCodes: ['PERCENTAGE_TAX'], usualTiming: 'Quarterly · applicable calendar date', usualTimingStatus: 'partially_verified', usualTimingSourceCode: 'BIR-TAX-REMINDER-2026', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Published 2026 reminder entries show quarter-end filing dates; exact rule context remains governed.' },
 ];
 
 export const unresolvedResearchItems = [

@@ -1,4 +1,5 @@
 import type { FixtureAssignment, FixtureRegistrationUnit, FixtureTaxProfile } from "@/lib/fixtures";
+import { normalizeClientDeadlinePolicy } from "@/lib/domain/client-deadline-policy";
 
 export type TaxProfilePersistencePayload = {
   profile: Record<string, unknown>;
@@ -31,7 +32,9 @@ export function buildTaxProfilePersistencePayload(
       filingContext: profile.filingContext,
       eFPSGroup: profile.eFPSGroup ?? "",
       registeredTaxTypes: profile.registeredTaxTypes,
+      taxYearBasis: profile.taxYearBasis ?? "",
       booksType: profile.booksType ?? "",
+      accountingSystem: profile.accountingSystem ?? "",
       invoicing: profile.invoicing ?? "",
       paymentRoute: profile.paymentRoute,
       clientWeight: String(profile.weight),
@@ -40,7 +43,9 @@ export function buildTaxProfilePersistencePayload(
       sourceKind: profile.sourceKind,
       extractionFields: profile.extractionFields ?? [],
       authorities: profile.authorities,
+      auditExposures: profile.auditExposures,
       sourceProvenance: profile.sourceLabel,
+      deadlinePolicy: profile.deadlinePolicy,
       assignmentActors: [assignment.preparer, assignment.checker, assignment.reviewer],
     },
     assignment: {
@@ -61,7 +66,19 @@ export type PersistedTaxProfileSnapshot = {
   effectiveFrom: string;
   profile: Record<string, unknown>;
   assignment: Record<string, unknown>;
+  /** Server-owned validation evidence. A creator/editor is not a validator. */
+  validatedAt?: string | null;
+  validatedBy?: string | null;
 };
+
+/**
+ * The small Clients-list check represents a governed validation event, not
+ * authorship or edit access. Both the active state and validator evidence are
+ * required before it is shown.
+ */
+export function hasCredibleTaxProfileValidation(profile: Pick<FixtureTaxProfile, "profileState" | "lastValidated" | "validator">) {
+  return profile.profileState === "Active" && Boolean(profile.lastValidated?.trim() && profile.validator?.trim());
+}
 
 function text(value: unknown, fallback: string): string {
   return typeof value === "string" ? value : fallback;
@@ -69,6 +86,16 @@ function text(value: unknown, fallback: string): string {
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === "string" && allowed.includes(value as T) ? value as T : fallback;
+}
+
+function weightLabel(weight: number): string {
+  return ({
+    1: "Super Light",
+    2: "Light",
+    3: "Medium",
+    4: "Heavy",
+    5: "Super Heavy",
+  } as Record<number, string>)[weight] ?? "Not assessed";
 }
 
 /** Apply a server-owned version to the current read model without making the
@@ -81,6 +108,7 @@ export function applyPersistedTaxProfileSnapshot(
   const source = snapshot.profile;
   const savedAssignment = snapshot.assignment;
   const weight = Number(source.clientWeight);
+  const hasRecordedValidation = snapshot.state === "active" && Boolean(snapshot.validatedAt?.trim() && snapshot.validatedBy?.trim());
   const profile: FixtureTaxProfile = {
     ...baseProfile,
     registeredTaxpayerName: text(source.registeredTaxpayerName, baseProfile.registeredTaxpayerName),
@@ -97,18 +125,25 @@ export function applyPersistedTaxProfileSnapshot(
     filingContext: text(source.filingContext, baseProfile.filingContext),
     eFPSGroup: text(source.eFPSGroup, baseProfile.eFPSGroup ?? ""),
     registeredTaxTypes: Array.isArray(source.registeredTaxTypes) ? source.registeredTaxTypes.filter((value): value is string => typeof value === "string") : baseProfile.registeredTaxTypes,
+    taxYearBasis: source.taxYearBasis === "Calendar year" || source.taxYearBasis === "Fiscal year" ? source.taxYearBasis : baseProfile.taxYearBasis,
     booksType: text(source.booksType, baseProfile.booksType ?? ""),
+    accountingSystem: text(source.accountingSystem, baseProfile.accountingSystem ?? ""),
     invoicing: text(source.invoicing, baseProfile.invoicing ?? ""),
     paymentRoute: oneOf(source.paymentRoute, ["Client Pays", "TMF Pays", "Not configured"] as const, baseProfile.paymentRoute),
     weight: Number.isFinite(weight) ? weight : baseProfile.weight,
-    weightLabel: baseProfile.weightLabel,
+    weightLabel: weightLabel(Number.isFinite(weight) ? weight : baseProfile.weight),
+    sourceFinalWeight: Number.isFinite(weight) && weight >= 1 && weight <= 5 ? weight : baseProfile.sourceFinalWeight,
+    sourceWeightClassification: Number.isFinite(weight) && weight >= 1 && weight <= 5 ? weightLabel(weight) as FixtureTaxProfile["sourceWeightClassification"] : baseProfile.sourceWeightClassification,
     enateSetup: oneOf(source.enateSetup, ["Yes", "No", "Unknown"] as const, baseProfile.enateSetup),
     profileState: snapshot.state === "active" ? "Active" : snapshot.state === "ready_for_validation" ? "Ready for validation" : "Setup incomplete",
     sourceLabel: text(source.sourceReference, baseProfile.sourceLabel),
     sourceKind: oneOf(source.sourceKind, ["2303-derived", "approved registration source", "manual validation"] as const, baseProfile.sourceKind),
     authorities: Array.isArray(source.authorities) ? source.authorities as FixtureTaxProfile["authorities"] : baseProfile.authorities,
+    auditExposures: Array.isArray(source.auditExposures) ? source.auditExposures as FixtureTaxProfile["auditExposures"] : baseProfile.auditExposures,
     extractionFields: Array.isArray(source.extractionFields) ? source.extractionFields as FixtureTaxProfile["extractionFields"] : baseProfile.extractionFields,
-    lastValidated: snapshot.state === "active" ? baseProfile.lastValidated ?? snapshot.effectiveFrom : baseProfile.lastValidated,
+    deadlinePolicy: source.deadlinePolicy === undefined ? baseProfile.deadlinePolicy : normalizeClientDeadlinePolicy(source.deadlinePolicy),
+    lastValidated: hasRecordedValidation ? snapshot.validatedAt ?? undefined : undefined,
+    validator: hasRecordedValidation ? snapshot.validatedBy ?? undefined : undefined,
   };
   const assignment: FixtureAssignment = {
     ...baseAssignment,
@@ -129,7 +164,8 @@ export function profileActivationGaps(profile: FixtureTaxProfile, assignment: Fi
   if (!unit.name.trim()) gaps.push("Registration Unit identity");
   if (!profile.sourceLabel.trim()) gaps.push("approved source/provenance");
   if (!profile.filingChannel.trim() || /not configured|needs review/i.test(profile.filingChannel)) gaps.push("filing channel");
-  if (!profile.fiscalYearEnd?.trim() || /requires|not configured|needs/i.test(profile.fiscalYearEnd)) gaps.push("fiscal year-end");
+  if (!profile.taxYearBasis) gaps.push("tax year basis");
+  if (profile.taxYearBasis === "Fiscal year" && (!profile.fiscalYearEnd?.trim() || /requires|not configured|needs/i.test(profile.fiscalYearEnd))) gaps.push("fiscal year-end");
   if (!assignment.cluster.trim()) gaps.push("Cluster");
   if (!assignment.tower.trim()) gaps.push("Tower");
   if (!assignment.preparer.trim() || assignment.preparer === "Unassigned") gaps.push("Preparer");

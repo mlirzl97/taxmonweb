@@ -39,6 +39,20 @@ A Client is not automatically the legal taxpayer, the Registration Unit, or the 
 
 One Client may relate to multiple Taxpayer Entities.
 
+### Contract Repository
+
+The commercial record container associated with a Client. It preserves the Client's master engagement records and additional engagements outside the master engagement.
+
+Each Client has one Contract Repository in the approved model. It is commercial-scope evidence and is not a substitute for a Tax Profile, Compliance Universe, or legal applicability decision.
+
+### Master Engagement
+
+The primary engagement branch within a Contract Repository. It may contain MSA, LSA, and addendum records.
+
+### Additional Engagement
+
+An engagement recorded outside the Master Engagement within the same Contract Repository. A Change Request Form may evidence an Additional Engagement. Additional Engagement does not mean a new Client or Taxpayer Entity.
+
 ### Taxpayer Entity
 
 The Philippine legal taxpayer represented in TaxMonWeb and identified by its own TIN as recorded and validated through approved source information.
@@ -370,6 +384,12 @@ The deadline before applying an approved adjustment or internal target calculati
 ### Adjusted Statutory Deadline
 
 The deadline after applying the approved Deadline Policy and relevant calendar information.
+
+### Published Operational Deadline
+
+The deadline that Tax Team has reviewed, confirmed, and released for operational use in TaxMonWeb.
+
+It is a governed publication state over a calculated or source-reconciled statutory date, not a second legal date. Only a published operational deadline may feed client Service Calendar projections and later authoritative work generation. Its rule version, source context, review/publication actor, and publication history remain traceable.
 
 ### TMF Internal Target
 

@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { isPrototypeDemoMode } from "@/lib/supabase/config";
+
 function redirectToLogin(request: NextRequest) {
   const url = request.nextUrl.clone();
   url.pathname = "/login";
@@ -13,7 +15,9 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (process.env.TAXMON_DEMO_MODE === "true") {
+  // Keep the edge gate consistent with the app layout. In production, the
+  // raw local demo flag must never bypass the auth boundary.
+  if (isPrototypeDemoMode()) {
     return NextResponse.next();
   }
 

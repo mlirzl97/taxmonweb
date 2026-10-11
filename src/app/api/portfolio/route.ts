@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 
-import { parseManualClientSetupInput } from "@/lib/domain/manual-client-setup";
-import { listPortfolioClients } from "@/lib/server/portfolio-repository";
-import { createManualClientSetup } from "@/lib/server/portfolio-repository";
+import { isManualClientSetupSourceAllowed, parseManualClientSetupInput } from "@/lib/domain/manual-client-setup";
+import { createManualClientSetup, listPortfolioClients } from "@/lib/server/client-repository";
+import { isPrototypeDemoMode } from "@/lib/supabase/config";
 import { getAuthenticatedUser } from "@/lib/supabase/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   const user = await getAuthenticatedUser();
 
   if (!user) {
@@ -13,7 +13,8 @@ export async function GET() {
   }
 
   try {
-    const data = await listPortfolioClients();
+    const detail = new URL(request.url).searchParams.get("detail") === "registry" ? "registry" : "full";
+    const data = await listPortfolioClients({ detail });
     return NextResponse.json({ data, fixtureSafe: true });
   } catch (error) {
     return NextResponse.json(
@@ -44,9 +45,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid client setup.", details: parsed.errors }, { status: 400 });
   }
 
-  if (process.env.TAXMON_DATA_MODE !== "production" && parsed.value.sourceSystem !== "synthetic_fixture") {
+  const prototypeMode = isPrototypeDemoMode();
+  if (!isManualClientSetupSourceAllowed(parsed.value.sourceSystem, prototypeMode)) {
     return NextResponse.json(
-      { error: "Only synthetic fixture setup is enabled in this environment." },
+      { error: prototypeMode ? "Only synthetic fixture setup is enabled in this environment." : "Synthetic fixture setup is disabled outside explicit prototype mode." },
       { status: 403 },
     );
   }

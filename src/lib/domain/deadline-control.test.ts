@@ -1,0 +1,84 @@
+import { describe, expect, it } from "vitest";
+
+import { fixtureClients } from "@/lib/fixtures";
+import { buildDeadlineControlRows, deadlineControlSummary, earliestApplicableDeadline, getClientServiceCalendarRows } from "./deadline-control";
+
+describe("deadline control projection", () => {
+  it("generates a deterministic annual set with separate statutory and TMF dates", () => {
+    const first = buildDeadlineControlRows(2026);
+    const second = buildDeadlineControlRows(2026);
+
+    expect(first).toEqual(second);
+    expect(first).toHaveLength(25);
+    const cit = first.find((row) => row.formNumber === "1702-RT");
+    const vatQ1 = first.find((row) => row.formNumber === "2550Q" && row.activityPeriod === "Q1 2026");
+    expect(cit?.baseStatutoryDeadline).toBe("2027-04-15");
+    expect(cit?.adjustedStatutoryDeadline).toBe("2027-04-15");
+    expect(cit?.earliestApplicableDeadline).toBe("2027-04-15");
+    expect(cit?.tmfPackageTarget).toBe("2027-04-14");
+    expect(cit?.publishedOperationalDeadline).toBe("2027-04-15");
+    expect(vatQ1?.adjustedStatutoryDeadline).toBe("2026-04-25");
+    expect(vatQ1?.tmfPackageTarget).toBe("2026-04-24");
+  });
+
+  it("keeps source verification and publication status distinct", () => {
+    const summary = deadlineControlSummary(buildDeadlineControlRows(2026));
+    expect(summary).toEqual({ total: 25, published: 5, requiringReview: 4, unresolved: 16 });
+    expect(buildDeadlineControlRows(2026).filter((row) => row.publicationStatus === "unresolved").every((row) => row.publishedOperationalDeadline === null)).toBe(true);
+    expect(buildDeadlineControlRows(2026).filter((row) => row.publicationStatus === "needs_review").every((row) => row.adjustedStatutoryDeadline !== null)).toBe(true);
+    expect(deadlineControlSummary(buildDeadlineControlRows(2027))).toEqual({ total: 25, published: 0, requiringReview: 9, unresolved: 16 });
+  });
+
+  it("derives a client's calendar from registered tax types and published rows", () => {
+    const vatClient = fixtureClients.find((client) => client.id === "fixture-client-03");
+    const whtClient = fixtureClients.find((client) => client.id === "fixture-client-05");
+    expect(vatClient).toBeDefined();
+    expect(whtClient).toBeDefined();
+
+    const vatCalendar = getClientServiceCalendarRows(vatClient!, 2026);
+    expect(vatCalendar.rows).toHaveLength(4);
+    expect(vatCalendar.rows.every((row) => row.formNumber === "2550Q" && row.publishedOperationalDeadline)).toBe(true);
+
+    const whtCalendar = getClientServiceCalendarRows(whtClient!, 2026);
+    expect(whtCalendar.rows).toHaveLength(0);
+    expect(whtCalendar.heldRows.some((row) => row.formNumber === "1601-C" && row.publicationStatus === "unresolved")).toBe(true);
+  });
+
+  it("projects the sanitized 2303-derived client into the published 2026 calendar", () => {
+    const client = fixtureClients.find((item) => item.id === "fixture-client-061");
+    expect(client).toBeDefined();
+
+    const calendar = getClientServiceCalendarRows(client!, 2026);
+
+    expect(calendar.rows).toHaveLength(5);
+    expect(calendar.rows.map((row) => row.formNumber)).toEqual(["1702-RT", "2550Q", "2550Q", "2550Q", "2550Q"]);
+    expect(calendar.rows.every((row) => row.publishedOperationalDeadline)).toBe(true);
+    expect(calendar.rows.map((row) => row.publishedOperationalDeadline)).toEqual([
+      "2027-04-15",
+      "2026-04-25",
+      "2026-07-25",
+      "2026-10-25",
+      "2027-01-25",
+    ]);
+    expect(calendar.heldRows).toHaveLength(16);
+    expect(calendar.heldRows.every((row) => row.publicationStatus === "unresolved")).toBe(true);
+  });
+
+  it("allows a controlled publication override without changing the statutory calculation", () => {
+    const base = buildDeadlineControlRows(2026).find((row) => row.formNumber === "2551Q");
+    expect(base).toBeDefined();
+    const client = fixtureClients.find((item) => item.id === "fixture-client-03");
+    expect(client).toBeDefined();
+    const percentageClient = { ...client!, entities: [{ ...client!.entities[0], profile: { ...client!.entities[0].profile, registeredTaxTypes: ["Percentage Tax · illustrative"] } }] };
+    const before = getClientServiceCalendarRows(percentageClient, 2026);
+    const after = getClientServiceCalendarRows(percentageClient, 2026, { [base!.id]: { status: "published", publishedOperationalDeadline: base!.adjustedStatutoryDeadline } });
+    expect(before.rows).toHaveLength(0);
+    expect(after.rows.some((row) => row.formNumber === "2551Q")).toBe(true);
+    expect(after.rows.find((row) => row.formNumber === "2551Q")?.adjustedStatutoryDeadline).toBe(base!.adjustedStatutoryDeadline);
+  });
+
+  it("uses the earliest applicable component deadline as the master default", () => {
+    expect(earliestApplicableDeadline(["2026-10-25", "2026-10-15", null])).toBe("2026-10-15");
+    expect(earliestApplicableDeadline([null, undefined])).toBeNull();
+  });
+});

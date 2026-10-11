@@ -4,9 +4,9 @@ import { buildControlTowerPath, parseControlTowerSearch } from "./control-tower-
 
 describe("Control Tower URL state", () => {
   it("round-trips meaningful view, scope, signal, and date context", () => {
-    const state = parseControlTowerSearch("?view=calendar&scope=central&signal=attention&date=2026-10-09");
-    expect(state).toEqual({ view: "calendar", scope: "central", preset: "attention", date: "2026-10-09" });
-    expect(buildControlTowerPath(state)).toBe("/app/control-tower?view=calendar&scope=central&signal=attention&date=2026-10-09");
+    const state = parseControlTowerSearch("?view=calendar&scope=tower-b&signal=attention&date=2026-10-09");
+    expect(state).toEqual({ view: "calendar", scope: "tower-b", preset: "attention", date: "2026-10-09" });
+    expect(buildControlTowerPath(state)).toBe("/app/control-tower?view=calendar&scope=tower-b&signal=attention&date=2026-10-09");
   });
 
   it("rejects unsupported or malformed state instead of creating a misleading view", () => {

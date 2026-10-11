@@ -1,4 +1,4 @@
--- Module 01 persistence boundary: versioned Tax Profile/setup snapshots,
+-- Clients workspace persistence boundary: versioned Tax Profile/setup snapshots,
 -- effective-dated assignment context, and governed validation history.
 -- No tax rules, obligations, filing, payment execution, or generated work are
 -- introduced here.

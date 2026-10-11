@@ -67,6 +67,13 @@ The primary business hierarchy is:
 
 ```text
 Client
+├── Contract Repository
+│   ├── Master Engagement
+│   │   ├── MSA
+│   │   ├── LSA
+│   │   └── Addendum
+│   └── Additional Engagement
+│       └── Change Request Form
 └── Taxpayer Entity (one Client may have many)
     └── Registration Unit (one Taxpayer Entity may have many)
         ├── Tax Profile versions
@@ -83,6 +90,10 @@ The nesting expresses the operational relationship, not necessarily ownership in
 The commercial/service relationship managed by TMF.
 
 A Client may be associated with multiple Taxpayer Entities. TaxMonWeb must not use Client as a substitute for the legal obligation anchor.
+
+Each Client has one Contract Repository. The Contract Repository is the commercial relationship container and does not replace the Taxpayer Entity, Registration Unit, Tax Profile, Compliance Universe, or Compliance Obligation hierarchy.
+
+The Contract Repository has two branches: Master Engagement for MSA/LSA/addendum records, and Additional Engagement for engagements outside the master engagement, represented by Change Request Forms. A Client may have multiple Additional Engagement records without creating duplicate Client or Taxpayer Entity records.
 
 ### 3.2 Taxpayer Entity
 
@@ -196,7 +207,7 @@ Approved configuration is maintained separately from generated operational recor
 - Service Scope configuration;
 - organizational scope configuration;
 - BIR Officer Master and effective-dated Officer Office Assignments;
-- future BIR Center projections over the canonical masters.
+- future BIR Center projections over the canonical masters, available as a shared read-only reference surface rather than a configuration or release console.
 
 These concepts are versioned or effective-dated where they affect historical interpretation.
 

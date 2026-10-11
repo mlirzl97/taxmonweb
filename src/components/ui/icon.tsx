@@ -19,7 +19,12 @@ export function Icon({ name, size = 18 }: IconProps) {
       <circle cx="12" cy="19" r="1.5" />
       <circle cx="18" cy="19" r="1.5" />
     </>,
+    tax: <>
+      <path d="M12 3 20 6v5c0 5-3.2 8.5-8 10-4.8-1.5-8-5-8-10V6l8-3Z" />
+      <path d="m8.5 12 2.1 2.1 4.9-5" />
+    </>,
     bir: <path d="M4 20h16M6 20V8l6-4 6 4v12M9 20v-5h6v5M9 9h.01M12 9h.01M15 9h.01" />,
+    admin: <path d="M12 3 20 6v5c0 5-3.2 8.5-8 10-4.8-1.5-8-5-8-10V6l8-3ZM9 12h6M12 9v6" />,
     menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   };
 

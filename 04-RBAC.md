@@ -153,7 +153,13 @@ For the current calibration and eventual governed HOD capability bundle, HOD is 
 
 Master Admin is not a seventh hierarchy level and does not mean unrestricted System Administration. User, authentication, and technical organization administration remain separate capabilities. Master Admin cannot fabricate filing, payment, acceptance, applicability, or evidence facts, and cannot erase actual-actor segregation-of-duties history.
 
-During the explicit sanitized prototype calibration mode, all prototype users may edit Module 01 fixture/profile context so the HOD can test the operating loop without a permission dead end. This is temporary demo behavior, browser-persisted for fixture data, and must be disabled before real client data or production authority is introduced.
+During the explicit sanitized prototype calibration mode, all prototype users may edit Client/Profile fixture context so the HOD can test the operating loop without a permission dead end. This is temporary demo behavior, browser-persisted for fixture data, and must be disabled before real client data or production authority is introduced.
+
+### 3.7 Super Admin
+
+Super Admin is an explicit combined authority for TaxMonWeb. It may access all modules, all authorized data projections, technical administration, governed tax configuration, operational intervention, and exceptional override actions.
+
+Super Admin is not an un-audited bypass. Every material action remains capability-aware, actor-attributed, effective-dated where relevant, and subject to history and segregation-of-duties safeguards. Super Admin cannot fabricate filing, payment, acceptance, applicability, or evidence facts, erase audit history, or replace the actual actors attached to completed controls.
 
 ## 4. Cross-functional and administrative modes
 
@@ -194,6 +200,8 @@ System Administration does not automatically grant:
 - evidence verification;
 - Elevated Override;
 - tax-control authority.
+
+Super Admin is the explicit exception because the combined authority is separately assigned and governed; ordinary System Admin access remains technical-only.
 
 ## 5. Organizational scope
 
@@ -506,6 +514,38 @@ Each view is filtered by visibility scope and enriched by available actions. A u
 Tax Team/Tax Control receives cross-portfolio control views where authorized. System Administration receives administrative views, not implicit compliance views.
 
 No separate management tracker or role-specific operational database is created.
+
+### 14.1 Team and Clients action boundary
+
+The Team workspace exposes people, reporting structure, and workload projections. The Clients workspace remains the canonical place for recurring Preparer / Checker / Reviewer ownership. The following action policy is approved for the current People & Portfolio slice:
+
+| Capability / POV | Team | Clients |
+|---|---|---|
+| Preparer | View people, structure, operating signals and assignment context | View within authorized work scope |
+| Checker | View people, structure, operating signals and assignment context | View within authorized work scope |
+| Reviewer | View only; no roster edit | View only within authorized work scope |
+| Tower Leader / Supervisor | Add, edit, move and deactivate people within Tower scope | Manage recurring ownership within Tower scope |
+| Cluster Leader | Add, edit, move and deactivate people within Cluster scope | Manage recurring ownership within Cluster scope |
+| Tax Control | View/review people and structure; no ordinary roster edit | View/review client context within control scope |
+| HOD / Master Admin | Add, edit, move and deactivate people; global operating-model accountability | Govern/reassign within approved scope |
+| System Admin | Technical identity and organization administration only | No client ownership or tax-control authority |
+| Super Admin | Explicit combined authority, still audited and SoD constrained | Explicit combined authority, still audited and SoD constrained |
+
+`View`, `Edit`, `Retire`, and `Clients` are the only row-action concepts exposed in the Team directory. `Retire` means deactivate while retaining history; destructive delete is not available. `Clients` is a handoff to the canonical client-assignment surface and never creates a second ownership record in Team.
+
+### 14.2 Team operating models and reporting ladder
+
+Team records use one of three operating models:
+
+- **Engagement team · agile** — an engagement team carrying multiple client relationships;
+- **Engagement team · dedicated** — an engagement team primarily dedicated to one client, while its leaders may intake or oversee additional client relationships; and
+- **Tax team** — a cross-portfolio team handling tax ad hoc work.
+
+The Tax Team remains in the same career/reporting hierarchy; its operating model changes workload interpretation, not organizational visibility or RBAC. Client-role ownership remains canonical in Clients, and Team only stores the person/structure classification that Work and management projections consume.
+
+The standard reporting ladder is `2.1/2.2 → 3.1 → 3.2 → 4.1 → 4.2`, with the existing senior layers above it. A different line is permitted only as an effective-dated, reasoned exception and is retained in the audit trail. The exception does not grant authority or change segregation-of-duties rules.
+
+RAG remains a derived operational projection, not a free-text person attribute. If a later controlled workflow exposes editable RAG inputs, Preparer and Checker may record applicable source facts within scope; Reviewer remains view-only. No action may directly overwrite a derived RAG state or use it as a performance score.
 
 ## 15. Representative RBAC scenarios
 
