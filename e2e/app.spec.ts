@@ -74,14 +74,14 @@ test("CRF repository applies authorized client scope and repository filters", as
 
 test("Team directory preserves its URL view and narrows staff people scope", async ({ page }) => {
   await page.goto("/app/team?view=directory");
-  await expect(page.getByRole("button", { name: "Directory", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("tab", { name: "Directory", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("heading", { name: "Directory", exact: true })).toBeVisible();
   const fullRoster = await page.locator(".team-directory tbody tr").count();
   expect(fullRoster).toBe(70);
 
   await applyAccessView(page, "PREPARER");
   await page.goto("/app/team?view=directory");
-  await expect(page.getByRole("button", { name: "Directory", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("tab", { name: "Directory", exact: true })).toHaveAttribute("aria-selected", "true");
   const staffRoster = await page.locator(".team-directory tbody tr").count();
   expect(staffRoster).toBeGreaterThan(0);
   expect(staffRoster).toBeLessThan(fullRoster);
@@ -108,7 +108,7 @@ test("Tax Team reports preserve period scope and produce a PDF snapshot", async 
   await applyAccessView(page, "TAX_CONTROL");
   await page.goto("/app/tax-team");
   await expect(page.getByRole("heading", { name: "Tax Team", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Monthly compliance", exact: true }).click();
+  await page.getByRole("tab", { name: "Monthly compliance", exact: true }).click();
   const fromDate = page.locator('input[aria-label="Report period from"]');
   const toDate = page.locator('input[aria-label="Report period to"]');
   await fromDate.fill("2026-10-06");
@@ -129,7 +129,7 @@ test("Tax Team reports preserve period scope and produce a PDF snapshot", async 
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toBe("tax-team-2026-10-06-to-2026-10-09.pdf");
 
-  await page.getByRole("button", { name: "QA", exact: true }).click();
+  await page.getByRole("tab", { name: "QA", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Transaction review" })).toBeVisible();
   await expect(page.getByText("Awaiting review", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: "Pulled transaction register" })).toBeVisible();
@@ -139,7 +139,7 @@ test("Tax Team reports preserve period scope and produce a PDF snapshot", async 
   await expect(page.getByRole("heading", { name: "RCA register" })).toBeVisible();
   await expect(page.getByText("ordinary QA corrections stay in QA", { exact: false })).toBeVisible();
 
-  await page.getByRole("button", { name: "Deadline Control", exact: true }).click();
+  await page.getByRole("tab", { name: "Deadline Control", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Deadline Control", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Master date rule · earliest applicable deadline" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Earliest applicable" })).toBeVisible();
@@ -205,7 +205,7 @@ test("Work follows the Due Register into step-by-step execution detail", async (
 test("period locks live in Tax Team and are separate from the return package", async ({ page }) => {
   await applyAccessView(page, "TAX_CONTROL");
   await page.goto("/app/tax-team");
-  await page.getByRole("button", { name: "Period locks", exact: true }).click();
+  await page.getByRole("tab", { name: "Period locks", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Period locks" })).toBeVisible();
   await expect(page.getByText("Tax Team control", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Lock period" }).first()).toBeDisabled();
