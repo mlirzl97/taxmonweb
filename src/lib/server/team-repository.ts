@@ -23,7 +23,7 @@ export async function listLiveTeamMembers(): Promise<LiveTeamMember[]> {
   if (!client) throw new Error("Supabase is not configured for this environment.");
 
   const [{ data: users, error: usersError }, { data: profiles, error: profilesError }] = await Promise.all([
-    client.from("app_users").select("id, display_name, is_active").order("display_name"),
+    client.from("app_users").select("id, display_name, is_active, account_status").order("display_name"),
     client.from("team_member_profiles").select("user_id, role_key, title, organization_unit_id, effective_from, effective_to, active, career_service_level, reports_to_user_id, operating_model, reporting_line_exception_reason, organization_units(id, code, name, unit_kind)"),
   ]);
 
@@ -40,7 +40,7 @@ export async function listLiveTeamMembers(): Promise<LiveTeamMember[]> {
     return {
       id: user.id,
       name: user.display_name,
-      active: user.is_active && (profile?.active ?? true),
+      active: user.is_active && user.account_status === "active" && (profile?.active ?? true),
       reportsToUserId: profile?.reports_to_user_id ?? null,
       roleKey: profile?.role_key ?? null,
       title: profile?.title ?? null,

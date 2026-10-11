@@ -1,35 +1,30 @@
 import { NextResponse } from "next/server";
 
 import { isManualClientSetupSourceAllowed, parseManualClientSetupInput } from "@/lib/domain/manual-client-setup";
+import { apiErrorResponse, inferredApiErrorStatus } from "@/lib/server/api-error";
+import { requireApiCapability } from "@/lib/server/api-authorization";
+import { requireSameOrigin } from "@/lib/server/request-origin";
 import { createManualClientSetup, listPortfolioClients } from "@/lib/server/client-repository";
 import { isPrototypeDemoMode } from "@/lib/supabase/config";
-import { getAuthenticatedUser } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
-  const user = await getAuthenticatedUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = await requireApiCapability(["ViewScopedPortfolio", "ReviewTaxProfile", "MaintainClientRepository"]);
+  if (denied) return denied;
 
   try {
     const detail = new URL(request.url).searchParams.get("detail") === "registry" ? "registry" : "full";
     const data = await listPortfolioClients({ detail });
     return NextResponse.json({ data, fixtureSafe: true });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Unable to load the portfolio." },
-      { status: 500 },
-    );
+    return apiErrorResponse(error, "Unable to load the portfolio.", { logContext: "load portfolio" });
   }
 }
 
 export async function POST(request: Request) {
-  const user = await getAuthenticatedUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = await requireApiCapability(["MaintainClientRepository"]);
+  if (denied) return denied;
+  const originDenied = requireSameOrigin(request);
+  if (originDenied) return originDenied;
 
   let body: unknown;
 
@@ -57,8 +52,6 @@ export async function POST(request: Request) {
     const data = await createManualClientSetup(parsed.value);
     return NextResponse.json({ data, fixtureSafe: parsed.value.sourceSystem === "synthetic_fixture" }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to create the client setup.";
-    const status = message.includes("not authorized") ? 403 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return apiErrorResponse(error, "Unable to create the client setup.", { status: inferredApiErrorStatus(error), logContext: "create client setup" });
   }
 }

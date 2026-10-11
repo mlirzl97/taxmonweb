@@ -7,10 +7,15 @@ import {
   failTemporary2303Upload,
   uploadTemporary2303Object,
 } from "@/lib/server/temporary-document-repository";
-import { getAuthenticatedUser } from "@/lib/supabase/server";
+import { apiErrorResponse, inferredApiErrorStatus } from "@/lib/server/api-error";
+import { requireApiCapability } from "@/lib/server/api-authorization";
+import { requireSameOrigin } from "@/lib/server/request-origin";
 
 export async function POST(request: Request, { params }: { params: Promise<{ registrationUnitId: string }> }) {
-  if (!await getAuthenticatedUser()) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = await requireApiCapability(["CorrectTaxProfile", "MaintainClientRepository"]);
+  if (denied) return denied;
+  const originDenied = requireSameOrigin(request);
+  if (originDenied) return originDenied;
 
   const { registrationUnitId } = await params;
   if (!uuidPattern.test(registrationUnitId)) return NextResponse.json({ error: "A valid Registration Unit is required." }, { status: 400 });
@@ -78,8 +83,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ reg
     if (documentId) {
       try { await failTemporary2303Upload(documentId, "storage_upload_failed"); } catch { /* preserve the original safe response */ }
     }
-    const message = error instanceof Error ? error.message : "Unable to upload the temporary document.";
-    const status = message.includes("not authorized") ? 403 : message.includes("no longer available for retry") ? 409 : 500;
-    return NextResponse.json({ error: status === 500 ? "Unable to upload the temporary document." : message }, { status });
+    return apiErrorResponse(error, "Unable to upload the temporary document.", { status: inferredApiErrorStatus(error), logContext: "upload temporary document" });
   }
 }

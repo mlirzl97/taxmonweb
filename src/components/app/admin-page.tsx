@@ -9,6 +9,7 @@ import { accessLevelLabel, moduleAccessMapForPersona, rbacPersonaOptions, type A
 import { fixtureCalendar, fixtureClients, fixtureOrgDirectoryMembers, fixtureSpecialistCases, fixtureWork, type FixtureClient } from "@/lib/fixtures";
 import { clearPrototypeSeedData } from "@/lib/prototype-storage";
 import { useWorkflow, workflowPerspectiveLabel } from "@/lib/workflow-state";
+import { StaffProvisioningForm } from "@/components/app/staff-provisioning-form";
 
 type AdminView = "overview" | "access" | "organization" | "audit" | "settings";
 
@@ -29,8 +30,8 @@ export default function AdminPage() {
   return (
     <FixturePageFrame>
       <PageHeader description="Govern access, structure and history." title="Admin" />
-      <nav aria-label="Admin views" className="tower-tabs module-tabs" role="tablist">
-        {adminViews.map((item) => <button aria-selected={view === item.id} className={view === item.id ? "tower-tab tower-tab--active" : "tower-tab"} key={item.id} onClick={() => setView(item.id)} role="tab" type="button">{item.label}</button>)}
+      <nav aria-label="Admin views" className="tower-tabs module-tabs">
+        {adminViews.map((item) => <button aria-pressed={view === item.id} className={view === item.id ? "tower-tab tower-tab--active" : "tower-tab"} key={item.id} onClick={() => setView(item.id)} type="button">{item.label}</button>)}
       </nav>
 
       {view === "overview" && <AdminOverview />}
@@ -71,10 +72,26 @@ function AdminOverview() {
 
 function AccessMatrixEditor() {
   const { accessMatrix, accessPolicyHistory, canManageAccess, commitAccessMatrix, workPerspective } = useWorkflow();
+  const { prototypeMode } = useWorkflow();
+  const [liveCapabilities, setLiveCapabilities] = useState<readonly string[]>([]);
   const [selectedPersona, setSelectedPersona] = useState<RbacPersona>(workPerspective);
   const [draft, setDraft] = useState<Record<ModuleKey, AccessLevel>>(() => ({ ...moduleAccessMapForPersona(workPerspective, accessMatrix) }));
   const [reason, setReason] = useState("");
   const [feedback, setFeedback] = useState("");
+
+  useEffect(() => {
+    if (prototypeMode) return;
+    let cancelled = false;
+    fetch("/api/me/access", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload: { capabilities?: Array<{ capability_key?: string }> }) => {
+        if (!cancelled) setLiveCapabilities((payload.capabilities ?? []).map((item) => item.capability_key).filter((value): value is string => Boolean(value)));
+      })
+      .catch(() => { if (!cancelled) setLiveCapabilities([]); });
+    return () => { cancelled = true; };
+  }, [prototypeMode]);
+
+  const canProvisionStaff = prototypeMode ? canManageAccess : liveCapabilities.includes("AdministerUsers");
 
   function selectPersona(next: RbacPersona) {
     setSelectedPersona(next);
@@ -95,7 +112,9 @@ function AccessMatrixEditor() {
     if (result.ok) setReason("");
   }
 
-  return <section className="panel admin-access-editor" aria-labelledby="access-editor-title">
+  return <>
+    <StaffProvisioningForm canManage={canProvisionStaff} />
+    <section className="panel admin-access-editor" aria-labelledby="access-editor-title">
     <SectionHeading detail="Choose one effective level per module. The strongest level is applied as a governed template; capabilities, scope and segregation of duties still apply." title="Users & access" />
     <div className="admin-access-editor__toolbar">
       <label className="admin-access-editor__role" htmlFor="access-role-template">
@@ -131,7 +150,8 @@ function AccessMatrixEditor() {
       {accessPolicyHistory.length === 0 ? <span className="admin-access-editor__note">No local access changes recorded.</span> : [...accessPolicyHistory].reverse().slice(0, 5).map((event) => <div className="admin-access-editor__history-item" key={event.id}><strong>{event.actor} · {event.recordedAt}</strong><span>{event.reason}</span></div>)}
     </div>
     <p className="admin-placeholder-note">Technical administration does not grant tax-control authority. Production enforcement belongs to authenticated server commands, RLS and audited actor history.</p>
-  </section>;
+    </section>
+  </>;
 }
 
 function AdminDataOverview() {

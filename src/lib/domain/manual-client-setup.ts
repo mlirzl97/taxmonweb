@@ -1,4 +1,6 @@
 import { clientDeadlineModes, clientDeadlinePolicyErrors, isValidClientDeadlineLeadDays, normalizeClientDeadlinePolicy, type ClientDeadlinePolicy } from "@/lib/domain/client-deadline-policy";
+import { generatedEntityReference, normalizeTinDigits } from "@/lib/domain/client-onboarding";
+import { governedReturnForms } from "@/lib/domain/client-return-selection";
 
 const referenceCodePattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -26,10 +28,16 @@ export type ManualClientSetupInput = {
     taxYearBasis?: string;
     fiscalYearEnd?: string;
     accountingSystem?: string;
+    booksType?: string;
+    invoicing?: string;
     filingChannel?: string;
     eFPSGroup?: string;
+    enateSetup?: "Yes" | "No" | "Unknown";
+    paymentRoute?: "Client Pays" | "TMF Pays" | "Not configured";
+    registeredTaxTypeCodes?: string[];
     registeredTaxTypes?: string[];
     registeredTaxTypesRaw?: string;
+    proposedReturnCodes?: string[];
     sourceNotes?: string;
     deadlinePolicy?: ClientDeadlinePolicy;
   };
@@ -120,12 +128,16 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
   const errors: string[] = [];
   const clientReferenceCode = requireText(source, "clientReferenceCode", errors, 64);
   const clientDisplayName = requireText(source, "clientDisplayName", errors, 160);
-  const entityReferenceCode = requireText(source, "entityReferenceCode", errors, 64);
+  const suppliedEntityReferenceCode = optionalText(source, "entityReferenceCode", errors, 64);
+  const entityReferenceCode = suppliedEntityReferenceCode || (clientReferenceCode ? generatedEntityReference(clientReferenceCode) : undefined);
   const entityDisplayName = requireText(source, "entityDisplayName", errors, 160);
   const unitReferenceCode = requireText(source, "unitReferenceCode", errors, 64);
   const unitDisplayName = requireText(source, "unitDisplayName", errors, 160);
   const sourceReference = requireText(source, "sourceReference", errors, 240);
-  const tin = optionalText(source, "tin", errors, 64);
+  const rawTin = optionalText(source, "tin", errors, 64);
+  if (rawTin && !/^[\d\s-]+$/.test(rawTin)) errors.push("tin must contain numbers, spaces, or hyphens only.");
+  const tin = rawTin ? normalizeTinDigits(rawTin) : undefined;
+  if (tin && (tin.length < 9 || tin.length > 14)) errors.push("tin must contain 9 to 14 digits when supplied.");
   const registrationReference = optionalText(source, "registrationReference", errors, 160);
   const organizationUnitId = requireText(source, "organizationUnitId", errors, 36);
   const sourceNotes = optionalText(source, "sourceNotes", errors, 500);
@@ -151,6 +163,19 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
   if (registeredTaxTypes !== undefined && (!Array.isArray(registeredTaxTypes) || registeredTaxTypes.some((value) => typeof value !== "string" || value.trim().length > 160))) {
     errors.push("profileData.registeredTaxTypes must be an array of short text values.");
   }
+  const registeredTaxTypeCodes = profileData?.registeredTaxTypeCodes;
+  if (registeredTaxTypeCodes !== undefined && (!Array.isArray(registeredTaxTypeCodes) || registeredTaxTypeCodes.some((value) => typeof value !== "string" || !/^[A-Za-z0-9_]{1,48}$/.test(value.trim())))) {
+    errors.push("profileData.registeredTaxTypeCodes must be an array of canonical tax type codes.");
+  }
+  const proposedReturnCodes = profileData?.proposedReturnCodes;
+  const governedReturnCodes = new Set(governedReturnForms.map((form) => form.formNumber));
+  if (proposedReturnCodes !== undefined && (!Array.isArray(proposedReturnCodes) || proposedReturnCodes.some((value) => typeof value !== "string" || !governedReturnCodes.has(value.trim())))) {
+    errors.push("profileData.proposedReturnCodes must contain only return forms from the current governed form catalog.");
+  }
+  const enateSetup = profileText("enateSetup", 32);
+  if (enateSetup !== undefined && !["Yes", "No", "Unknown"].includes(enateSetup)) errors.push("profileData.enateSetup must be Yes, No, or Unknown.");
+  const paymentRoute = profileText("paymentRoute", 32);
+  if (paymentRoute !== undefined && !["Client Pays", "TMF Pays", "Not configured"].includes(paymentRoute)) errors.push("profileData.paymentRoute must be Client Pays, TMF Pays, or Not configured.");
 
   const deadlinePolicySource = profileData?.deadlinePolicy;
   if (deadlinePolicySource !== undefined && (!deadlinePolicySource || typeof deadlinePolicySource !== "object" || Array.isArray(deadlinePolicySource))) {
@@ -264,10 +289,16 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
         taxYearBasis: profileText("taxYearBasis", 80),
         fiscalYearEnd: profileText("fiscalYearEnd", 80),
         accountingSystem: profileText("accountingSystem", 160),
+        booksType: profileText("booksType", 160),
+        invoicing: profileText("invoicing", 160),
         filingChannel: profileText("filingChannel", 80),
         eFPSGroup: profileText("eFPSGroup", 160),
+        enateSetup: enateSetup as "Yes" | "No" | "Unknown" | undefined,
+        paymentRoute: paymentRoute as "Client Pays" | "TMF Pays" | "Not configured" | undefined,
+        registeredTaxTypeCodes: Array.isArray(registeredTaxTypeCodes) ? registeredTaxTypeCodes.map((value) => String(value).trim()).filter(Boolean) : undefined,
         registeredTaxTypes: Array.isArray(registeredTaxTypes) ? registeredTaxTypes.map((value) => String(value).trim()).filter(Boolean) : undefined,
         registeredTaxTypesRaw: profileText("registeredTaxTypesRaw", 1000),
+        proposedReturnCodes: Array.isArray(proposedReturnCodes) ? [...new Set(proposedReturnCodes.map((value) => String(value).trim()).filter(Boolean))] : undefined,
         sourceNotes: profileText("sourceNotes", 500),
         deadlinePolicy,
       } : undefined,

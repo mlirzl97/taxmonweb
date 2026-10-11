@@ -1,6 +1,7 @@
 import { fixtureCalendar, fixtureClients, fixtureClock, fixtureWork, type FixtureScope, type FixtureStatus } from "@/lib/fixtures";
 import { scopeValueForFilter } from "@/lib/control-tower-state";
 import type { OrganizationScopeFilter } from "@/lib/domain/organization-catalog";
+import type { LivePublishedCalendarEntry } from "@/lib/server/generated-work-repository";
 
 export type DuePreset = "all" | "today" | "next-5" | "week" | "overdue" | "attention" | "blocked" | "statutory";
 
@@ -87,8 +88,48 @@ export function getFixtureOperationalRecords(workItems: readonly (typeof fixture
   return getOperationalRecords(workItems, { calendar: fixtureCalendar, clients: fixtureClients, today: fixtureClock.today });
 }
 
-export function getLiveOperationalRecords(workItems: readonly (typeof fixtureWork)[number][]): FixtureOperationalRecord[] {
-  return getOperationalRecords(workItems, { calendar: [], clients: [], today: new Date().toISOString().slice(0, 10) });
+function liveCalendarForWork(work: (typeof fixtureWork)[number], entry: LivePublishedCalendarEntry | undefined, today: string) {
+  const operationalDeadline = entry?.published_operational_deadline ?? entry?.tmf_package_target ?? entry?.adjusted_statutory_deadline ?? entry?.base_statutory_deadline ?? work.deadline;
+  const statutoryDeadline = entry?.adjusted_statutory_deadline ?? entry?.base_statutory_deadline ?? "Rule unresolved";
+  return {
+    id: entry?.id ?? `calendar-${work.id}`,
+    calendarDate: operationalDeadline,
+    dateGroup: operationalDeadline === today ? "Today" : "Scheduled",
+    date: operationalDeadline,
+    milestone: entry ? "Released calendar target" : "Calendar target unresolved",
+    returnKey: work.id,
+    returnLabel: entry?.external_requirement_label ?? work.title,
+    period: entry?.period_or_event ?? work.period,
+    statutoryDeadline,
+    internalDeadline: entry?.tmf_package_target ?? "Target unresolved",
+    serviceMilestone: work.nextAction,
+    client: work.client,
+    clientId: work.clientId,
+    scope: work.scope,
+    workId: work.id,
+    type: entry?.tmf_package_target ? "TMF internal target" : "Control milestone",
+    status: work.status,
+    detail: entry ? "Released calendar context joined to generated compliance work." : "No released calendar entry matched this work object.",
+  } as (typeof fixtureCalendar)[number];
+}
+
+export function getLiveOperationalRecords(workItems: readonly (typeof fixtureWork)[number][], calendarEntries: readonly LivePublishedCalendarEntry[] = []): FixtureOperationalRecord[] {
+  const today = new Date().toISOString().slice(0, 10);
+  const entriesByContext = new Map(calendarEntries.map((entry) => [`${entry.requirement_id}:${entry.requirement_version_id ?? ""}:${entry.period_or_event ?? ""}`, entry]));
+  const calendar = workItems.map((work) => liveCalendarForWork(work, entriesByContext.get(`${work.requirementId ?? ""}:${work.requirementVersionId ?? ""}:${work.period}`), today));
+  return getOperationalRecords(workItems, { calendar, clients: [], today });
+}
+
+/**
+ * Single mode boundary for operational projections. UI surfaces should not
+ * decide independently how fixture and live records are assembled.
+ */
+export function getOperationalRecordsForMode(workItems: readonly (typeof fixtureWork)[number][], prototypeMode: boolean): FixtureOperationalRecord[] {
+  return prototypeMode ? getFixtureOperationalRecords(workItems) : getLiveOperationalRecords(workItems);
+}
+
+export function operationalToday(prototypeMode: boolean): string {
+  return prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10);
 }
 
 export function getFixtureOperationalRecord(workId: string, workItems: readonly (typeof fixtureWork)[number][] = fixtureWork): FixtureOperationalRecord | undefined {

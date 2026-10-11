@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { clientOnboardingDocumentTypes, getClientOnboardingReadiness, type ClientOnboardingDocument, type ClientOnboardingIdentity } from "./client-onboarding";
+import { clientOnboardingDocumentTypes, formatTin, generatedEntityReference, getClientOnboardingReadiness, normalizeTinDigits, type ClientOnboardingDocument, type ClientOnboardingIdentity } from "./client-onboarding";
 
 const completeIdentity: ClientOnboardingIdentity = {
   clientReferenceCode: "CLIENT-001",
@@ -19,6 +19,18 @@ function completeDocuments(): ClientOnboardingDocument[] {
 }
 
 describe("client onboarding readiness", () => {
+  it("keeps TIN storage numeric while presenting the source-friendly format", () => {
+    expect(normalizeTinDigits("123-456-789-00000")).toBe("12345678900000");
+    expect(formatTin("12345678900000")).toBe("123-456-789-00000");
+    expect(generatedEntityReference("client-2026-001")).toBe("ENTITY-CLIENT-2026-001");
+  });
+
+  it("does not require an internal entity reference from the onboarding user", () => {
+    const readiness = getClientOnboardingReadiness({ ...completeIdentity, entityReferenceCode: "" }, completeDocuments());
+    expect(readiness.status).toBe("ready_for_human_review");
+    expect(readiness.identityGaps).toEqual([]);
+  });
+
   it("keeps an incomplete registration pack visibly unresolved", () => {
     const readiness = getClientOnboardingReadiness(completeIdentity, []);
     expect(readiness.status).toBe("source_pack_incomplete");

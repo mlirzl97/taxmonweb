@@ -17,6 +17,18 @@ export type PersistedTaxTeamReview = {
   certified_at: string | null;
 };
 
+export type TaxTeamReviewInput = Omit<PersistedTaxTeamReview, "certified_by" | "certified_at">;
+
+export function isTaxTeamReviewInput(value: unknown): value is TaxTeamReviewInput {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const input = value as Record<string, unknown>;
+  return ["review_key", "review_date", "client_label", "requirement_label", "period_label", "tower_label", "cluster_label", "source_label"].every((key) => typeof input[key] === "string" && input[key].trim().length > 0)
+    && Number.isSafeInteger(input.records_pulled) && (input.records_pulled as number) >= 0
+    && typeof input.completeness_checked === "boolean"
+    && typeof input.awareness_checked === "boolean"
+    && ["awaiting_review", "in_review", "certified", "follow_up"].includes(String(input.review_status));
+}
+
 async function requireClient() {
   const client = await createSupabaseServerClient();
   if (!client) throw new Error("Supabase is not configured for this environment.");
@@ -30,7 +42,7 @@ export async function listPersistedTaxTeamReviews() {
   return (Array.isArray(data) ? data : []) as PersistedTaxTeamReview[];
 }
 
-export async function savePersistedTaxTeamReview(input: Omit<PersistedTaxTeamReview, "certified_by" | "certified_at">) {
+export async function savePersistedTaxTeamReview(input: TaxTeamReviewInput) {
   const client = await requireClient();
   const { data, error } = await client.rpc("save_tax_team_transaction_review", {
     p_review_key: input.review_key,

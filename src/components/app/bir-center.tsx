@@ -35,10 +35,10 @@ export function BirCenter({ offices, taxpayers, taxTypes, forms }: { offices: Bi
         <div className="module-header__right"><span className="module-count">Governed reference</span></div>
       </header>
 
-      <nav aria-label="BIR Center views" className="bir-center-tabs bir-center-tabs--primary module-tabs" role="tablist">
-        <button aria-selected={activeTab === "tax_map"} className={activeTab === "tax_map" ? "bir-center-tab is-active" : "bir-center-tab"} onClick={() => setActiveTab("tax_map")} role="tab" type="button">Tax map</button>
-        <button aria-selected={activeTab === "directory"} className={activeTab === "directory" ? "bir-center-tab is-active" : "bir-center-tab"} onClick={() => setActiveTab("directory")} role="tab" type="button">BIR directory</button>
-        <button aria-selected={activeTab === "regulatory_updates"} className={activeTab === "regulatory_updates" ? "bir-center-tab is-active" : "bir-center-tab"} onClick={() => setActiveTab("regulatory_updates")} role="tab" type="button">Regulatory updates</button>
+      <nav aria-label="BIR Center views" className="bir-center-tabs bir-center-tabs--primary module-tabs">
+        <button aria-pressed={activeTab === "tax_map"} className={activeTab === "tax_map" ? "bir-center-tab is-active" : "bir-center-tab"} onClick={() => setActiveTab("tax_map")} type="button">Tax map</button>
+        <button aria-pressed={activeTab === "directory"} className={activeTab === "directory" ? "bir-center-tab is-active" : "bir-center-tab"} onClick={() => setActiveTab("directory")} type="button">BIR directory</button>
+        <button aria-pressed={activeTab === "regulatory_updates"} className={activeTab === "regulatory_updates" ? "bir-center-tab is-active" : "bir-center-tab"} onClick={() => setActiveTab("regulatory_updates")} type="button">Regulatory updates</button>
       </nav>
 
       {activeTab === "tax_map" ? <TaxMap groups={visibleGroups} forms={forms} query={taxQuery} onQueryChange={setTaxQuery} /> : activeTab === "directory" ? <BirDirectory offices={visibleOffices} selectedOffice={selectedOffice} selectedOfficeCode={selectedOfficeCode} linkedTaxpayers={linkedTaxpayers} query={officeQuery} onQueryChange={setOfficeQuery} onSelect={(code) => { setSelectedOfficeCode(code); setOfficeDetailOpen(true); }} onCloseDetails={() => setOfficeDetailOpen(false)} detailOpen={officeDetailOpen} /> : <RegulatoryUpdates />}

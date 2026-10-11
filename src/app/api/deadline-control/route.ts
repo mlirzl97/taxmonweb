@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 
 import { buildDeadlineControlRows, type DeadlinePublicationStatus } from "@/lib/domain/deadline-control";
+import { apiErrorResponse, inferredApiErrorStatus } from "@/lib/server/api-error";
+import { requireApiCapability } from "@/lib/server/api-authorization";
+import { requireSameOrigin } from "@/lib/server/request-origin";
+import { asRecord, isNonEmptyString } from "@/lib/server/request-input";
 import { isPrototypeDemoMode } from "@/lib/supabase/config";
-import { getAuthenticatedUser } from "@/lib/supabase/server";
 import { listDeadlineControlRows, saveDeadlineControlEntry, transitionDeadlineControlEntry, type DeadlineControlEntryInput } from "@/lib/server/deadline-control-repository";
 
 function requestedYear(value: string | null) {
@@ -11,9 +14,7 @@ function requestedYear(value: string | null) {
 }
 
 function responseError(error: unknown, fallback: string) {
-  const message = error instanceof Error ? error.message : fallback;
-  const status = /authorized|authentication|configured/i.test(message) ? 403 : 500;
-  return NextResponse.json({ error: message }, { status });
+  return apiErrorResponse(error, fallback, { status: inferredApiErrorStatus(error), logContext: fallback });
 }
 
 export async function GET(request: Request) {
@@ -24,7 +25,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ data: buildDeadlineControlRows(year), source: "sanitized-fixture" });
   }
 
-  if (!(await getAuthenticatedUser())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = await requireApiCapability(["ViewTaxControlHistory", "MaintainDeadlineControl", "MaintainRulesLibrary", "ValidateTaxProfile"]);
+  if (denied) return denied;
 
   try {
     return NextResponse.json({ data: await listDeadlineControlRows(year), source: "repository" });
@@ -34,11 +36,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const denied = await requireApiCapability(["MaintainDeadlineControl", "MaintainRulesLibrary", "ValidateTaxProfile"]);
+  if (denied) return denied;
+  const originDenied = requireSameOrigin(request);
+  if (originDenied) return originDenied;
   if (isPrototypeDemoMode()) {
     return NextResponse.json({ error: "Prototype mode uses an in-browser sanitized fixture. Apply the Supabase migration to enable governed persistence." }, { status: 409 });
   }
-  if (!(await getAuthenticatedUser())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-
   let body: unknown;
   try {
     body = await request.json();
@@ -46,10 +50,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400 });
   }
 
-  const input = body as Record<string, unknown>;
+  const input = asRecord(body);
+  if (!input) return NextResponse.json({ error: "Unsupported deadline control action." }, { status: 400 });
   try {
     if (input.action === "transition") {
-      if (typeof input.entryId !== "string" || typeof input.toStatus !== "string" || typeof input.reason !== "string") {
+      if (!isNonEmptyString(input.entryId) || !isNonEmptyString(input.toStatus) || !isNonEmptyString(input.reason)) {
         return NextResponse.json({ error: "Entry ID, status, and reason are required." }, { status: 400 });
       }
       const data = await transitionDeadlineControlEntry({
@@ -64,9 +69,10 @@ export async function POST(request: Request) {
     if (input.action !== "save" || !input.payload || typeof input.payload !== "object") {
       return NextResponse.json({ error: "Unsupported deadline control action." }, { status: 400 });
     }
-    const payload = input.payload as Record<string, unknown>;
+    const payload = asRecord(input.payload);
+    if (!payload) return NextResponse.json({ error: "Unsupported deadline control action." }, { status: 400 });
     const requiredStrings = ["calendarMonth", "requirementCode", "requirementName", "operatingCategory", "frequencyLabel", "sourceCode", "reason"];
-    if (requiredStrings.some((key) => typeof payload[key] !== "string" || !String(payload[key]).trim())) {
+    if (requiredStrings.some((key) => !isNonEmptyString(payload[key]))) {
       return NextResponse.json({ error: "Calendar month, requirement identity, category, frequency, source, and reason are required." }, { status: 400 });
     }
     const data = await saveDeadlineControlEntry({

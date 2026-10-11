@@ -13,9 +13,8 @@ type SearchParams = Promise<{
 export default async function WorkRoute({ searchParams }: { searchParams: SearchParams }) {
   await requireModuleAccess("work");
   const params = await searchParams;
-  if (params.view === "run") redirect("/app/control-tower?view=my-run");
   if (params.view === "locks") redirect("/app/tax-team?view=period-locks");
-  const queue = params.queue === "today" || params.queue === "waiting" || params.queue === "attention" ? params.queue : "all";
+  const queue = params.queue === "all" || params.queue === "today" || params.queue === "waiting" || params.queue === "attention" ? params.queue : "attention";
   const due = params.due === "today" || params.due === "next-5" || params.due === "week" || params.due === "overdue" || params.due === "attention" || params.due === "blocked" || params.due === "statutory" ? params.due : "all";
 
   return (
@@ -23,7 +22,7 @@ export default async function WorkRoute({ searchParams }: { searchParams: Search
       initialDate={params.date ?? null}
       initialDue={due}
       initialQueue={queue}
-      initialView={params.view === "calendar" ? "calendar" : "queue"}
+      initialView={params.view === "calendar" ? "calendar" : params.view === "run" ? "run" : "queue"}
     />
   );
 }

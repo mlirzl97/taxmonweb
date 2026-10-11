@@ -1,7 +1,7 @@
 import type { NavigationIcon } from "@/lib/navigation";
 
 type IconProps = {
-  name: NavigationIcon | "menu";
+  name: NavigationIcon | "bell" | "menu";
   size?: number;
 };
 
@@ -25,6 +25,7 @@ export function Icon({ name, size = 18 }: IconProps) {
     </>,
     bir: <path d="M4 20h16M6 20V8l6-4 6 4v12M9 20v-5h6v5M9 9h.01M12 9h.01M15 9h.01" />,
     admin: <path d="M12 3 20 6v5c0 5-3.2 8.5-8 10-4.8-1.5-8-5-8-10V6l8-3ZM9 12h6M12 9v6" />,
+    bell: <path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />,
     menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   };
 

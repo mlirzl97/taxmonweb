@@ -5,6 +5,8 @@ import { adaptLiveGeneratedWork } from "./live-work-adapter";
 const work = {
   id: "work-live-1",
   registration_unit_id: "ru-live-1",
+  requirement_id: "requirement-test",
+  requirement_version_id: "requirement-version-test",
   period_label: "September 2026",
   data_readiness: "ready" as const,
   lifecycle_stage: "client_approval" as const,
@@ -43,6 +45,16 @@ describe("live generated work adapter", () => {
     expect(projected.status).toBe("AMBER");
     expect(projected.stage).toBe("CLIENT");
     expect(projected.cluster).toBe("Cluster A");
+    expect(projected.steps.map((step) => step.label)).toEqual([
+      "Preparation",
+      "Checking",
+      "Review",
+      "Client approval",
+      "Filing",
+      "Payment",
+      "Attachments",
+      "Archiving",
+    ]);
   });
 
   it("keeps unresolved readiness visible as a blocker", () => {

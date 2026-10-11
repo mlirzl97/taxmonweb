@@ -47,6 +47,19 @@ export const getAuthenticatedRequestContext = cache(async () => {
 
 export const getAuthenticatedUser = cache(async () => (await getAuthenticatedRequestContext()).user);
 
+export const getAuthenticatedAppUser = cache(async () => {
+  const { client, user } = await getAuthenticatedRequestContext();
+  if (!client || !user) return null;
+
+  const { data } = await client
+    .from("app_users")
+    .select("id, display_name, is_active, account_status, activated_at")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  return data;
+});
+
 export const getAuthenticatedUserProfile = cache(async () => {
   const { client, user } = await getAuthenticatedRequestContext();
 

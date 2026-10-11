@@ -1,28 +1,31 @@
 import { NextResponse } from "next/server";
 
 import type { TaxProfilePersistencePayload } from "@/lib/domain/client-profile-persistence";
+import { apiErrorResponse, inferredApiErrorStatus } from "@/lib/server/api-error";
+import { requireApiCapability } from "@/lib/server/api-authorization";
+import { requireSameOrigin } from "@/lib/server/request-origin";
+import { asRecord, isNonEmptyString } from "@/lib/server/request-input";
 import { getLatestTaxProfileVersion, saveTaxProfileVersion, validateTaxProfileVersion } from "@/lib/server/tax-profile-repository";
-import { getAuthenticatedUser } from "@/lib/supabase/server";
 
 type RouteContext = { params: Promise<{ clientId: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
-  const user = await getAuthenticatedUser();
-  if (!user) return NextResponse.json({ error: "Authentication is required to read a Tax Profile." }, { status: 401 });
+  const denied = await requireApiCapability(["ReviewTaxProfile", "ViewScopedPortfolio", "MaintainClientRepository"]);
+  if (denied) return denied;
 
   try {
     const result = await getLatestTaxProfileVersion((await context.params).clientId);
     return NextResponse.json({ clientFound: result?.clientFound ?? false, data: result?.data ?? null });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to load the saved Tax Profile.";
-    const status = /not authorized|outside the caller|authentication/i.test(message) ? 403 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return apiErrorResponse(error, "Unable to load the saved Tax Profile.", { status: inferredApiErrorStatus(error), logContext: "load Tax Profile" });
   }
 }
 
 export async function POST(request: Request, context: RouteContext) {
-  const user = await getAuthenticatedUser();
-  if (!user) return NextResponse.json({ error: "Authentication is required to change a Tax Profile." }, { status: 401 });
+  const denied = await requireApiCapability(["CorrectTaxProfile", "MaintainClientRepository"]);
+  if (denied) return denied;
+  const originDenied = requireSameOrigin(request);
+  if (originDenied) return originDenied;
 
   let body: unknown;
   try {
@@ -31,8 +34,8 @@ export async function POST(request: Request, context: RouteContext) {
     return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400 });
   }
 
-  if (!body || typeof body !== "object") return NextResponse.json({ error: "Profile command is invalid." }, { status: 400 });
-  const command = body as Record<string, unknown>;
+  const command = asRecord(body);
+  if (!command) return NextResponse.json({ error: "Profile command is invalid." }, { status: 400 });
   const action = command.action;
   const reason = typeof command.reason === "string" ? command.reason.trim() : "";
   if (!reason) return NextResponse.json({ error: "A reason is required for a profile change." }, { status: 400 });
@@ -44,10 +47,16 @@ export async function POST(request: Request, context: RouteContext) {
       return NextResponse.json({ data, state: "active" });
     }
 
-    const payload = command.payload as TaxProfilePersistencePayload | undefined;
-    if (!payload || typeof payload !== "object" || !payload.profile || !payload.assignment) {
+    const rawPayload = asRecord(command.payload);
+    if (!rawPayload || !asRecord(rawPayload.profile) || !asRecord(rawPayload.assignment) || !isNonEmptyString(rawPayload.effectiveFrom) || !isNonEmptyString(rawPayload.reason)) {
       return NextResponse.json({ error: "A complete profile payload is required." }, { status: 400 });
     }
+    const payload: TaxProfilePersistencePayload = {
+      profile: asRecord(rawPayload.profile) ?? {},
+      assignment: asRecord(rawPayload.assignment) ?? {},
+      effectiveFrom: rawPayload.effectiveFrom,
+      reason: rawPayload.reason,
+    };
     const data = await saveTaxProfileVersion((await context.params).clientId, { ...payload, reason });
     if (action === "save-and-validate") {
       const validated = await validateTaxProfileVersion(data.id, reason);
@@ -55,8 +64,6 @@ export async function POST(request: Request, context: RouteContext) {
     }
     return NextResponse.json({ data, state: "ready_for_validation" });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to apply the Tax Profile command.";
-    const status = /not authorized|outside the caller/i.test(message) ? 403 : /required|cannot be activated|invalid/i.test(message) ? 422 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return apiErrorResponse(error, "Unable to apply the Tax Profile command.", { status: inferredApiErrorStatus(error), logContext: "apply Tax Profile command" });
   }
 }

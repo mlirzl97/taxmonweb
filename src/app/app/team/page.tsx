@@ -282,8 +282,8 @@ export default function TeamPage() {
         <div className="module-header__right"><div className="module-actions">{canAddPerson && <button className="button button--primary button--small" onClick={() => openEditor(null)} type="button">Add employee</button>}</div></div>
       </header>
 
-      <nav aria-label="Team views" className="tower-tabs module-tabs team-module-tabs" data-testid="team-module-tabs" role="tablist">
-        {teamViews.map((view) => <button aria-selected={activeView === view.id} className={activeView === view.id ? "tower-tab tower-tab--active" : "tower-tab"} key={view.id} onClick={() => setActiveView(view.id)} role="tab" type="button"><span>{view.label}</span></button>)}
+      <nav aria-label="Team views" className="tower-tabs module-tabs team-module-tabs" data-testid="team-module-tabs">
+        {teamViews.map((view) => <button aria-pressed={activeView === view.id} className={activeView === view.id ? "tower-tab tower-tab--active" : "tower-tab"} key={view.id} onClick={() => setActiveView(view.id)} type="button"><span>{view.label}</span></button>)}
       </nav>
       {!prototypeMode && liveTeamLoading && <p className="team-note" role="status">Loading current people…</p>}
       {!prototypeMode && liveTeamError && <p className="team-note" role="alert">{liveTeamError}</p>}

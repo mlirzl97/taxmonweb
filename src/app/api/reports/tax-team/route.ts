@@ -11,6 +11,7 @@ import { listPersistedTaxTeamReviews } from "@/lib/server/tax-team-review-reposi
 import { listLiveGeneratedWork } from "@/lib/server/generated-work-repository";
 import { adaptLiveGeneratedWork } from "@/lib/domain/live-work-adapter";
 import { liveWorkToTaxTeamReportRow } from "@/lib/domain/live-tax-team-adapter";
+import { apiErrorResponse } from "@/lib/server/api-error";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,37 @@ const scopes: readonly TaxTeamScope[] = ["all", ...fixtureOrganizationScopes.map
 const reportTypes: readonly TaxTeamReportType[] = ["monthly", "qa", "rca", "audit"];
 const dateBases: readonly TaxTeamDateBasis[] = ["milestone", "compliance_period"];
 const groupBys: readonly TaxTeamGroupBy[] = ["tower", "cluster", "owner", "client", "requirement"];
+
+type TaxAuditPackEvidence = {
+  workId: string;
+  client: string;
+  requirement: string;
+  period: string;
+  step: string;
+  kind: string;
+  reference: string;
+  externalDate: string;
+  externalReference: string;
+  channel: string;
+  sharepoint: string;
+  result: string;
+  actor: string;
+  recordedAt: string;
+  note: string;
+};
+
+type TaxAuditPackEvent = {
+  workId: string;
+  actor: string;
+  action: string;
+  summary: string;
+  reason: string;
+  effectiveAt: string;
+  occurredAt: string;
+  correlationId: string;
+  beforeState: string;
+  afterState: string;
+};
 
 function isDate(value: string | null): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
@@ -31,9 +63,10 @@ function parseReportParams(request: NextRequest) {
   const basis = params.get("basis");
   const scope = params.get("scope");
   const group = params.get("group");
+  const client = params.get("client") ?? "";
   if (!reportTypes.includes(report as TaxTeamReportType) || !isDate(from) || !isDate(to) || !dateBases.includes(basis as TaxTeamDateBasis) || !scopes.includes(scope as TaxTeamScope) || !groupBys.includes(group as TaxTeamGroupBy)) return null;
   if (from > to) return null;
-  return { report: report as TaxTeamReportType, from, to, dateBasis: basis as TaxTeamDateBasis, scope: scope as TaxTeamScope, groupBy: group as TaxTeamGroupBy };
+  return { report: report as TaxTeamReportType, from, to, dateBasis: basis as TaxTeamDateBasis, scope: scope as TaxTeamScope, groupBy: group as TaxTeamGroupBy, client };
 }
 
 async function authorizeReport(scope: TaxTeamScope) {
@@ -76,7 +109,7 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
   return lines;
 }
 
-function drawReportPdf(params: NonNullable<ReturnType<typeof parseReportParams>>, rows: ReturnType<typeof getTaxTeamReportRows>, transactionReviews: readonly TaxTeamTransactionReview[], actor: string) {
+function drawReportPdf(params: NonNullable<ReturnType<typeof parseReportParams>>, rows: ReturnType<typeof getTaxTeamReportRows>, transactionReviews: readonly TaxTeamTransactionReview[], actor: string, auditEvidence: readonly TaxAuditPackEvidence[], auditEvents: readonly TaxAuditPackEvent[]) {
   return PDFDocument.create().then(async (document) => {
     const regular = await document.embedFont(StandardFonts.Helvetica);
     const bold = await document.embedFont(StandardFonts.HelveticaBold);
@@ -133,13 +166,13 @@ function drawReportPdf(params: NonNullable<ReturnType<typeof parseReportParams>>
     const drawUnderlyingDetail = () => {
       section(params.report === "audit" ? "Audit detail" : "Underlying obligation detail");
       const columns = [
-        ["Status", 34, 130], ["Requirement / client", 164, 168], ["Period", 332, 70], ["Group", 402, 78], ["Lifecycle", 480, 82], ["Filing", 562, 72], ["Payment", 634, 76], ["Control", 710, 98],
+        ["Status", 34, 110], ["Requirement / client", 144, 155], ["Period", 299, 65], ["Group", 364, 70], ["Lifecycle", 434, 78], ["Filing", 512, 72], ["Payment", 584, 72], ["Attachments", 656, 80], ["Control", 736, 72],
       ] as const;
       const headerY = y;
       columns.forEach(([label, x]) => page.drawText(label, { x, y: headerY, size: 7, font: bold, color: muted }));
       y -= 14;
       for (const row of rows) {
-        const values = [taxTeamMonthlyStatusLabels[row.monthlyStatus], row.requirement, row.period, reportGroupValue(row, params.groupBy), row.lifecycle, row.filing, row.payment, row.control];
+        const values = [taxTeamMonthlyStatusLabels[row.monthlyStatus], row.requirement, row.period, reportGroupValue(row, params.groupBy), row.lifecycle, row.filing, row.payment, row.attachments, row.control];
         const wrappedValues = values.map((value, index) => wrapText(index === 1 ? `${value} · ${row.client}` : value, regular, 7, columns[index][2] - 6).slice(0, 2));
         const rowHeight = Math.max(18, ...wrappedValues.map((lines) => lines.length * 9 + 2));
         ensure(rowHeight + 8);
@@ -212,6 +245,42 @@ function drawReportPdf(params: NonNullable<ReturnType<typeof parseReportParams>>
       drawUnderlyingDetail();
     }
 
+    if (params.report === "audit") {
+      section("Evidence register");
+      const columns = [["Obligation", 34, 130], ["Step / kind", 164, 112], ["Reference", 276, 155], ["Actor", 431, 92], ["Recorded", 523, 88], ["Result / channel", 611, 100], ["Source", 711, 97]] as const;
+      columns.forEach(([label, x]) => page.drawText(label, { x, y, size: 7, font: bold, color: muted }));
+      y -= 14;
+      if (!auditEvidence.length) {
+        text("No evidence records were found in the selected population. This is an unresolved control state, not a positive conclusion.", margin, 8, regular, muted); line(18);
+      } else {
+        for (const evidence of auditEvidence) {
+          const values = [`${evidence.requirement} · ${evidence.client}`, `${evidence.step} · ${evidence.kind}`, [evidence.reference, evidence.externalReference].filter(Boolean).join(" · ") || "Reference missing", evidence.actor || "Actor unavailable", evidence.recordedAt || "Timestamp missing", [evidence.result, evidence.channel].filter(Boolean).join(" · ") || "Result/channel missing", evidence.sharepoint || "No SharePoint reference"];
+          const wrappedValues = values.map((value, index) => wrapText(value, regular, 7, columns[index][2] - 6).slice(0, 3));
+          const rowHeight = Math.max(18, ...wrappedValues.map((lines) => lines.length * 9 + 2));
+          ensure(rowHeight + 8);
+          wrappedValues.forEach((lines, index) => { const [, x] = columns[index]; lines.forEach((lineValue, lineIndex) => page.drawText(lineValue, { x, y: y - lineIndex * 9, size: 7, font: index === 0 ? bold : regular, color: ink })); });
+          y -= rowHeight; page.drawLine({ start: { x: margin, y }, end: { x: 808, y }, thickness: 0.35, color: rgb(0.9, 0.9, 0.9) }); y -= 7;
+        }
+      }
+
+      section("Immutable audit-event register");
+      const eventColumns = [["Occurred", 34, 78], ["Actor", 112, 86], ["Action", 198, 94], ["Summary", 292, 160], ["Before → after", 452, 190], ["Reason / correlation", 642, 166]] as const;
+      eventColumns.forEach(([label, x]) => page.drawText(label, { x, y, size: 7, font: bold, color: muted }));
+      y -= 14;
+      if (!auditEvents.length) {
+        text("No audit events were found for the selected work population. Verify the population and event retention before relying on this pack.", margin, 8, regular, muted); line(18);
+      } else {
+        for (const event of auditEvents) {
+          const values = [event.occurredAt || "Timestamp missing", event.actor || "Actor unavailable", event.action, event.summary, `${event.beforeState || "No before snapshot"} → ${event.afterState || "No after snapshot"}`, [event.reason, event.correlationId].filter(Boolean).join(" · ") || "—"];
+          const wrappedValues = values.map((value, index) => wrapText(value, regular, 7, eventColumns[index][2] - 6).slice(0, 3));
+          const rowHeight = Math.max(18, ...wrappedValues.map((lines) => lines.length * 9 + 2));
+          ensure(rowHeight + 8);
+          wrappedValues.forEach((lines, index) => { const [, x] = eventColumns[index]; lines.forEach((lineValue, lineIndex) => page.drawText(lineValue, { x, y: y - lineIndex * 9, size: 7, font: index === 1 ? bold : regular, color: ink })); });
+          y -= rowHeight; page.drawLine({ start: { x: margin, y }, end: { x: 808, y }, thickness: 0.35, color: rgb(0.9, 0.9, 0.9) }); y -= 7;
+        }
+      }
+    }
+
     ensure(42);
     y -= 4;
     text("Control notes", margin, 10, bold, ink); y -= 15;
@@ -234,9 +303,11 @@ export async function GET(request: NextRequest) {
 
   let rows: ReturnType<typeof getTaxTeamReportRows> = [];
   let transactionReviews: TaxTeamTransactionReview[] = [];
+  let auditEvidence: TaxAuditPackEvidence[] = [];
+  let auditEvents: TaxAuditPackEvent[] = [];
   if (isPrototypeDemoMode()) {
-    rows = filterTaxTeamReportRows(getTaxTeamReportRows(), { from: params.from, to: params.to, dateBasis: params.dateBasis, scope: params.scope });
-    transactionReviews = filterTaxTeamTransactionReviews(getTaxTeamTransactionReviews(), { from: params.from, to: params.to, scope: params.scope });
+    rows = filterTaxTeamReportRows(getTaxTeamReportRows(), params);
+    transactionReviews = filterTaxTeamTransactionReviews(getTaxTeamTransactionReviews(), params);
   } else {
     try {
       const liveWork = await listLiveGeneratedWork();
@@ -246,7 +317,55 @@ export async function GET(request: NextRequest) {
         : { data: [], error: null };
       if (usersError) throw new Error(`Unable to load work owners: ${usersError.message}`);
       const names = new Map((users ?? []).map((user) => [user.id, user.display_name]));
-      rows = filterTaxTeamReportRows(liveWork.map((record) => liveWorkToTaxTeamReportRow(adaptLiveGeneratedWork(record, names))), { from: params.from, to: params.to, dateBasis: params.dateBasis, scope: params.scope });
+      const adaptedWork = liveWork.map((record) => liveWorkToTaxTeamReportRow(adaptLiveGeneratedWork(record, names)));
+      rows = filterTaxTeamReportRows(adaptedWork, params);
+      if (params.report === "audit") {
+        const selectedIds = new Set(rows.map((row) => row.id));
+        const selectedWork = liveWork.filter((record) => selectedIds.has(record.id));
+        auditEvidence = selectedWork.flatMap((record) => {
+          const row = adaptedWork.find((candidate) => candidate.id === record.id);
+          return (record.generated_work_evidence ?? []).map((evidence) => ({
+            workId: record.id,
+            client: row?.client ?? "Taxpayer unresolved",
+            requirement: row?.requirement ?? "Requirement unresolved",
+            period: record.period_label,
+            step: evidence.step_code,
+            kind: evidence.evidence_kind,
+            reference: evidence.reference,
+            externalDate: evidence.external_date ?? "",
+            externalReference: evidence.external_reference ?? "",
+            channel: evidence.external_channel ?? "",
+            sharepoint: evidence.sharepoint_url ?? "",
+            result: evidence.result_status ?? "",
+            actor: names.get(evidence.actor_id) ?? "Authenticated user",
+            recordedAt: evidence.recorded_at,
+            note: evidence.note ?? "",
+          }));
+        });
+        if (selectedIds.size > 0) {
+          const auditClient = await createSupabaseServerClient();
+          if (!auditClient) throw new Error("Supabase is not configured for this environment.");
+          const { data: events, error: eventsError } = await auditClient
+            .from("audit_events")
+            .select("entity_id, actor_display, action, summary, reason, effective_at, occurred_at, correlation_id, before_state, after_state")
+            .eq("entity_type", "generated_compliance_work")
+            .in("entity_id", [...selectedIds])
+            .order("occurred_at", { ascending: true });
+          if (eventsError) throw new Error(`Unable to load audit events: ${eventsError.message}`);
+          auditEvents = (events ?? []).map((event) => ({
+            workId: event.entity_id,
+            actor: event.actor_display,
+            action: event.action,
+            summary: event.summary,
+            reason: event.reason ?? "",
+            effectiveAt: event.effective_at ?? "",
+            occurredAt: event.occurred_at,
+            correlationId: event.correlation_id ?? "",
+            beforeState: event.before_state ? JSON.stringify(event.before_state) : "",
+            afterState: event.after_state ? JSON.stringify(event.after_state) : "",
+          }));
+        }
+      }
       transactionReviews = filterTaxTeamTransactionReviews((await listPersistedTaxTeamReviews()).map((review) => ({
         id: review.review_key,
         date: review.review_date,
@@ -262,12 +381,12 @@ export async function GET(request: NextRequest) {
         awarenessChecked: review.awareness_checked,
         ...(review.certified_by ? { certifiedBy: review.certified_by } : {}),
         ...(review.certified_at ? { certifiedAt: review.certified_at } : {}),
-      })), { from: params.from, to: params.to, scope: params.scope });
+      })), params);
     } catch (error) {
-      return new Response(error instanceof Error ? error.message : "Unable to load the persisted Tax Team review population.", { status: 503 });
+      return apiErrorResponse(error, "Unable to load the persisted Tax Team review population.", { status: 503, logContext: "load persisted Tax Team review population" });
     }
   }
-  const bytes = await drawReportPdf(params, rows, transactionReviews, authorization.actor);
+  const bytes = await drawReportPdf(params, rows, transactionReviews, authorization.actor, auditEvidence, auditEvents);
   const client = await createSupabaseServerClient();
   if (client && !isPrototypeDemoMode()) {
     await client.rpc("append_audit_event", {

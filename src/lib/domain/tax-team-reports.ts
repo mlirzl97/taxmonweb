@@ -79,6 +79,7 @@ export type TaxTeamReportRow = {
   filing: string;
   acceptance: string;
   payment: string;
+  attachments: string;
   evidence: string;
   control: string;
   qa: string;
@@ -114,13 +115,14 @@ export type TaxTeamReportFilters = {
   dateBasis: TaxTeamDateBasis;
   scope: TaxTeamScope;
   groupBy: TaxTeamGroupBy;
+  client: string;
 };
 
 export const taxTeamReportTypes: readonly { id: TaxTeamReportType; label: string; description: string }[] = [
   { id: "monthly", label: "Monthly compliance", description: "Expected work and recorded control position for the selected window." },
   { id: "qa", label: "QA", description: "Review pulled transactions for completeness and record awareness." },
   { id: "rca", label: "RCA", description: "Exception-driven root-cause tracking for material or repeated control failures." },
-  { id: "audit", label: "Audit detail", description: "Traceable obligation context, control facts, and historical accountability." },
+  { id: "audit", label: "Tax Audit Pack", description: "Filing, payment, attachments, evidence, and accountable history." },
 ];
 
 export const taxTeamDateBasisOptions: readonly { id: TaxTeamDateBasis; label: string; description: string }[] = [
@@ -144,7 +146,7 @@ const lifecycleLabels: Record<string, string> = {
   "POST-FILING": "Evidence / post-filing",
 };
 
-function componentState(work: ReturnType<typeof getFixtureWorkRegisterRecords>[number]["work"], label: "Submission" | "Payment" | "Evidence") {
+function componentState(work: ReturnType<typeof getFixtureWorkRegisterRecords>[number]["work"], label: "Submission" | "Payment" | "Attachments" | "Evidence") {
   return work.components.find((component) => component.label === label)?.state ?? "Unknown";
 }
 
@@ -165,6 +167,7 @@ export function getTaxTeamReportRows(): TaxTeamReportRow[] {
   return getFixtureWorkRegisterRecords().map(({ work, calendar }) => {
     const evidence = componentState(work, "Evidence");
     const payment = componentState(work, "Payment");
+    const attachments = componentState(work, "Attachments");
     const filing = filingState(work);
     return {
       id: work.id,
@@ -187,6 +190,7 @@ export function getTaxTeamReportRows(): TaxTeamReportRow[] {
       filing,
       acceptance: acceptanceState(work),
       payment,
+      attachments,
       evidence,
       control: /verified|complete/i.test(evidence) ? "Complete" : "Incomplete",
       qa: "Not configured",
@@ -229,22 +233,22 @@ function rowDate(row: TaxTeamReportRow, basis: TaxTeamDateBasis): number | null 
   return basis === "milestone" ? dateValue(row.date) : compliancePeriodDate(row.period);
 }
 
-export function filterTaxTeamReportRows(rows: readonly TaxTeamReportRow[], filters: Pick<TaxTeamReportFilters, "from" | "to" | "dateBasis" | "scope">): TaxTeamReportRow[] {
+export function filterTaxTeamReportRows(rows: readonly TaxTeamReportRow[], filters: Pick<TaxTeamReportFilters, "from" | "to" | "dateBasis" | "scope"> & Partial<Pick<TaxTeamReportFilters, "client">>): TaxTeamReportRow[] {
   const from = dateValue(filters.from);
   const to = dateValue(filters.to);
   return rows.filter((row) => {
     const date = rowDate(row, filters.dateBasis);
     if (date === null || date < from || date > to) return false;
-    return filters.scope === "all" || row.tower === filters.scope;
+    return (filters.scope === "all" || row.tower === filters.scope) && (!filters.client || row.client === filters.client);
   });
 }
 
-export function filterTaxTeamTransactionReviews(reviews: readonly TaxTeamTransactionReview[], filters: Pick<TaxTeamReportFilters, "from" | "to" | "scope">): TaxTeamTransactionReview[] {
+export function filterTaxTeamTransactionReviews(reviews: readonly TaxTeamTransactionReview[], filters: Pick<TaxTeamReportFilters, "from" | "to" | "scope"> & Partial<Pick<TaxTeamReportFilters, "client">>): TaxTeamTransactionReview[] {
   const from = dateValue(filters.from);
   const to = dateValue(filters.to);
   return reviews.filter((review) => {
     const date = dateValue(review.date);
-    return date >= from && date <= to && (filters.scope === "all" || review.tower === filters.scope);
+    return date >= from && date <= to && (filters.scope === "all" || review.tower === filters.scope) && (!filters.client || review.client === filters.client);
   });
 }
 
@@ -288,4 +292,5 @@ export const defaultTaxTeamReportFilters: TaxTeamReportFilters = {
   dateBasis: "milestone",
   scope: "all",
   groupBy: "tower",
+  client: "",
 };

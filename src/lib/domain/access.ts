@@ -1,5 +1,7 @@
 export const priorityCapabilities = {
-  preparer: ["ViewAssignedWork"],
+  preparer: ["ViewAssignedWork", "ExecuteGeneratedComplianceWork"],
+  checker: ["ViewAssignedWork", "ExecuteGeneratedComplianceWork"],
+  reviewer: ["ViewAssignedWork", "ExecuteGeneratedComplianceWork"],
   taxTeam: [
     "ViewScopedPortfolio",
     "ReviewTaxProfile",
@@ -8,6 +10,8 @@ export const priorityCapabilities = {
     "MaintainDeadlineControl",
     "ViewTaxControlHistory",
     "MaintainClientRepository",
+    "ManageWorkPeriodLock",
+    "PerformWorkQA",
   ],
   hod: [
     "ViewScopedPortfolio",

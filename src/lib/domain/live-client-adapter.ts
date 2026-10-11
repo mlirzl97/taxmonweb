@@ -1,5 +1,6 @@
 import type { PortfolioClient } from "@/lib/server/client-repository";
 import type { FixtureChangeRequestForm, FixtureChangeRequestFormStatus, FixtureChangeRequestFormType, FixtureClient, FixtureContractRepository, FixtureScope, FixtureTaxProfile, FixtureTeamHistory } from "@/lib/fixtures";
+import { formatTin } from "./client-onboarding";
 import { applyPersistedTaxProfileSnapshot, type PersistedTaxProfileSnapshot } from "./client-profile-persistence";
 
 function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
@@ -200,7 +201,7 @@ function buildProfile(client: PortfolioClient, entity?: PortfolioClient["taxpaye
   const source = unit?.registration_source_references[0];
   const baseProfile: FixtureTaxProfile = {
     registeredTaxpayerName: entity?.display_name ?? client.display_name,
-    tinDisplay: entity?.tin ?? "Needs validated source",
+    tinDisplay: entity?.tin ? formatTin(entity.tin) : "Needs validated source",
     branchCode: "Not configured",
     rdoOrLts: "Needs validated source",
     entityType: "Needs validated source",

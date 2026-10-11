@@ -44,6 +44,21 @@ export type ClientOnboardingIdentity = {
   sourceReference: string;
 };
 
+/** Keep the source value numeric; punctuation is presentation only. */
+export function normalizeTinDigits(value: string): string {
+  return value.replace(/\D/g, "").slice(0, 14);
+}
+
+export function formatTin(value: string): string {
+  const digits = normalizeTinDigits(value);
+  if (!digits) return "";
+  return [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6, 9), digits.slice(9, 14)].filter(Boolean).join("-");
+}
+
+export function generatedEntityReference(clientReferenceCode: string): string {
+  return `ENTITY-${clientReferenceCode.trim().toUpperCase()}`.slice(0, 64);
+}
+
 export type ClientOnboardingReadiness = {
   status: "intake_incomplete" | "source_pack_incomplete" | "ready_for_human_review";
   identityGaps: string[];
@@ -54,7 +69,6 @@ export type ClientOnboardingReadiness = {
 const requiredIdentityFields: Array<[keyof ClientOnboardingIdentity, string]> = [
   ["clientReferenceCode", "Client reference code"],
   ["clientDisplayName", "Client display name"],
-  ["entityReferenceCode", "Taxpayer entity reference code"],
   ["entityDisplayName", "Taxpayer entity name"],
   ["unitReferenceCode", "Registration unit reference code"],
   ["unitDisplayName", "Registration unit name"],

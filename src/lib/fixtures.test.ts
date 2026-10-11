@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { fixtureCalendar, fixtureClients, fixtureClock, fixtureEnvironment, fixtureExceptions, fixtureWork, isSanitizedFixtureText, validateFixtureSet } from "./fixtures";
-import { filterFixtureOperationalRecords, getFixtureOperationalRecords, getFixtureWorkRegisterRecords, getLiveOperationalRecords } from "./fixtures-read-model";
+import { filterFixtureOperationalRecords, getFixtureOperationalRecords, getFixtureWorkRegisterRecords, getLiveOperationalRecords, getOperationalRecordsForMode, operationalToday } from "./fixtures-read-model";
+import type { LivePublishedCalendarEntry } from "./server/generated-work-repository";
 
 describe("demo fixture mechanism", () => {
   it("clearly labels local demo data and keeps external documents out of fixtures", () => {
@@ -24,6 +25,12 @@ describe("demo fixture mechanism", () => {
     expect(records).toHaveLength(fixtureCalendar.length);
     expect(records.every((record) => fixtureWork.some((work) => work.id === record.work.id))).toBe(true);
     expect(fixtureClock.today).toBe("2026-10-05");
+  });
+
+  it("routes fixture and live projections through the same mode boundary", () => {
+    expect(getOperationalRecordsForMode(fixtureWork, true)).toHaveLength(fixtureCalendar.length);
+    expect(getOperationalRecordsForMode([fixtureWork[0]], false)).toHaveLength(1);
+    expect(operationalToday(true)).toBe(fixtureClock.today);
   });
 
   it("keeps newly created work in the shared operational projection", () => {
@@ -68,6 +75,28 @@ describe("demo fixture mechanism", () => {
     expect(records[0]?.client).toBeUndefined();
     expect(records[0]?.calendar.client).toBe(liveWork.client);
     expect(records[0]?.calendar.statutoryDeadline).toBe("Rule unresolved");
+  });
+
+  it("joins live work to a released calendar entry by governed requirement context", () => {
+    const liveWork = { ...fixtureWork[0], requirementId: "req-1601eq", requirementVersionId: "req-1601eq-v1", period: "September 2026" };
+    const releasedEntry: LivePublishedCalendarEntry = {
+      id: "calendar-live-01",
+      requirement_id: "req-1601eq",
+      requirement_version_id: "req-1601eq-v1",
+      external_requirement_label: "WHT · 1601EQ",
+      period_or_event: "September 2026",
+      period_start: "2026-09-01",
+      period_end: "2026-09-30",
+      base_statutory_deadline: "2026-10-10",
+      adjusted_statutory_deadline: "2026-10-12",
+      tmf_package_target: "2026-10-09",
+      published_operational_deadline: "2026-10-09",
+      publication_status: "published",
+    };
+    const records = getLiveOperationalRecords([liveWork], [releasedEntry]);
+    expect(records[0]?.calendar.id).toBe("calendar-live-01");
+    expect(records[0]?.calendar.internalDeadline).toBe("2026-10-09");
+    expect(records[0]?.calendar.statutoryDeadline).toBe("2026-10-12");
   });
 
   it("keeps returned correction work visible in general attention", () => {

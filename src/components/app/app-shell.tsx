@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { accessLevelLabel, canAccessModule, firstAllowedRoute, highestAccessLevel, moduleForRoute, personaNavigation, rbacPersonaLabel, rbacPersonaOptions, visibleModuleKeys } from "@/lib/domain/access";
+import type { FixtureWorkItem } from "@/lib/fixtures";
 import { primaryNavigation, restrictedNavigation } from "@/lib/navigation";
-import { useWorkflow, workflowPerspectiveDescription, workflowPerspectiveLabel, WorkflowProvider, type WorkflowPerspective } from "@/lib/workflow-state";
+import { trackModuleView, trackUsageInteractions } from "@/lib/usage-analytics";
+import { useWorkflow, workflowPerspectiveDescription, workflowPerspectiveLabel, workflowProcessRole, workflowProcessRoleLabel, WorkflowProvider, type WorkflowPerspective } from "@/lib/workflow-state";
 import { AntMark } from "../brand/ant-mark";
 import { BrandLockup } from "../brand/brand-lockup";
 import { Icon } from "../ui/icon";
@@ -25,6 +27,7 @@ export function AppShell({ children, email, demoMode = false, calibrationEditMod
   const [isSigningOut, setIsSigningOut] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const firstNavLinkRef = useRef<HTMLAnchorElement>(null);
+  const mobileSidebarRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!sidebarPreferenceHydrated) return;
@@ -49,6 +52,11 @@ export function AppShell({ children, email, demoMode = false, calibrationEditMod
   }, []);
 
   useEffect(() => {
+    trackModuleView(pathname);
+    return trackUsageInteractions(pathname);
+  }, [pathname]);
+
+  useEffect(() => {
     if (!mobileOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -57,6 +65,19 @@ export function AppShell({ children, email, demoMode = false, calibrationEditMod
       if (event.key === "Escape") {
         setMobileOpen(false);
         toggleRef.current?.focus();
+        return;
+      }
+      if (event.key !== "Tab" || !mobileSidebarRef.current) return;
+      const focusable = Array.from(mobileSidebarRef.current.querySelectorAll<HTMLElement>("a[href], button:not(:disabled), input, select, textarea, [tabindex]:not([tabindex=\"-1\"])")).filter((element) => element.offsetParent !== null);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -80,7 +101,7 @@ export function AppShell({ children, email, demoMode = false, calibrationEditMod
     <WorkflowProvider prototypeMode={demoMode}>
     <div className="app-frame">
       <a className="skip-link" href="#main-content">Skip to content</a>
-      <aside className={`app-sidebar${collapsed ? " app-sidebar--collapsed" : ""}${mobileOpen ? " app-sidebar--mobile-open" : ""}`}>
+      <aside aria-label="Application navigation" className={`app-sidebar${collapsed ? " app-sidebar--collapsed" : ""}${mobileOpen ? " app-sidebar--mobile-open" : ""}`} ref={mobileSidebarRef}>
         <div className="app-sidebar__brand">
           {collapsed ? <Link aria-label="TaxMonWeb" className="collapsed-brand" href="/app/control-tower"><AntMark size={30} /></Link> : <BrandLockup />}
         </div>
@@ -92,11 +113,12 @@ export function AppShell({ children, email, demoMode = false, calibrationEditMod
       {mobileOpen && <button aria-label="Close navigation" className="sidebar-backdrop" onClick={() => setMobileOpen(false)} type="button" />}
       <div className="app-main">
         <header className="app-main-header">
-          <button aria-controls="primary-navigation" aria-expanded={isMobile ? mobileOpen : !collapsed} aria-label={isMobile ? (mobileOpen ? "Close modules" : "Open modules") : (collapsed ? "Expand sidebar" : "Collapse sidebar")} className="sidebar-toggle" onClick={() => { if (isMobile) setMobileOpen((open) => !open); else setCollapsed((value) => !value); }} ref={toggleRef} type="button"><Icon name="menu" size={19} /><span className="sidebar-toggle__label">Modules</span></button>
+          <button aria-controls="primary-navigation" aria-expanded={isMobile ? mobileOpen : !collapsed} aria-label={isMobile ? (mobileOpen ? "Close modules" : "Open modules") : (collapsed ? "Expand sidebar" : "Collapse sidebar")} className="sidebar-toggle" data-usage-action="toggle_navigation" onClick={() => { if (isMobile) setMobileOpen((open) => !open); else setCollapsed((value) => !value); }} ref={toggleRef} type="button"><Icon name="menu" size={19} /><span className="sidebar-toggle__label">Modules</span></button>
           <div className="app-main-header__brand"><BrandLockup compact /></div>
           <span className="app-main-header__context">{context}</span>
           <WorkflowPerspectiveControl pathname={pathname} />
           {demoMode ? <span className="prototype-mark">Prototype · Sanitized data</span> : <span className="app-main-header__user">{email}</span>}
+          <ActionNotifications />
           <CurrentPersonaLabel calibrationEditMode={calibrationEditMode} fallback={persona} />
         </header>
         <main className="app-content" id="main-content" tabIndex={-1}><PersonaContent pathname={pathname}>{children}</PersonaContent></main>
@@ -104,6 +126,32 @@ export function AppShell({ children, email, demoMode = false, calibrationEditMod
     </div>
     </WorkflowProvider>
   );
+}
+
+type ActionNotification = { work: FixtureWorkItem; step: FixtureWorkItem["steps"][number]; owner: string };
+
+function ActionNotifications() {
+  const { canActOnProcessStep, getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode } = useWorkflow();
+  const [open, setOpen] = useState(false);
+  const actions = useMemo(() => {
+    const pending: ActionNotification[] = [];
+    for (const work of getWorkItems().map(getEffectiveWork)) {
+      if (prototypeMode && !isWorkVisible(work)) continue;
+      const step = work.steps.find((candidate) => ["current", "blocked", "unresolved"].includes(candidate.state) && canActOnProcessStep(candidate.id, work));
+      if (step) pending.push({ work, step, owner: workflowProcessRoleLabel(workflowProcessRole(step.id)) });
+    }
+    return pending;
+  }, [canActOnProcessStep, getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode]);
+  const countLabel = actions.length === 1 ? "1 pending action" : `${actions.length} pending actions`;
+
+  return <div className={`app-main-header__notifications${open ? " app-main-header__notifications--open" : ""}`}>
+    <button aria-expanded={open} aria-haspopup="dialog" aria-label={countLabel} className="app-main-header__notifications-trigger" onClick={() => setOpen((current) => !current)} type="button"><Icon name="bell" size={17} />{actions.length > 0 && <span aria-hidden="true" className="app-main-header__notifications-count">{actions.length > 9 ? "9+" : actions.length}</span>}</button>
+    {open && <div aria-label="My actions" className="app-main-header__notifications-panel" id="my-actions-panel" role="region">
+      <div className="app-main-header__notifications-heading"><strong>My actions</strong><small>{countLabel}</small></div>
+      {actions.length > 0 ? <div className="app-main-header__notifications-list">{actions.slice(0, 5).map(({ work, step, owner }) => <Link href={`/app/work/${work.id}`} key={work.id}><strong>{step.label}</strong><span>{work.client} · {work.title}</span><small>{work.period} · {owner}</small></Link>)}</div> : <p className="app-main-header__notifications-empty">No pending actions.</p>}
+      <Link className="app-main-header__notifications-footer" href="/app/work?queue=all">View Work</Link>
+    </div>}
+  </div>;
 }
 
 function CurrentPersonaLabel({ calibrationEditMode, fallback }: { calibrationEditMode: boolean; fallback?: string }) {
@@ -155,7 +203,7 @@ function PersonaNavigation({ pathname, firstNavLinkRef, onNavigate }: { pathname
 
   return <>{visibleNavigation.map((item, index) => {
     const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-    return <Link aria-current={isActive ? "page" : undefined} className={isActive ? "primary-nav__link primary-nav__link--active" : "primary-nav__link"} href={item.href} key={item.href} onClick={onNavigate} ref={index === 0 ? firstNavLinkRef : undefined} title={item.label}><Icon name={item.icon} /><span>{item.label}</span></Link>;
+    return <Link aria-current={isActive ? "page" : undefined} className={isActive ? "primary-nav__link primary-nav__link--active" : "primary-nav__link"} data-usage-action={`open_${item.label.toLowerCase().replace(/\s+/g, "_")}`} data-usage-event="navigation" href={item.href} key={item.href} onClick={onNavigate} ref={index === 0 ? firstNavLinkRef : undefined} title={item.label}><Icon name={item.icon} /><span>{item.label}</span></Link>;
   })}</>;
 }
 

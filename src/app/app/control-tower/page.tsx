@@ -10,9 +10,10 @@ type SearchParams = Promise<{ signal?: string; view?: string }>;
 export default async function ControlTowerRoute({ searchParams }: { searchParams: SearchParams }) {
   await requireModuleAccess("control_tower");
   const params = await searchParams;
+  if (params.view === "my-run") redirect("/app/work?view=run");
   if (params.signal === "attention") redirect("/app/work?due=attention");
   if (params.view === "due") redirect("/app/work");
   const initialScope = await getAuthorizedControlTowerScope();
   const profile = await getAuthenticatedUserProfile();
-  return <ControlTowerPage displayName={profile?.displayName ?? "Master Admin"} initialScope={initialScope} initialView={params.view === "my-run" ? "my-run" : "overview"} />;
+  return <ControlTowerPage displayName={profile?.displayName ?? "Master Admin"} initialScope={initialScope} />;
 }

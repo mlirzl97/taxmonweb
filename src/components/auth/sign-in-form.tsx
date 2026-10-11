@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -61,6 +62,7 @@ export function SignInForm({ isConfigured }: SignInFormProps) {
       <button className="button button--primary button--full" disabled={!isConfigured || isSubmitting} type="submit">
         {isSubmitting ? "Signing in…" : "Sign in"}
       </button>
+      <Link className="auth-back-link" href="/forgot-password">Forgot password?</Link>
       <p className="form-footnote">Access is provided through the configured TaxMonWeb Supabase Auth project.</p>
     </form>
   );

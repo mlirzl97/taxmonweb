@@ -29,6 +29,94 @@ describe("manual client setup contract", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("generates the internal entity reference and normalizes a source-formatted TIN", () => {
+    const result = parseManualClientSetupInput({
+      clientReferenceCode: "CLIENT-TIN-001",
+      clientDisplayName: "Cresthaven Consumer Products Inc.",
+      entityDisplayName: "Cresthaven Consumer Products Inc.",
+      tin: "123-456-789-00000",
+      unitReferenceCode: "RU-TIN-001",
+      unitDisplayName: "Head Office",
+      unitKind: "head_office",
+      organizationUnitId: "00000000-0000-4000-8000-000000000001",
+      sourceReference: "2303-reference-tin-001",
+      sourceSystem: "manual_reference",
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.entityReferenceCode).toBe("ENTITY-CLIENT-TIN-001");
+      expect(result.value.tin).toBe("12345678900000");
+    }
+  });
+
+  it("preserves canonical tax type codes selected during onboarding", () => {
+    const result = parseManualClientSetupInput({
+      clientReferenceCode: "CLIENT-TAX-TYPES",
+      clientDisplayName: "Cresthaven Consumer Products Inc.",
+      entityReferenceCode: "ENTITY-TAX-TYPES",
+      entityDisplayName: "Cresthaven Consumer Products Inc.",
+      unitReferenceCode: "RU-TAX-TYPES",
+      unitDisplayName: "Head Office",
+      unitKind: "head_office",
+      organizationUnitId: "00000000-0000-4000-8000-000000000001",
+      sourceReference: "2303-reference-001",
+      sourceSystem: "manual_reference",
+      profileData: {
+        registeredTaxTypeCodes: ["CIT", "VAT"],
+        registeredTaxTypes: ["CIT", "VAT"],
+        booksType: "CAS/CBA",
+        invoicing: "Source wording",
+        enateSetup: "Yes",
+        paymentRoute: "TMF Pays",
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.profileData).toMatchObject({ registeredTaxTypeCodes: ["CIT", "VAT"], booksType: "CAS/CBA", invoicing: "Source wording", enateSetup: "Yes", paymentRoute: "TMF Pays" });
+  });
+
+  it("preserves governed return-form proposals separately from source tax wording", () => {
+    const result = parseManualClientSetupInput({
+      clientReferenceCode: "CLIENT-RETURNS",
+      clientDisplayName: "Cresthaven Consumer Products Inc.",
+      entityReferenceCode: "ENTITY-RETURNS",
+      entityDisplayName: "Cresthaven Consumer Products Inc.",
+      unitReferenceCode: "RU-RETURNS",
+      unitDisplayName: "Head Office",
+      unitKind: "head_office",
+      organizationUnitId: "00000000-0000-4000-8000-000000000001",
+      sourceReference: "2303-reference-002",
+      sourceSystem: "manual_reference",
+      profileData: {
+        registeredTaxTypes: ["Withholding Tax"],
+        proposedReturnCodes: ["0619-E", "1601-EQ", "0619-E"],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.profileData?.proposedReturnCodes).toEqual(["0619-E", "1601-EQ"]);
+  });
+
+  it("rejects return forms outside the current governed form catalog", () => {
+    const result = parseManualClientSetupInput({
+      clientReferenceCode: "CLIENT-RETURNS-INVALID",
+      clientDisplayName: "Cresthaven Consumer Products Inc.",
+      entityReferenceCode: "ENTITY-RETURNS-INVALID",
+      entityDisplayName: "Cresthaven Consumer Products Inc.",
+      unitReferenceCode: "RU-RETURNS-INVALID",
+      unitDisplayName: "Head Office",
+      unitKind: "head_office",
+      organizationUnitId: "00000000-0000-4000-8000-000000000001",
+      sourceReference: "2303-reference-003",
+      sourceSystem: "manual_reference",
+      profileData: { proposedReturnCodes: ["9999-X"] },
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors).toContain("profileData.proposedReturnCodes must contain only return forms from the current governed form catalog.");
+  });
+
   it("accepts a client-specific timing policy without changing statutory deadline truth", () => {
     const result = parseManualClientSetupInput({
       clientReferenceCode: "FIXTURE-CLIENT-TIMING",

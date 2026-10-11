@@ -1,30 +1,33 @@
 import { NextResponse } from "next/server";
 
 import { listLiveTeamMembers, saveLiveTeamMemberProfile, type SaveLiveTeamMemberProfileInput } from "@/lib/server/team-repository";
+import { apiErrorResponse, inferredApiErrorStatus } from "@/lib/server/api-error";
+import { requireApiCapability } from "@/lib/server/api-authorization";
+import { requireSameOrigin } from "@/lib/server/request-origin";
+import { asRecord, isNonEmptyString } from "@/lib/server/request-input";
 import { isPrototypeDemoMode } from "@/lib/supabase/config";
-import { getAuthenticatedUser } from "@/lib/supabase/server";
 
 export async function GET() {
-  if (!(await getAuthenticatedUser())) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const denied = await requireApiCapability(["ViewScopedPortfolio", "AdministerUsers", "AdministerOrganization"]);
+  if (denied) return denied;
 
   try {
     return NextResponse.json({ data: await listLiveTeamMembers(), source: "live", fixtureSafe: true });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to load Team." }, { status: 500 });
+    return apiErrorResponse(error, "Unable to load Team.", { logContext: "load Team" });
   }
 }
 
 function responseError(error: unknown) {
-  const message = error instanceof Error ? error.message : "Unable to save the Team profile.";
-  const status = /authorized|authentication|capability|outside|reporting|career|organization/i.test(message) ? 403 : 500;
-  return NextResponse.json({ error: message }, { status });
+  return apiErrorResponse(error, "Unable to save the Team profile.", { status: inferredApiErrorStatus(error), logContext: "save Team profile" });
 }
 
 export async function POST(request: Request) {
+  const denied = await requireApiCapability(["AdministerUsers", "AdministerOrganization"]);
+  if (denied) return denied;
+  const originDenied = requireSameOrigin(request);
+  if (originDenied) return originDenied;
   if (isPrototypeDemoMode()) return NextResponse.json({ error: "Prototype mode uses the sanitized browser roster." }, { status: 409 });
-  if (!(await getAuthenticatedUser())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   let body: unknown;
   try {
@@ -33,14 +36,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400 });
   }
 
-  const input = body as Record<string, unknown>;
-  if (input.action !== "save" || !input.payload || typeof input.payload !== "object") {
+  const input = asRecord(body);
+  if (!input || input.action !== "save") {
     return NextResponse.json({ error: "Unsupported Team action." }, { status: 400 });
   }
 
-  const payload = input.payload as Record<string, unknown>;
+  const payload = asRecord(input.payload);
+  if (!payload) return NextResponse.json({ error: "Unsupported Team action." }, { status: 400 });
   const requiredStrings = ["userId", "title", "organizationUnitId", "effectiveFrom", "careerServiceLevel", "operatingModel"];
-  if (requiredStrings.some((key) => typeof payload[key] !== "string" || !String(payload[key]).trim())) {
+  if (requiredStrings.some((key) => !isNonEmptyString(payload[key]))) {
     return NextResponse.json({ error: "User, title, organizational unit, effective date, career level, and operating model are required." }, { status: 400 });
   }
 

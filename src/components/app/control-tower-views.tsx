@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { fixtureClock, fixtureCalendar, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
-import { dateValue, filterFixtureOperationalRecords, getFixtureOperationalRecords, getFixtureWorkRegisterRecords, getLiveOperationalRecords, type DuePreset } from "@/lib/fixtures-read-model";
+import { fixtureCalendar, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
+import { dateValue, filterFixtureOperationalRecords, getFixtureWorkRegisterRecords, type DuePreset } from "@/lib/fixtures-read-model";
 import { useWorkflow } from "@/lib/workflow-state";
 import { FilterTabs, isInScope, scopeLabelForValue, type ScopeFilter, WorkDetail } from "./workspace-components";
 
@@ -20,19 +21,43 @@ function returnPackageDetail(milestones: readonly (typeof fixtureCalendar)[numbe
   return milestones.some((item) => /QAP/i.test(item.returnLabel)) ? "QAP sequence included" : fallback;
 }
 
+function OperationalRegisterHeader({ mode }: { mode: "due" | "work" }) {
+  return <div className={mode === "due" ? "due-register__header" : "work-register__header"}><span>Target</span><span>{mode === "due" ? "Taxpayer" : "Client"}</span><span>Return / submission</span><span>Period</span><span>Stage / status</span><span>Owner</span><span>Attention</span></div>;
+}
+
+function OperationalRegisterRow({ mode, record, onSelect }: { mode: "due" | "work"; record: { calendar: (typeof fixtureCalendar)[number]; work: FixtureWorkItem; milestones?: readonly (typeof fixtureCalendar)[number][] }; onSelect: (workId: string) => void }) {
+  const { calendar: item, work } = record;
+  const milestones = record.milestones ?? [item];
+  const currentStep = work.steps.find((step) => step.state === "current" || step.state === "blocked" || step.state === "waiting") ?? work.steps[work.steps.length - 1];
+  const rowClass = mode === "due" ? "due-register__row" : "work-register__row";
+  const dateClass = mode === "due" ? "due-register__date" : "work-register__date";
+  const periodClass = mode === "due" ? "due-register__period" : "work-register__period";
+  const attentionClass = mode === "due" ? "due-register__attention" : "work-register__attention";
+
+  return <button className={rowClass} key={mode === "due" ? item.id : work.id} onClick={() => onSelect(work.id)} type="button">
+    <span className={`${dateClass} ${dateClass}--${work.status.toLowerCase()}`}><strong>{item.calendarDate.slice(-2)}</strong><small>{item.internalDeadline.replace(/^.*?·\s*/, "")}</small></span>
+    <span><strong>{item.client}</strong><small>{mode === "due" ? scopeLabelForValue(item.scope) : `${work.registrationUnit} · ${scopeLabelForValue(work.scope)}`}</small></span>
+    <span><strong>{mode === "work" ? compactReturnPackageLabel(milestones) : compactReturnLabel(item.returnLabel)}</strong><small>{mode === "work" ? returnPackageDetail(milestones, item.milestone) : item.milestone}</small></span>
+    <span className={periodClass}>{item.period}</span>
+    {mode === "due" ? <span><span className={`rag-text rag-text--${work.status.toLowerCase()}`}>{work.stage}</span><small>{work.statusReason}</small></span> : <span><span className={`rag-text rag-text--${work.status.toLowerCase()}`}>{work.status}</span><strong>{currentStep?.label}</strong><small>{stepCount(work)}</small></span>}
+    <span><strong>{work.owner}</strong><small>{scopeLabelForValue(mode === "due" ? item.scope : work.scope)}</small></span>
+    <span className={attentionClass}>{mode === "due" ? <>{work.blocker?.category ?? (work.status === "GREEN" ? "—" : "Review")}</> : <><strong>{work.blocker?.category ?? "Next action"}</strong><small>{work.blocker?.reason ?? work.nextAction}</small></>}</span>
+  </button>;
+}
+
 export function DueRegisterView({ scope, preset = "all", dateFilter, onClearDate }: { scope: ScopeFilter; preset?: DuePreset; dateFilter?: string | null; onClearDate?: () => void }) {
   const [search, setSearch] = useState("");
   const [due, setDue] = useState<DuePreset>(preset);
   const [status, setStatus] = useState<"all" | FixtureStatus>("all");
   const [selectedWorkId, setSelectedWorkId] = useState<string | null>(null);
 
-  const { getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode } = useWorkflow();
+  const { getEffectiveWork, getOperationalRecords, getWorkItems, isWorkVisible, operationalToday, prototypeMode } = useWorkflow();
   const workItems = getWorkItems();
-  const today = prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10);
-  const operationalRecords = useMemo(() => (prototypeMode ? getFixtureOperationalRecords(workItems) : getLiveOperationalRecords(workItems)).flatMap((record) => {
+  const today = operationalToday;
+  const operationalRecords = useMemo(() => getOperationalRecords().flatMap((record) => {
     const work = getEffectiveWork(record.work);
     return (prototypeMode ? isWorkVisible(work) : true) ? [{ ...record, work, status: work.status }] : [];
-  }), [getEffectiveWork, isWorkVisible, prototypeMode, workItems]);
+  }), [getEffectiveWork, getOperationalRecords, isWorkVisible, prototypeMode]);
   const rows = useMemo(() => filterFixtureOperationalRecords(operationalRecords, { dateFilter, due, scope, search, status, today }).sort((a, b) => dateValue(a.calendar.calendarDate) - dateValue(b.calendar.calendarDate)), [dateFilter, due, operationalRecords, scope, search, status, today]);
 
   const selectedWork = selectedWorkId ? workItems.find((work) => work.id === selectedWorkId) : undefined;
@@ -49,18 +74,7 @@ export function DueRegisterView({ scope, preset = "all", dateFilter, onClearDate
       <section aria-labelledby="due-register-title" className="panel panel--table due-register-panel">
                 <div className="section-heading"><div><h2 id="due-register-title">Due register</h2></div><span className="section-heading__note">{dateFilter ? `Due ${dateFilter}` : "Internal target first"}</span></div>
         <div className="due-register" aria-label="Due register">
-          <div className="due-register__header"><span>Target</span><span>Taxpayer</span><span>Return / submission</span><span>Period</span><span>Stage / status</span><span>Owner</span><span>Attention</span></div>
-          {rows.length === 0 ? <div className="inline-empty">No due work matches these filters.</div> : rows.map(({ calendar: item, work }) => {
-            return <button className="due-register__row" key={item.id} onClick={() => setSelectedWorkId(work.id)} type="button">
-              <span className={`due-register__date due-register__date--${work.status.toLowerCase()}`}><strong>{item.calendarDate.slice(-2)}</strong><small>{item.internalDeadline.replace(/^.*?·\s*/, "")}</small></span>
-              <span><strong>{item.client}</strong><small>{scopeLabelForValue(item.scope)}</small></span>
-              <span><strong>{compactReturnLabel(item.returnLabel)}</strong><small>{item.milestone}</small></span>
-              <span className="due-register__period">{item.period}</span>
-              <span><span className={`rag-text rag-text--${work.status.toLowerCase()}`}>{work.stage}</span><small>{work.statusReason}</small></span>
-              <span>{work.owner}<small>{scopeLabelForValue(item.scope)}</small></span>
-              <span className="due-register__attention">{work.blocker?.category ?? (work.status === "GREEN" ? "—" : "Review")}</span>
-            </button>;
-          })}
+          {rows.length === 0 ? <div className="inline-empty">No due work matches these filters.</div> : <><OperationalRegisterHeader mode="due" />{rows.map((record) => <OperationalRegisterRow key={record.calendar.id} mode="due" onSelect={setSelectedWorkId} record={record} />)}</>}
         </div>
       </section>
       <p className="deadline-note">The target is the TMF package target. Statutory and adjusted deadlines remain available in the work detail.</p>
@@ -83,13 +97,13 @@ export function WorkRegisterView({ scope, initialDue = "all", initialQueue = "al
   const [queue, setQueue] = useState<WorkQueueFilter>(initialQueue);
   const [sort, setSort] = useState<"priority" | "deadline" | "client">("priority");
   const [selectedWorkId, setSelectedWorkId] = useState<string | null>(null);
-  const { getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode } = useWorkflow();
+  const { getEffectiveWork, getOperationalRecords, getWorkItems, isWorkVisible, operationalToday, prototypeMode } = useWorkflow();
   const workItems = getWorkItems();
-  const reviewDate = prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10);
-  const operationalRecords = useMemo(() => (prototypeMode ? getFixtureOperationalRecords(workItems) : getLiveOperationalRecords(workItems)).flatMap((record) => {
+  const reviewDate = operationalToday;
+  const operationalRecords = useMemo(() => getOperationalRecords().flatMap((record) => {
     const work = getEffectiveWork(record.work);
     return (prototypeMode ? isWorkVisible(work) : true) ? [{ ...record, work, status: work.status }] : [];
-  }), [getEffectiveWork, isWorkVisible, prototypeMode, workItems]);
+  }), [getEffectiveWork, getOperationalRecords, isWorkVisible, prototypeMode]);
   const records = useMemo(() => {
     const dueRecords = filterFixtureOperationalRecords(operationalRecords, { due, scope, search, status, today: reviewDate });
     const workRecords = getFixtureWorkRegisterRecords(dueRecords, reviewDate).filter(({ work, milestones }) => {
@@ -130,22 +144,10 @@ export function WorkRegisterView({ scope, initialDue = "all", initialQueue = "al
         <span className="due-controls__count">{records.length} work items</span>
       </div>
       <section aria-labelledby="work-register-title" className="panel panel--table due-register-panel work-register-panel">
-        <div className="section-heading section-heading--queue"><div><h2 id="work-register-title">Work register</h2></div><div className="section-heading__actions"><span className="section-heading__note">{counts.all} in scope</span></div></div>
-        <FilterTabs label="Work Register filters" onChange={setQueue} options={[{ id: "all", label: "All work", count: counts.all }, { id: "today", label: "Do today", count: counts.today }, { id: "waiting", label: "Waiting", count: counts.waiting }, { id: "attention", label: "Needs attention", count: counts.attention }]} value={queue} />
+        <div className="section-heading section-heading--queue"><div><h2 id="work-register-title">Work register</h2></div><div className="section-heading__actions"><span className="section-heading__note">{counts.all} in scope</span><Link className="text-link" href={queue === "all" ? "/app/work?queue=attention" : "/app/work?queue=all"}>{queue === "all" ? "Needs attention" : "View all"}</Link></div></div>
+        {queue === "all" ? <div aria-label="Work queue" className="filter-tabs filter-tabs--context"><span className="filter-tabs__context-label">All current work</span></div> : <FilterTabs label="Work queue" onChange={setQueue} options={[{ id: "today", label: "Do today", count: counts.today }, { id: "waiting", label: "Waiting", count: counts.waiting }, { id: "attention", label: "Needs attention", count: counts.attention }]} value={queue} />}
         <div className="work-register" aria-label="Work register">
-          <div className="work-register__header"><span>Target</span><span>Client</span><span>Return / submission</span><span>Period</span><span>Stage / status</span><span>Owner</span><span>Attention</span></div>
-          {records.length === 0 ? <div className="inline-empty">No work matches these filters.</div> : records.map(({ calendar: item, milestones, work }) => {
-            const currentStep = work.steps.find((step) => step.state === "current" || step.state === "blocked" || step.state === "waiting") ?? work.steps[work.steps.length - 1];
-            return <button className="work-register__row" key={work.id} onClick={() => setSelectedWorkId(work.id)} type="button">
-              <span className={`work-register__date work-register__date--${work.status.toLowerCase()}`}><strong>{item.calendarDate.slice(-2)}</strong><small>{item.internalDeadline.replace(/^.*?·\s*/, "")}</small></span>
-              <span><strong>{item.client}</strong><small>{work.registrationUnit} · {scopeLabelForValue(work.scope)}</small></span>
-              <span><strong>{compactReturnPackageLabel(milestones)}</strong><small>{returnPackageDetail(milestones, item.milestone)}</small></span>
-              <span className="work-register__period">{item.period}</span>
-              <span><span className={`rag-text rag-text--${work.status.toLowerCase()}`}>{work.status}</span><strong>{currentStep?.label}</strong><small>{stepCount(work)}</small></span>
-              <span><strong>{work.owner}</strong><small>{scopeLabelForValue(work.scope)}</small></span>
-              <span className="work-register__attention"><strong>{work.blocker?.category ?? "Next action"}</strong><small>{work.blocker?.reason ?? work.nextAction}</small></span>
-            </button>;
-          })}
+          {records.length === 0 ? <div className="inline-empty">No work matches these filters.</div> : <><OperationalRegisterHeader mode="work" />{records.map((record) => <OperationalRegisterRow key={record.work.id} mode="work" onSelect={setSelectedWorkId} record={record} />)}</>}
         </div>
       </section>
       {selectedWork && <WorkDetail onClose={() => setSelectedWorkId(null)} work={selectedWork} />}
@@ -176,8 +178,8 @@ export function DueRegisterWorkspace({ scope, initialDate = null, initialDue = "
 export function CalendarView({ scope, selectedDate, onSelectDate, includeDueRegister = true }: { scope: ScopeFilter; selectedDate?: string | null; onSelectDate?: (date: string) => void; includeDueRegister?: boolean }) {
   const [selectedWorkId, setSelectedWorkId] = useState<string | null>(null);
   const selectedDateParts = selectedDate?.match(/^(\d{4})-(\d{2})-/);
-  const { getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode } = useWorkflow();
-  const runtimeToday = prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10);
+  const { getEffectiveWork, getOperationalRecords, getWorkItems, isWorkVisible, operationalToday, prototypeMode } = useWorkflow();
+  const runtimeToday = operationalToday;
   const [displayMonth, setDisplayMonth] = useState({ year: selectedDateParts ? Number(selectedDateParts[1]) : Number(runtimeToday.slice(0, 4)), month: selectedDateParts ? Number(selectedDateParts[2]) - 1 : Number(runtimeToday.slice(5, 7)) - 1 });
   const workItems = getWorkItems();
   const { year, month } = displayMonth;
@@ -186,10 +188,10 @@ export function CalendarView({ scope, selectedDate, onSelectDate, includeDueRegi
   const cells = Array.from({ length: firstDay + daysInMonth }, (_, index) => index < firstDay ? null : index - firstDay + 1);
   const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
   const monthLabel = new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(new Date(year, month, 1));
-  const operationalRecords = useMemo(() => (prototypeMode ? getFixtureOperationalRecords(workItems) : getLiveOperationalRecords(workItems)).flatMap((record) => {
+  const operationalRecords = useMemo(() => getOperationalRecords().flatMap((record) => {
     const work = getEffectiveWork(record.work);
     return (prototypeMode ? isWorkVisible(work) : true) ? [{ ...record, work, status: work.status }] : [];
-  }), [getEffectiveWork, isWorkVisible, prototypeMode, workItems]);
+  }), [getEffectiveWork, getOperationalRecords, isWorkVisible, prototypeMode]);
   const scopedItems = operationalRecords.filter((record) => isInScope(record.scope, scope));
   const monthItems = scopedItems.filter(({ calendar: item }) => item.calendarDate.startsWith(monthKey));
 

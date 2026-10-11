@@ -141,7 +141,7 @@ export function TeamRosterEditor({ members, load, editingMemberId, initialActive
   const hasCases = (currentLoad?.activeSpecialistCases ?? 0) > 0;
 
   return (
-    <form aria-label={isNew ? "Add employee" : `Edit ${draft.name || "team member"}`} className="team-editor team-editor--drawer" onSubmit={submit}>
+    <form aria-label={isNew ? "Add employee" : `Edit ${draft.name || "team member"}`} className="team-editor team-editor--drawer" data-usage-form="team_member_setup" onSubmit={submit}>
       <div className="team-editor__grid">
           <label className="form-field"><span>Name</span><input autoComplete="off" onChange={(event) => update("name", event.target.value)} value={draft.name} /></label>
           <label className="form-field"><span>Operating title</span><select onChange={(event) => update("title", event.target.value)} value={draft.title}>{titleOptions.map((title) => <option key={title} value={title}>{title}</option>)}</select></label>

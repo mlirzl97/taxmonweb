@@ -1,27 +1,33 @@
 import { NextResponse } from "next/server";
 
-import { listPersistedTaxTeamReviews, savePersistedTaxTeamReview } from "@/lib/server/tax-team-review-repository";
-import { getAuthenticatedUser } from "@/lib/supabase/server";
+import { isTaxTeamReviewInput, listPersistedTaxTeamReviews, savePersistedTaxTeamReview } from "@/lib/server/tax-team-review-repository";
+import { apiErrorResponse, inferredApiErrorStatus } from "@/lib/server/api-error";
+import { requireApiCapability } from "@/lib/server/api-authorization";
+import { requireSameOrigin } from "@/lib/server/request-origin";
 
 export async function GET() {
-  if (!(await getAuthenticatedUser())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = await requireApiCapability(["ViewTaxControlHistory", "ValidateTaxProfile"]);
+  if (denied) return denied;
   try {
     return NextResponse.json({ data: await listPersistedTaxTeamReviews() });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to load Tax Team transaction reviews." }, { status: 500 });
+    return apiErrorResponse(error, "Unable to load Tax Team transaction reviews.", { logContext: "load Tax Team transaction reviews" });
   }
 }
 
 export async function POST(request: Request) {
-  if (!(await getAuthenticatedUser())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const denied = await requireApiCapability(["ValidateTaxProfile"]);
+  if (denied) return denied;
+  const originDenied = requireSameOrigin(request);
+  if (originDenied) return originDenied;
   let input: unknown;
   try { input = await request.json(); } catch { return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400 }); }
   if (!input || typeof input !== "object") return NextResponse.json({ error: "A transaction review is required." }, { status: 400 });
   try {
-    const data = await savePersistedTaxTeamReview(input as Parameters<typeof savePersistedTaxTeamReview>[0]);
+    if (!isTaxTeamReviewInput(input)) return NextResponse.json({ error: "The transaction review is incomplete or invalid." }, { status: 400 });
+    const data = await savePersistedTaxTeamReview(input);
     return NextResponse.json({ data });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to save Tax Team transaction review.";
-    return NextResponse.json({ error: message }, { status: /authorized|authentication/i.test(message) ? 403 : 422 });
+    return apiErrorResponse(error, "Unable to save Tax Team transaction review.", { status: inferredApiErrorStatus(error, 422), logContext: "save Tax Team transaction review" });
   }
 }

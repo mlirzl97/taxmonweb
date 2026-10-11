@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import { fixtureClock, fixtureWork, type FixtureStatus } from "@/lib/fixtures";
-import { getFixtureOperationalRecords, getLiveOperationalRecords } from "@/lib/fixtures-read-model";
+import { deriveTeamControlPulses, deriveTeamMemberLoad, deriveTeamTowerSummary } from "@/lib/domain/team";
+import { fixtureClients, fixtureOrgDirectoryMembers, fixtureWork, type FixtureStatus } from "@/lib/fixtures";
 import { useWorkflow } from "@/lib/workflow-state";
-import { MyRunView } from "@/components/app/my-run-view";
 import { FixturePageFrame, isInScope, PageHeader, type ScopeFilter, WorkDetail } from "@/components/app/workspace-components";
+import { scopeOptions } from "@/lib/control-tower-state";
 
 function isImmediateAction(work: (typeof fixtureWork)[number]) {
   const overdue = work.deadline.toLowerCase().includes("overdue");
@@ -20,36 +20,34 @@ function shortMonth(date: string) {
 }
 
 type PulseFilter = "ALL" | FixtureStatus;
-type ControlTowerView = "overview" | "my-run";
-
 function matchesPulseFilter(work: (typeof fixtureWork)[number], filter: PulseFilter) {
   return filter === "ALL" || work.status === filter;
 }
 
-export default function ControlTowerPage({ displayName, initialScope, initialView = "overview" }: { displayName: string; initialScope: ScopeFilter | null; initialView?: ControlTowerView }) {
+export default function ControlTowerPage({ displayName, initialScope }: { displayName: string; initialScope: ScopeFilter | null }) {
   if (initialScope === null) {
     return <FixturePageFrame><PageHeader action={<ControlTowerGreeting displayName={displayName} />} description="Portfolio control, pressure, and intervention." title="Control Tower" /><section aria-labelledby="scope-required-title" className="panel access-state"><h2 id="scope-required-title">Workspace access is not configured</h2><p>Your account has no active organizational scope for this workspace. Ask an administrator to assign a Team, Tower, Cluster, Tax Control, or All A&amp;T scope.</p></section></FixturePageFrame>;
   }
 
-  return <ScopedControlTowerPage displayName={displayName} initialScope={initialScope} initialView={initialView} />;
+  return <ScopedControlTowerPage initialScope={initialScope} />;
 }
 
 function ControlTowerGreeting({ displayName }: { displayName: string }) {
   return <div aria-label={`Greeting for ${displayName}`} className="control-tower-greeting"><span className="eyebrow">Welcome</span><strong>Hello {displayName}</strong></div>;
 }
 
-function ScopedControlTowerPage({ displayName, initialScope, initialView }: { displayName: string; initialScope: ScopeFilter; initialView: ControlTowerView }) {
+function ScopedControlTowerPage({ initialScope }: { initialScope: ScopeFilter }) {
   const [selectedWorkId, setSelectedWorkId] = useState<string | null>(null);
   const [pulseFilter, setPulseFilter] = useState<PulseFilter>("ALL");
-  const { getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode, workPerspective } = useWorkflow();
+  const { getEffectiveWork, getOperationalRecords, getWorkItems, isWorkVisible, operationalToday, prototypeMode, workPerspective } = useWorkflow();
   const workItems = getWorkItems();
-  const today = prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10);
+  const today = operationalToday;
 
   const visibleWork = useMemo(() => workItems.map(getEffectiveWork).filter((work) => (prototypeMode ? isWorkVisible(work) : true) && isInScope(work.scope, initialScope)), [getEffectiveWork, initialScope, isWorkVisible, prototypeMode, workItems]);
-  const operationalRecords = useMemo(() => (prototypeMode ? getFixtureOperationalRecords(workItems) : getLiveOperationalRecords(workItems)).flatMap((record) => {
+  const operationalRecords = useMemo(() => getOperationalRecords().flatMap((record) => {
     const work = getEffectiveWork(record.work);
     return (prototypeMode ? isWorkVisible(work) : true) && isInScope(record.scope, initialScope) ? [{ ...record, work, status: work.status }] : [];
-  }), [getEffectiveWork, initialScope, isWorkVisible, prototypeMode, workItems]);
+  }), [getEffectiveWork, getOperationalRecords, initialScope, isWorkVisible, prototypeMode]);
 
   const intervention = visibleWork.filter(isImmediateAction);
   const blocked = visibleWork.filter((work) => work.blocker);
@@ -77,17 +75,23 @@ function ScopedControlTowerPage({ displayName, initialScope, initialView }: { di
     : controlViewState === "warning"
       ? `${missingWorkMessage} · ${unmatchedDueMessage}`
       : "This is not an All Clear result.";
+  const canViewTeamProgress = ["TOWER_LEADER", "CLUSTER_LEADER", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective);
+  const visibleClients = useMemo(() => prototypeMode ? fixtureClients.filter((client) => isInScope(client.scope, initialScope)) : [], [initialScope, prototypeMode]);
+  const teamProgress = useMemo(() => {
+    if (!canViewTeamProgress || !prototypeMode) return [];
+    const load = deriveTeamMemberLoad(fixtureOrgDirectoryMembers, visibleClients, visibleWork);
+    const summaries = deriveTeamTowerSummary(load, visibleClients, visibleWork);
+    const pulses = deriveTeamControlPulses(visibleWork);
+    return summaries.map((summary) => ({
+      ...summary,
+      pulse: pulses.find((pulse) => pulse.scope === summary.tower),
+      scopeFilter: scopeOptions.find((option) => option.scopeValue === summary.tower)?.id ?? "all",
+    }));
+  }, [canViewTeamProgress, prototypeMode, visibleClients, visibleWork]);
 
   return (
     <FixturePageFrame>
-      <PageHeader action={<ControlTowerGreeting displayName={displayName} />} title="Control Tower" />
-
-      <nav aria-label="Control Tower views" className="tower-tabs module-tabs" role="tablist">
-        <Link aria-current={initialView === "overview" ? "page" : undefined} className={initialView === "overview" ? "tower-tab tower-tab--active" : "tower-tab"} href="/app/control-tower" role="tab">Portfolio</Link>
-        <Link aria-current={initialView === "my-run" ? "page" : undefined} className={initialView === "my-run" ? "tower-tab tower-tab--active" : "tower-tab"} href="/app/control-tower?view=my-run" role="tab">My run</Link>
-      </nav>
-
-      {initialView === "my-run" ? <MyRunView perspective={workPerspective} work={visibleWork} /> : <>
+      <PageHeader title="Control Tower" />
       <section aria-labelledby="all-clear-title" className={`run-card run-card--${pulseState.toLowerCase()}`}>
         <div className="run-card__main">
           <div aria-label={`${clearPercent}% of visible work is clear`} aria-valuemax={100} aria-valuemin={0} aria-valuenow={clearPercent} className="run-card__ring" role="progressbar">
@@ -108,6 +112,26 @@ function ScopedControlTowerPage({ displayName, initialScope, initialView }: { di
       </section>
 
       <div className={`control-tower-integrity control-tower-integrity--${controlViewState}`} role="status"><span aria-hidden="true" className="control-tower-integrity__dot" /><strong>{controlViewState === "ready" ? "Control view reconciled" : controlViewState === "warning" ? "Control view needs review" : "No work returned"}</strong><span>{controlViewMessage}</span></div>
+
+      {canViewTeamProgress && <section aria-labelledby="team-progress-title" className="panel control-team-progress">
+        <div className="section-heading"><div><h2 id="team-progress-title">Team progress</h2><p className="section-heading__support">Where to deploy help across the current scope.</p></div><Link className="text-link-button" href="/app/team?view=coverage">Open Team coverage</Link></div>
+        <div aria-label="Team progress" className="control-team-progress__table">
+          <div className="control-team-progress__header"><span>Team</span><span>Progress</span><span>Workload</span><span>Attention</span><span>Coverage</span></div>
+          {teamProgress.length === 0 ? <div className="inline-empty">No team progress is available in this scope.</div> : teamProgress.map(({ pulse, scopeFilter, ...summary }) => {
+            const clearWork = pulse?.clearWork ?? 0;
+            const totalWork = pulse?.totalWork ?? 0;
+            const attentionWork = pulse?.attentionWork ?? 0;
+            const blockedWork = pulse?.blockedWork ?? 0;
+            return <Link aria-label={`${summary.cluster} team progress · ${clearWork} of ${totalWork} controlled · known weight ${summary.clientWeight}`} className="control-team-progress__row" href={`/app/control-tower${scopeFilter === "all" ? "" : `?scope=${scopeFilter}`}`} key={summary.tower}>
+              <span className="control-team-progress__team"><strong>{summary.cluster}</strong><small>{summary.members} active people</small></span>
+              <span className="control-team-progress__progress"><span className="control-team-progress__progress-line"><i style={{ width: `${totalWork ? (clearWork / totalWork) * 100 : 0}%` }} /></span><small>{clearWork} of {totalWork} controlled</small></span>
+              <span><strong>{summary.clientWeight}</strong><small>{summary.clients} clients · known weight</small></span>
+              <span className={attentionWork > 0 ? "attention-open" : "attention-clear"}><strong>{attentionWork}</strong><small>{blockedWork > 0 ? `${blockedWork} blocked` : "needs attention"}</small></span>
+              <span className={summary.coverageGaps > 0 ? "attention-open" : "attention-clear"}><strong>{summary.coverageGaps}</strong><small>{summary.coverageGaps === 1 ? "gap" : "gaps"}</small></span>
+            </Link>;
+          })}
+        </div>
+      </section>}
 
       <section aria-labelledby="attention-title" className="panel needs-attention-panel">
         <div className="section-heading"><div><h2 id="attention-title">{pulseQueueLabel}</h2><p className="section-heading__support">{pulseFilter === "ALL" ? "Decision, unblock, or escalation." : "RAG filter · select the color again to clear."}</p></div><span className="section-heading__note">{pulseItems.length} items</span></div>
@@ -133,7 +157,6 @@ function ScopedControlTowerPage({ displayName, initialScope, initialView }: { di
       </section>
 
       {selectedWorkId && <WorkDetail onClose={() => setSelectedWorkId(null)} serverAuthorized={!prototypeMode} work={workItems.find((work) => work.id === selectedWorkId)!} />}
-      </>}
     </FixturePageFrame>
   );
 }

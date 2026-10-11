@@ -1,7 +1,7 @@
 import type { FixtureWorkItem } from "@/lib/fixtures";
 import type { TaxTeamReportRow } from "./tax-team-reports";
 
-function componentState(work: FixtureWorkItem, label: "Submission" | "Payment" | "Evidence") {
+function componentState(work: FixtureWorkItem, label: "Submission" | "Payment" | "Attachments" | "Evidence") {
   return work.components.find((component) => component.label === label)?.state ?? "Unknown";
 }
 
@@ -10,6 +10,7 @@ export function liveWorkToTaxTeamReportRow(work: FixtureWorkItem): TaxTeamReport
   const filing = filingStep?.state === "complete" ? "Reported sent" : filingStep?.state === "not-started" ? "Not reached" : "Unknown";
   const evidence = componentState(work, "Evidence");
   const payment = componentState(work, "Payment");
+  const attachments = componentState(work, "Attachments");
   const date = /^\d{4}-\d{2}-\d{2}$/.test(work.deadline) ? work.deadline : "1970-01-01";
   return {
     id: work.id,
@@ -29,6 +30,7 @@ export function liveWorkToTaxTeamReportRow(work: FixtureWorkItem): TaxTeamReport
     filing,
     acceptance: filing === "Reported sent" ? "Not verified" : "Not reached",
     payment,
+    attachments,
     evidence,
     control: /verified|complete/i.test(evidence) ? "Complete" : "Incomplete",
     qa: "Not configured",

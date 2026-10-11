@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { resolveTowerScope } from "./authorized-scope";
 
 const units = [
-  { id: "tower-a", code: "TOWER-A", name: "Tower A", unit_kind: "tower" },
-  { id: "tower-b", code: "TOWER-B", name: "Tower B", unit_kind: "tower" },
+  { id: "tower-a", code: "FIXTURE-TOWER-A", name: "Tower A", unit_kind: "tower" },
+  { id: "tower-b", code: "FIXTURE-TOWER-B", name: "Tower B", unit_kind: "tower" },
 ];
 
 describe("authorized control-tower scope", () => {
@@ -20,5 +20,11 @@ describe("authorized control-tower scope", () => {
     expect(resolveTowerScope([], units)).toBeNull();
     expect(resolveTowerScope([{ scope_kind: "team_tower", organization_unit_id: "tower-a" }, { scope_kind: "team_tower", organization_unit_id: "tower-b" }], units)).toBeNull();
     expect(resolveTowerScope([{ scope_kind: "team_tower", organization_unit_id: "missing" }], units)).toBeNull();
+  });
+
+  it("does not infer a scope from a partial or renamed organization code", () => {
+    expect(resolveTowerScope([{ scope_kind: "team_tower", organization_unit_id: "renamed" }], [
+      { id: "renamed", code: "FIXTURE-TOWER-A-ARCHIVED", name: "Tower A", unit_kind: "tower" },
+    ])).toBeNull();
   });
 });

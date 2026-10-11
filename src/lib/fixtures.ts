@@ -1,6 +1,3 @@
-import type { FixtureTower } from "@/lib/domain/organization-catalog";
-import type { ClientDeadlinePolicy } from "@/lib/domain/client-deadline-policy";
-
 export const fixtureEnvironment = {
   label: "REVIEW MODE",
   description: "Demonstration data only. No live client information or source documents are included.",
@@ -15,240 +12,29 @@ export const fixtureClock = {
   timestampLabel: "5 October 2026 · 9:00 AM (Asia/Manila)",
 } as const;
 
-export type FixtureScope = FixtureTower;
-export type FixtureStatus = "GREEN" | "AMBER" | "RED" | "UNRESOLVED";
-export type FixtureSourceWeightClassification = "Extremely Heavy" | "Heavy" | "Moderate" | "Light" | "Super Light";
-export type FixtureSource = "source_weighted_portfolio" | "synthetic_portfolio_test";
-export type FixtureOperatingModel = "ENGAGEMENT_AGILE" | "ENGAGEMENT_DEDICATED" | "TAX_TEAM";
-export type FixtureContractRecordStatus = "Active" | "Pending review" | "Closed";
-export type FixtureMasterEngagementDocumentKind = "MSA" | "LSA" | "Addendum";
-export type FixtureAdditionalEngagementKind = "Change Request Form";
-export type FixtureWorkStepState = "complete" | "current" | "waiting" | "blocked" | "not-started" | "unresolved";
-
-export type FixtureWorkStep = {
-  id: string;
-  label: string;
-  state: FixtureWorkStepState;
-  detail: string;
-};
-
-export type FixtureWorkComponent = {
-  label: "Submission" | "Payment" | "Attachments" | "Evidence";
-  state: string;
-  detail: string;
-};
-
-export type FixturePaymentApplicability = "REQUIRED" | "NOT_APPLICABLE" | "UNRESOLVED";
-
-export type FixtureWorkItem = {
-  id: string;
-  clientId: string;
-  client: string;
-  entity: string;
-  registrationUnitId?: string;
-  registrationUnit: string;
-  title: string;
-  period: string;
-  detail: string;
-  stage: "PREPARE" | "REVIEW" | "CLIENT" | "FILE" | "POST-FILING";
-  nextAction: string;
-  status: FixtureStatus;
-  statusReason: string;
-  deadline: string;
-  deadlineType: "TMF internal target" | "Client / service milestone" | "Control milestone";
-  owner: string;
-  scope: FixtureScope;
-  /** Normalized organizational projection; unresolved until a canonical cluster is linked. */
-  cluster?: string;
-  paymentApplicability: FixturePaymentApplicability;
-  paymentAmount?: number | null;
-  steps: readonly FixtureWorkStep[];
-  components: readonly FixtureWorkComponent[];
-  returnedFrom?: string;
-  blocker?: { category: "CLIENT APPROVAL" | "CLIENT DATA" | "FUNDING" | "INTERNAL" | "BIR/SYSTEM" | "OTHER"; reason: string };
-};
-
-export type FixtureExtractionField = {
-  label: string;
-  value: string;
-  sourcePage: string;
-  confidence: "High" | "Review required" | "Missing";
-  provenance: "2303-derived" | "Human correction" | "Not on source";
-  reviewState?: "unreviewed" | "corrected";
-};
-
-export type FixtureAuthority = {
-  id: string;
-  authority: string;
-  reference: string;
-  status: "Active" | "Review due" | "Not configured";
-  effectiveFrom: string;
-  effectiveTo?: string;
-  entitlement: string;
-  source: string;
-};
-
-export type FixtureAuditExposure = {
-  id: string;
-  taxableYear: string;
-  matter: string;
-  status: "Open" | "Under review" | "Closed";
-  asOf: string;
-  context: string;
-  source: string;
-  officerName?: string;
-  officerRole?: string;
-  officerContact?: string;
-};
-
-export type FixtureTaxProfile = {
-  registeredTaxpayerName: string;
-  tinDisplay: string;
-  branchCode: string;
-  rdoOrLts: string;
-  entityType: string;
-  registeredAddress: string;
-  lineOfBusiness: string;
-  registrationEffective: string;
-  registrationStatus: string;
-  registeredActivities: string;
-  tradeName: string;
-  filingChannel: string;
-  filingContext: string;
-  eFPSGroup?: string;
-  registeredTaxTypes: readonly string[];
-  taxYearBasis?: "Calendar year" | "Fiscal year";
-  fiscalYearEnd?: string;
-  accountingSystem?: string;
-  booksType?: string;
-  invoicing?: string;
-  paymentRoute: "Client Pays" | "TMF Pays" | "Not configured";
-  deadlinePolicy?: ClientDeadlinePolicy;
-  /** Numeric source workload value. Zero is preserved when the supplied source total requires it. */
-  weight: number;
-  weightLabel: string;
-  weightNote?: string;
-  sourceWeightClassification?: FixtureSourceWeightClassification;
-  sourceFinalWeight: number | null;
-  fixtureSource: FixtureSource;
-  enateSetup: "Yes" | "No" | "Unknown";
-  profileState: "Active" | "Ready for validation" | "Setup incomplete";
-  sourceLabel: string;
-  sourceKind: "2303-derived" | "approved registration source" | "manual validation";
-  lastValidated?: string;
-  validator?: string;
-  authorities: readonly FixtureAuthority[];
-  auditExposures: readonly FixtureAuditExposure[];
-  attention: readonly string[];
-  extractionFields?: readonly FixtureExtractionField[];
-};
-
-export type FixtureRegistrationUnit = {
-  name: string;
-  type: "Head Office" | "Branch";
-  profile: FixtureTaxProfile;
-};
-
-export type FixtureTaxpayerEntity = {
-  name: string;
-  profile: FixtureTaxProfile;
-  units: FixtureRegistrationUnit[];
-};
-
-export type FixtureAssignment = {
-  preparer: string;
-  checker: string;
-  reviewer: string;
-  tower: string;
-  cluster: string;
-  effectiveFrom: string;
-};
-
-export type FixtureContractDocument = {
-  id: string;
-  kind: FixtureMasterEngagementDocumentKind;
-  isCurrent: boolean;
-  referenceCode: string;
-  title: string;
-  status: FixtureContractRecordStatus;
-  effectiveFrom: string;
-  sourceReference: string;
-};
-
-export type FixtureMasterEngagement = {
-  id: string;
-  referenceCode: string;
-  title: string;
-  status: FixtureContractRecordStatus;
-  effectiveFrom: string;
-  documents: readonly FixtureContractDocument[];
-};
-
-export type FixtureAdditionalEngagement = {
-  id: string;
-  kind: FixtureAdditionalEngagementKind;
-  referenceCode: string;
-  title: string;
-  status: FixtureContractRecordStatus;
-  effectiveFrom: string;
-  sourceReference: string;
-  scopeSummary: string;
-};
-
-export type FixtureChangeRequestFormType = "Tax audit support" | "Additional tax service" | "Registration remediation" | "Other";
-export type FixtureChangeRequestFormStatus = "Draft" | "Pending review" | "Approved" | "Active" | "Closed";
-
-/**
- * CRF is the prototype projection of an additional engagement. It remains
- * linked to the client's single Contract Repository; it is not a second
- * taxpayer, Tax Profile, or audit-case record.
- */
-export type FixtureChangeRequestForm = {
-  id: string;
-  referenceCode: string;
-  clientId: string;
-  contractRepositoryId: string;
-  clientName: string;
-  title: string;
-  type: FixtureChangeRequestFormType;
-  status: FixtureChangeRequestFormStatus;
-  requestedOn: string;
-  requestedBy: string;
-  owner: string;
-  scopeSummary: string;
-  sourceReference: string;
-  templateVersion: "CRF v1";
-  auditContext?: FixtureAuditExposure;
-};
-
-export type FixtureContractRepository = {
-  id: string;
-  referenceCode: string;
-  masterEngagement?: FixtureMasterEngagement;
-  additionalEngagements: readonly FixtureAdditionalEngagement[];
-};
-
-export type FixtureTeamMember = {
-  id: string;
-  name: string;
-  title: string;
-  role: "HOD / Leader" | "Team Member" | "Reviewer" | "System Admin";
-  tower: FixtureScope | "All A&T";
-  cluster: string;
-  active: boolean;
-  email: string;
-  organizationUnitId?: string | null;
-  operatingModel: FixtureOperatingModel;
-  specialistTeam?: "Tax Team";
-  careerServiceLevel?: string;
-  reportsToOrgNodeId?: string | null;
-  reportingLineExceptionReason?: string;
-  assignmentAliases?: readonly string[];
-  /** Effective date for the current fixture roster state. Production commands must audit this. */
-  effectiveFrom?: string;
-  /** Human-entered context only; does not change assignment or workload semantics. */
-  remarks?: string;
-};
+import type {
+  FixtureScope,
+  FixtureStatus,
+  FixtureSourceWeightClassification,
+  FixtureSource,
+  FixtureContractRecordStatus,
+  FixtureMasterEngagementDocumentKind,
+  FixtureAdditionalEngagementKind,
+  FixtureWorkItem,
+  FixtureExtractionField,
+  FixtureAuthority,
+  FixtureTaxProfile,
+  FixtureRegistrationUnit,
+  FixtureTaxpayerEntity,
+  FixtureAssignment,
+  FixtureMasterEngagement,
+  FixtureChangeRequestFormType,
+  FixtureChangeRequestFormStatus,
+  FixtureChangeRequestForm,
+  FixtureContractRepository,
+  FixtureTeamMember
+} from "./fixtures/types";
+export type * from "./fixtures/types";
 
 // The supplied org-chart photo and the domain-owner corrections provide the
 // reporting shape. Lower cells not yet named remain explicit placeholders.
@@ -1247,7 +1033,7 @@ export const fixtureWork: FixtureWorkItem[] = [
       { id: "payment", label: "Payment endorsement", state: "not-started", detail: "Endorse payment separately from filing when payment is applicable." },
       { id: "payment-client-approval", label: "Payment client approval", state: "not-started", detail: "Record the client's payment approval separately from return approval." },
       { id: "payment-confirmation", label: "Payment confirmation", state: "not-started", detail: "Record confirmation only from the external payment result." },
-      { id: "esubmission", label: "eSubmission email", state: "not-started", detail: "Generate and validate the DAT, send it to BIR, and retain the acknowledgment and validation emails." },
+      { id: "esubmission", label: "Attachments", state: "not-started", detail: "Complete the applicable attachment or eSubmission sequence and retain its validation and acknowledgment results." },
       { id: "evidence", label: "Archiving", state: "not-started", detail: "Compile and save the complete return package, including filing, payment, and eSubmission evidence." },
     ],
     components: [
@@ -1286,13 +1072,13 @@ export const fixtureWork: FixtureWorkItem[] = [
       { id: "payment", label: "Payment endorsement", state: "not-started", detail: "Payment is tracked separately from filing." },
       { id: "payment-client-approval", label: "Payment client approval", state: "not-started", detail: "Payment client approval is separate from return approval." },
       { id: "payment-confirmation", label: "Payment confirmation", state: "not-started", detail: "Payment confirmation is not established by this fixture." },
-      { id: "esubmission", label: "eSubmission email", state: "complete", detail: "The eSubmission email result is recorded for this return when applicable." },
+      { id: "esubmission", label: "Attachments", state: "complete", detail: "The applicable attachment or eSubmission result is recorded for this return." },
       { id: "evidence", label: "Archiving", state: "current", detail: "Compile and save the complete return package, including filing, payment, and eSubmission evidence." },
     ],
     components: [
       { label: "Submission", state: "Reported", detail: "Reported result is retained; acceptance remains unverified." },
       { label: "Payment", state: "Required · amount not recorded", detail: "Payment applies, but the amount remains unresolved in this synthetic fixture." },
-      { label: "Attachments", state: "None indicated", detail: "No attachment requirement is asserted by this fixture." },
+      { label: "Attachments", state: "Recorded", detail: "QAP and eSubmission results are recorded within this 1601EQ return package." },
       { label: "Evidence", state: "Needs verification", detail: "Evidence is not yet verified." },
     ],
     returnedFrom: "Archiving",
@@ -1325,7 +1111,7 @@ export const fixtureWork: FixtureWorkItem[] = [
       { id: "payment", label: "Payment endorsement", state: "not-started", detail: "Endorse payment separately from filing when payment is applicable." },
       { id: "payment-client-approval", label: "Payment client approval", state: "not-started", detail: "Record the client's payment approval separately from return approval." },
       { id: "payment-confirmation", label: "Payment confirmation", state: "not-started", detail: "Record confirmation only from the external payment result." },
-      { id: "esubmission", label: "eSubmission email", state: "not-started", detail: "Generate and validate the DAT, send it to BIR, and retain the acknowledgment and validation emails." },
+      { id: "esubmission", label: "Attachments", state: "not-started", detail: "Complete the applicable attachment or eSubmission sequence and retain its validation and acknowledgment results." },
       { id: "evidence", label: "Archiving", state: "not-started", detail: "Compile and save the complete return package, including filing, payment, and eSubmission evidence." },
     ],
     components: [
@@ -1363,7 +1149,7 @@ export const fixtureWork: FixtureWorkItem[] = [
       { id: "payment", label: "Payment endorsement", state: "not-started", detail: "Endorse payment separately from filing when payment is applicable." },
       { id: "payment-client-approval", label: "Payment client approval", state: "not-started", detail: "Record the client's payment approval separately from return approval." },
       { id: "payment-confirmation", label: "Payment confirmation", state: "not-started", detail: "Record confirmation only from the external payment result." },
-      { id: "esubmission", label: "eSubmission email", state: "not-started", detail: "Generate and validate the DAT, send it to BIR, and retain the acknowledgment and validation emails." },
+      { id: "esubmission", label: "Attachments", state: "not-started", detail: "Complete the applicable attachment or eSubmission sequence and retain its validation and acknowledgment results." },
       { id: "evidence", label: "Archiving", state: "not-started", detail: "Compile and save the complete return package, including filing, payment, and eSubmission evidence." },
     ],
     components: [

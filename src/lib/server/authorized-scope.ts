@@ -22,8 +22,9 @@ async function withTimeout<T>(operation: PromiseLike<T>, fallback: T): Promise<T
 
 function towerScopeForUnit(unit: OrganizationUnit | undefined): Exclude<ScopeFilter, "all"> | null {
   if (!unit) return null;
-  const value = `${unit.code} ${unit.name}`.toLowerCase();
-  return fixtureOrganizationScopes.find((scope) => value.includes(scope.code.toLowerCase()) || value.includes(scope.tower.toLowerCase()))?.filterId ?? null;
+  // Fixture projection mapping is intentionally exact. Fuzzy name matching can
+  // silently widen or misroute an authorized live scope.
+  return fixtureOrganizationScopes.find((scope) => scope.code === unit.code)?.filterId ?? null;
 }
 
 /**
@@ -54,14 +55,15 @@ export async function getAuthorizedControlTowerScope(): Promise<ScopeFilter | nu
 
   const { client, user } = await withTimeout(getAuthenticatedRequestContext(), { client: null, user: null });
   if (!user || !client) return null;
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
 
   const { data: assignments, error: assignmentError } = await withTimeout(
     client
       .from("user_scope_assignments")
       .select("scope_kind, organization_unit_id")
       .eq("user_id", user.id)
-      .lte("effective_from", new Date().toISOString().slice(0, 10))
-      .or(`effective_to.is.null,effective_to.gte.${new Date().toISOString().slice(0, 10)}`),
+      .lte("effective_from", today)
+      .or(`effective_to.is.null,effective_to.gte.${today}`),
     { data: [] as ScopeAssignment[], error: null, count: 0, status: 200, statusText: "OK", success: true },
   );
 
