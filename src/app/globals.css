@@ -2500,9 +2500,31 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
 .admin-provisioning-grid textarea { resize: vertical; }
 .admin-provisioning-actions { align-items: center; display: flex; gap: 14px; justify-content: space-between; }
 .admin-provisioning-actions .admin-placeholder-note { margin: 0; }
+.admin-provisioning-actions__buttons { display: flex; gap: 8px; }
+.admin-users-panel { display: grid; gap: 14px; margin-bottom: 14px; }
+.admin-users-panel__header { align-items: center; display: flex; gap: 14px; justify-content: space-between; }
+.admin-users-panel__header h2 { font-size: 18px; letter-spacing: -.03em; margin: 3px 0 0; }
+.admin-users-table { border-top: 1px solid var(--border); overflow-x: auto; }
+.admin-users-table__head, .admin-user-row { align-items: center; display: grid; gap: 14px; grid-template-columns: minmax(180px, 1.2fr) minmax(150px, 1fr) minmax(150px, 1fr) 80px; min-width: 680px; padding: 10px 4px; text-align: left; }
+.admin-users-table__head { color: var(--muted); font-size: 9px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+.admin-user-row { background: transparent; border: 0; border-bottom: 1px solid var(--border); color: inherit; cursor: pointer; font: inherit; width: 100%; }
+.admin-user-row:hover, .admin-user-row:focus-visible { background: var(--surface-soft); }
+.admin-user-row > span:first-child { display: grid; gap: 3px; min-width: 0; }
+.admin-user-row strong { font-size: 12px; }
+.admin-user-row span:not(:first-child) { color: var(--slate); font-size: 11px; }
+.admin-user-row small { color: var(--muted); font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
+.admin-user-status { color: var(--muted); font-size: 10px; font-weight: 800; }
+.admin-user-status--active { color: var(--green-dark); }
+.admin-user-detail { border-top: 1px solid var(--border); display: grid; gap: 0; }
+.admin-user-detail > div { border-bottom: 1px solid var(--border); display: grid; gap: 4px; padding: 12px 0; }
+.admin-user-detail span { color: var(--muted); font-size: 9px; font-weight: 850; letter-spacing: .07em; text-transform: uppercase; }
+.admin-user-detail strong { font-size: 12px; text-transform: capitalize; }
 @media (max-width: 680px) {
   .admin-provisioning-panel__header, .admin-provisioning-actions { align-items: stretch; flex-direction: column; }
   .admin-provisioning-grid { grid-template-columns: 1fr; }
+  .admin-users-panel__header { align-items: stretch; flex-direction: column; }
+  .admin-users-panel__header .button { align-self: start; }
+  .admin-provisioning-actions__buttons { justify-content: flex-end; }
 }
 .admin-data-panel { margin-top: 14px; }
 .admin-data-grid { border-top: 1px solid var(--border); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }

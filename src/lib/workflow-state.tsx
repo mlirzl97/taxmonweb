@@ -319,10 +319,10 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     setWorkPerspective(perspective);
   }, []);
 
-  const canManageAccess = prototypeMode && workPerspective === "SUPER_ADMIN";
+  const canManageAccess = prototypeMode && ["MASTER_ADMIN", "TAX_CONTROL", "SUPER_ADMIN"].includes(workPerspective);
   const commitAccessMatrix = useCallback((matrix: AccessMatrix, reason: string) => {
     if (!prototypeMode) return { ok: false, error: "Authenticated access templates are managed by server-side administration." };
-    if (!canManageAccess) return { ok: false, error: "Only Super Admin can change access templates in this prototype." };
+    if (!canManageAccess) return { ok: false, error: "Only HOD, Tax Control or Super Admin can change access templates in this prototype." };
     if (!reason.trim()) return { ok: false, error: "Record a reason for this access change." };
     const event: AccessPolicyEvent = { id: `access-${Date.now()}`, actor: rbacPersonaLabel(workPerspective), recordedAt: fixtureClock.timestampLabel, reason: reason.trim() };
     setAccessMatrix(matrix);

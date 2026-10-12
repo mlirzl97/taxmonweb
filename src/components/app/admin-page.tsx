@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { EmptyState, FixturePageFrame, PageHeader, SectionHeading } from "@/components/app/workspace-components";
+import { DetailDrawer, EmptyState, FixturePageFrame, PageHeader, SectionHeading } from "@/components/app/workspace-components";
 import { portfolioClientToFixtureClient } from "@/lib/domain/live-client-adapter";
+import { adaptLiveTeamMember } from "@/lib/domain/live-team-adapter";
 import { accessLevelLabel, moduleAccessMapForPersona, rbacPersonaOptions, type AccessLevel, type AccessMatrix, type ModuleKey, type RbacPersona } from "@/lib/domain/access";
-import { fixtureCalendar, fixtureClients, fixtureOrgDirectoryMembers, fixtureSpecialistCases, fixtureWork, type FixtureClient } from "@/lib/fixtures";
+import { fixtureCalendar, fixtureClients, fixtureOrgDirectoryMembers, fixtureSpecialistCases, fixtureWork, type FixtureClient, type FixtureTeamMember } from "@/lib/fixtures";
 import { clearPrototypeSeedData } from "@/lib/prototype-storage";
 import { useWorkflow, workflowPerspectiveLabel } from "@/lib/workflow-state";
 import { StaffProvisioningForm } from "@/components/app/staff-provisioning-form";
@@ -82,6 +83,9 @@ function AccessMatrixEditor() {
   const [draft, setDraft] = useState<Record<ModuleKey, AccessLevel>>(() => ({ ...moduleAccessMapForPersona(workPerspective, accessMatrix) }));
   const [reason, setReason] = useState("");
   const [feedback, setFeedback] = useState("");
+  const [staffMembers, setStaffMembers] = useState<FixtureTeamMember[]>(() => prototypeMode ? [...fixtureOrgDirectoryMembers] : []);
+  const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
+  const [staffDrawerOpen, setStaffDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (prototypeMode) return;
@@ -92,6 +96,19 @@ function AccessMatrixEditor() {
         if (!cancelled) setLiveCapabilities((payload.capabilities ?? []).map((item) => item.capability_key).filter((value): value is string => Boolean(value)));
       })
       .catch(() => { if (!cancelled) setLiveCapabilities([]); });
+    return () => { cancelled = true; };
+  }, [prototypeMode]);
+
+  useEffect(() => {
+    if (prototypeMode) return;
+    let cancelled = false;
+    fetch("/api/team", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json() as { data?: Parameters<typeof adaptLiveTeamMember>[0][] };
+        if (!response.ok) throw new Error("Unable to load users.");
+        if (!cancelled) setStaffMembers((payload.data ?? []).map(adaptLiveTeamMember));
+      })
+      .catch(() => { if (!cancelled) setStaffMembers([]); });
     return () => { cancelled = true; };
   }, [prototypeMode]);
 
@@ -117,7 +134,9 @@ function AccessMatrixEditor() {
   }
 
   return <>
-    <StaffProvisioningForm canManage={canProvisionStaff} />
+    <StaffAccessRoster members={staffMembers} canManage={canProvisionStaff} onAdd={() => setStaffDrawerOpen(true)} onSelect={(id) => { setSelectedStaffId(id); setStaffDrawerOpen(false); }} />
+    {staffDrawerOpen && <DetailDrawer eyebrow="Users & access" title="Add staff member" subtitle="Create the identity, access bundle and scope in one audited step." onClose={() => setStaffDrawerOpen(false)}><StaffProvisioningForm canManage={canProvisionStaff} onClose={() => setStaffDrawerOpen(false)} /></DetailDrawer>}
+    {selectedStaffId && <StaffAccessDrawer member={staffMembers.find((member) => member.id === selectedStaffId)} onClose={() => setSelectedStaffId(null)} />}
     <section className="panel admin-access-editor" aria-labelledby="access-editor-title">
     <SectionHeading detail="Choose one effective level per module. The strongest level is applied as a governed template; capabilities, scope and segregation of duties still apply." title="Users & access" />
     <div className="admin-access-editor__toolbar">
@@ -147,7 +166,7 @@ function AccessMatrixEditor() {
       </label>
       <button className="button button--primary" disabled={!canManageAccess || !reason.trim()} onClick={saveTemplate} type="button">Save access template</button>
     </div>
-    <p aria-live="polite" className="inline-feedback">{feedback || (canManageAccess ? "Changes are staged until you save with a reason." : "Read-only access view. Only Super Admin can change access templates in this prototype.")}</p>
+    <p aria-live="polite" className="inline-feedback">{feedback || (canManageAccess ? "Changes are staged until you save with a reason." : "Read-only access view. HOD, Tax Control and Super Admin manage access templates.")}</p>
 
     <div className="admin-access-editor__history">
       <strong>Recent access changes</strong>
@@ -156,6 +175,35 @@ function AccessMatrixEditor() {
     <p className="admin-placeholder-note">Technical administration does not grant tax-control authority. Production enforcement belongs to authenticated server commands, RLS and audited actor history.</p>
     </section>
   </>;
+}
+
+function StaffAccessRoster({ members, canManage, onAdd, onSelect }: { members: readonly FixtureTeamMember[]; canManage: boolean; onAdd: () => void; onSelect: (id: string) => void }) {
+  return <section className="panel admin-users-panel" aria-labelledby="admin-users-title">
+    <div className="admin-users-panel__header"><div><span className="meta-label">People with access</span><h2 id="admin-users-title">Users & access</h2></div>{canManage && <button className="button button--primary" onClick={onAdd} type="button">Add staff member</button>}</div>
+    <div className="admin-users-table" role="table" aria-label="Users with access">
+      <div className="admin-users-table__head" role="row"><span role="columnheader">Name</span><span role="columnheader">Role</span><span role="columnheader">Scope</span><span role="columnheader">Status</span></div>
+      {members.length === 0 ? <EmptyState title="No users found" description="People with an active Team profile will appear here." /> : members.map((member) => <button className="admin-user-row" key={member.id} onClick={() => onSelect(member.id)} role="row" type="button">
+        <span><strong>{member.name}</strong><small>{member.email}</small></span>
+        <span>{member.title}</span>
+        <span>{member.tower}{member.cluster && member.cluster !== "Organization not configured" ? ` · ${member.cluster}` : ""}</span>
+        <span className={member.active ? "admin-user-status admin-user-status--active" : "admin-user-status"}>{member.active ? "Active" : "Inactive"}</span>
+      </button>)}
+    </div>
+  </section>;
+}
+
+function StaffAccessDrawer({ member, onClose }: { member?: FixtureTeamMember; onClose: () => void }) {
+  if (!member) return null;
+  return <DetailDrawer eyebrow="User access" title={member.name} subtitle={member.email} onClose={onClose}>
+    <div className="admin-user-detail">
+      <div><span>Role</span><strong>{member.title}</strong></div>
+      <div><span>Access scope</span><strong>{member.tower}{member.cluster && member.cluster !== "Organization not configured" ? ` · ${member.cluster}` : ""}</strong></div>
+      <div><span>Status</span><strong className={member.active ? "admin-user-status--active" : ""}>{member.active ? "Active" : "Inactive"}</strong></div>
+      <div><span>Operating model</span><strong>{member.operatingModel.replaceAll("_", " ")}</strong></div>
+      <div><span>Effective from</span><strong>{member.effectiveFrom ?? "Not configured"}</strong></div>
+      {member.reportsToOrgNodeId && <div><span>Reports to</span><strong>Configured in Team</strong></div>}
+    </div>
+  </DetailDrawer>;
 }
 
 function AdminDataOverview() {
