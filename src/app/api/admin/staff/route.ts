@@ -4,7 +4,7 @@ import { staffAccessProfileDefinition, isStaffAccessProfile, type StaffScopeKind
 import { apiErrorResponse, inferredApiErrorStatus } from "@/lib/server/api-error";
 import { requireApiCapabilities } from "@/lib/server/api-authorization";
 import { asRecord } from "@/lib/server/request-input";
-import { requireSameOrigin } from "@/lib/server/request-origin";
+import { applicationOrigin, requireSameOrigin } from "@/lib/server/request-origin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
   if (scopeKind !== "team_tower" && scopeKind !== "cluster" && scopeOrganizationUnitId) return NextResponse.json({ error: "This access scope does not use an organization unit." }, { status: 400 });
   if ((scopeKind === "team_tower" || scopeKind === "cluster") && !scopeOrganizationUnitId) return NextResponse.json({ error: "Select the organization unit for this access scope." }, { status: 400 });
 
-  const redirectTo = new URL("/auth/callback?next=/activate", request.url).toString();
+  const redirectTo = new URL("/auth/callback?next=/activate", `${applicationOrigin(request)}/`).toString();
   const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
     data: { display_name: displayName },
     redirectTo,
