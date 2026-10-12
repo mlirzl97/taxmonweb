@@ -34,7 +34,7 @@ export function SignInForm({ isConfigured }: SignInFormProps) {
       const { error: signInError } = await client.auth.signInWithPassword({ email, password });
 
       if (signInError) {
-        setError("Incorrect email or password.");
+        setError("We couldn't sign you in. Check that you're using the work email connected to TaxMonWeb and that the password is correct. If you're unsure which email was set up, ask your administrator.");
         return;
       }
 
@@ -55,14 +55,14 @@ export function SignInForm({ isConfigured }: SignInFormProps) {
           <p>This environment is not connected to TaxMonWeb Auth.</p>
         </div>
       )}
-      {error && <div className="callout callout--error" role="alert">{error}</div>}
+      {error && <div className="callout callout--error" id="sign-in-error" role="alert">{error}</div>}
       <div className="field">
         <label htmlFor="email">Work email</label>
-        <input autoComplete="email" disabled={!isConfigured || isSubmitting} id="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} />
+        <input aria-describedby={error ? "sign-in-error" : undefined} aria-invalid={Boolean(error)} autoComplete="email" disabled={!isConfigured || isSubmitting} id="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} />
       </div>
       <div className="field">
         <label htmlFor="password">Password</label>
-        <input autoComplete="current-password" disabled={!isConfigured || isSubmitting} id="password" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} />
+        <input aria-describedby={error ? "sign-in-error" : undefined} aria-invalid={Boolean(error)} autoComplete="current-password" disabled={!isConfigured || isSubmitting} id="password" onChange={(event) => setPassword(event.target.value)} required type="password" value={password} />
       </div>
       <button className="button button--primary button--full" disabled={!isConfigured || isSubmitting} type="submit">
         {isSubmitting ? "Signing in…" : "Sign in"}
