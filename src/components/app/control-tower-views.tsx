@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { fixtureCalendar, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
-import { dateValue, filterFixtureOperationalRecords, getFixtureWorkRegisterRecords, type DuePreset } from "@/lib/fixtures-read-model";
+import { dateValue, filterFixtureOperationalRecords, getFixtureWorkRegisterRecords, hasOutstandingCompletionAction, isWorkAttention, type DuePreset } from "@/lib/fixtures-read-model";
 import { useWorkflow } from "@/lib/workflow-state";
 import { FilterTabs, isInScope, scopeLabelForValue, type ScopeFilter, WorkDetail } from "./workspace-components";
 
@@ -41,7 +41,7 @@ function OperationalRegisterRow({ mode, record, onSelect }: { mode: "due" | "wor
     <span className={periodClass}>{item.period}</span>
     {mode === "due" ? <span><span className={`rag-text rag-text--${work.status.toLowerCase()}`}>{work.stage}</span><small>{work.statusReason}</small></span> : <span><span className={`rag-text rag-text--${work.status.toLowerCase()}`}>{work.status}</span><strong>{currentStep?.label}</strong><small>{stepCount(work)}</small></span>}
     <span><strong>{work.owner}</strong><small>{scopeLabelForValue(mode === "due" ? item.scope : work.scope)}</small></span>
-    <span className={attentionClass}>{mode === "due" ? <>{work.blocker?.category ?? (work.status === "GREEN" ? "—" : "Review")}</> : <><strong>{work.blocker?.category ?? "Next action"}</strong><small>{work.blocker?.reason ?? work.nextAction}</small></>}</span>
+    <span className={attentionClass}>{mode === "due" ? <>{work.blocker?.category ?? (work.status === "GREEN" ? "—" : "Review")}</> : <><strong>{work.blocker?.category ?? (hasOutstandingCompletionAction(work) ? "Needs attention" : "Next action")}</strong><small>{work.blocker?.reason ?? work.nextAction}</small></>}</span>
   </button>;
 }
 
@@ -109,7 +109,7 @@ export function WorkRegisterView({ scope, initialDue = "all", initialQueue = "al
     const workRecords = getFixtureWorkRegisterRecords(dueRecords, reviewDate).filter(({ work, milestones }) => {
       if (queue === "today" && !milestones.some((item) => item.calendarDate === reviewDate)) return false;
       if (queue === "waiting" && !work.blocker) return false;
-      if (queue === "attention" && work.status === "GREEN" && !work.blocker) return false;
+      if (queue === "attention" && !isWorkAttention(work)) return false;
       return true;
     });
 
@@ -127,7 +127,7 @@ export function WorkRegisterView({ scope, initialDue = "all", initialQueue = "al
       all: scoped.length,
       today: scoped.filter(({ milestones }) => milestones.some((item) => item.calendarDate === reviewDate)).length,
       waiting: scoped.filter(({ work }) => work.blocker).length,
-      attention: scoped.filter(({ work }) => work.status !== "GREEN" || work.blocker).length,
+      attention: scoped.filter(({ work }) => isWorkAttention(work)).length,
     };
   }, [operationalRecords, reviewDate, scope]);
 

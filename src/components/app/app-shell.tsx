@@ -154,13 +154,14 @@ function ActionNotifications() {
     }
     return pending;
   }, [canActOnProcessStep, getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode]);
-  const countLabel = actions.length === 1 ? "1 pending action" : `${actions.length} pending actions`;
+  const notificationLabel = actions.length === 0 ? "Notifications" : `${actions.length} notifications`;
+  const attentionLabel = actions.length === 1 ? "1 item requires action" : `${actions.length} items require action`;
 
   return <div className={`app-main-header__notifications${open ? " app-main-header__notifications--open" : ""}`}>
-    <button aria-expanded={open} aria-haspopup="dialog" aria-label={countLabel} className="app-main-header__notifications-trigger" onClick={() => setOpen((current) => !current)} type="button"><Icon name="bell" size={17} />{actions.length > 0 && <span aria-hidden="true" className="app-main-header__notifications-count">{actions.length > 9 ? "9+" : actions.length}</span>}</button>
-    {open && <div aria-label="My actions" className="app-main-header__notifications-panel" id="my-actions-panel" role="region">
-      <div className="app-main-header__notifications-heading"><strong>My actions</strong><small>{countLabel}</small></div>
-      {actions.length > 0 ? <div className="app-main-header__notifications-list">{actions.slice(0, 5).map(({ work, step, owner }) => <Link href={`/app/work/${work.id}`} key={work.id}><strong>{step.label}</strong><span>{work.client} · {work.title}</span><small>{work.period} · {owner}</small></Link>)}</div> : <p className="app-main-header__notifications-empty">No pending actions.</p>}
+    <button aria-expanded={open} aria-haspopup="dialog" aria-label={notificationLabel} className="app-main-header__notifications-trigger" onClick={() => setOpen((current) => !current)} title="Notifications" type="button"><Icon name="bell" size={17} />{actions.length > 0 && <span aria-hidden="true" className="app-main-header__notifications-count">{actions.length > 9 ? "9+" : actions.length}</span>}</button>
+    {open && <div aria-label="Notifications" className="app-main-header__notifications-panel" id="my-actions-panel" role="region">
+      <div className="app-main-header__notifications-heading"><strong>Notifications</strong><small>{actions.length > 0 ? attentionLabel : "No new notifications"}</small></div>
+      {actions.length > 0 ? <div className="app-main-header__notifications-list">{actions.slice(0, 5).map(({ work, step, owner }) => <Link href={`/app/work/${work.id}`} key={work.id}><strong>{step.label}</strong><span>{work.client} · {work.title}</span><small>{work.period} · {owner}</small></Link>)}</div> : <p className="app-main-header__notifications-empty">No new notifications.</p>}
       <Link className="app-main-header__notifications-footer" href="/app/work?queue=all">View Work</Link>
     </div>}
   </div>;

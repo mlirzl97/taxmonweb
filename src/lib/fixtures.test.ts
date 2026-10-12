@@ -45,7 +45,7 @@ describe("demo fixture mechanism", () => {
     const records = getFixtureWorkRegisterRecords(getFixtureOperationalRecords());
     expect(records).toHaveLength(fixtureWork.length);
     expect(records.find((record) => record.work.id === "work-02")?.milestones).toHaveLength(2);
-    expect(records.find((record) => record.work.id === "work-02")?.work.steps.at(-1)?.state).toBe("current");
+    expect(records.find((record) => record.work.id === "work-02")?.work.steps.find((step) => step.id === "payment")?.state).toBe("current");
   });
 
   it("shares due filtering semantics with the Due Register", () => {
@@ -105,6 +105,14 @@ describe("demo fixture mechanism", () => {
 
     expect(attention.some((record) => record.work.returnedFrom)).toBe(true);
     expect(records.find((record) => record.work.returnedFrom)?.work.id).toBe("work-02");
+  });
+
+  it("flags a completion next action even when the RAG status is green", () => {
+    const completeActionWork = { ...fixtureWork.find((work) => work.id === "work-03")!, id: "work-complete-action", nextAction: "Complete payment confirmation" };
+    const records = getFixtureOperationalRecords([completeActionWork]);
+    const attention = filterFixtureOperationalRecords(records, { due: "attention", scope: "all", status: "all" });
+
+    expect(attention.map((record) => record.work.id)).toEqual(["work-complete-action"]);
   });
 
   it("includes a preparer-facing data gap and separate attachment control", () => {

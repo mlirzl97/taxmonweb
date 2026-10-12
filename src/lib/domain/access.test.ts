@@ -11,6 +11,7 @@ describe("priority access foundation", () => {
     expect(priorityCapabilities.taxTeam).toContain("MaintainDeadlineControl");
     expect(priorityCapabilities.hod).toContain("ViewTaxControlHistory");
     expect(priorityCapabilities.hod).toContain("MaintainDeadlineControl");
+    expect(priorityCapabilities.hod).toContain("ManageWorkPeriodLock");
     expect(priorityCapabilities.masterAdmin).toContain("PerformElevatedOverride");
     expect(priorityCapabilities.masterAdmin).toContain("MaintainRulesLibrary");
   });

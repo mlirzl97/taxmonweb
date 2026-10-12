@@ -91,6 +91,9 @@ create table if not exists public.generated_work_evidence (
   evidence_kind text not null check (evidence_kind in ('result', 'filing', 'payment', 'attachment', 'archive', 'client_approval', 'other')),
   reference text not null,
   external_date date,
+  acknowledged_on date,
+  validated_on date,
+  attachment_name text,
   external_reference text,
   external_channel text,
   sharepoint_url text,
@@ -240,6 +243,9 @@ declare
   is_elevated boolean := has_elevated_authority and nullif(trim(p_payload ->> 'overrideReason'), '') is not null;
   payment_applicability_value text := lower(trim(coalesce(p_payload ->> 'paymentApplicability', '')));
   payment_amount_value numeric := nullif(trim(p_payload ->> 'paymentAmount'), '')::numeric;
+  acknowledged_on_value date := nullif(trim(p_payload ->> 'acknowledgedOn'), '')::date;
+  validated_on_value date := nullif(trim(p_payload ->> 'validatedOn'), '')::date;
+  attachment_name_value text := nullif(trim(p_payload ->> 'attachmentName'), '');
 begin
   if actor_id is null or not public.is_active_app_user() then
     raise exception using errcode = '42501', message = 'Authentication is required for Work commands.';
@@ -348,6 +354,7 @@ begin
     if step_code_value in ('payment', 'payment-client-approval', 'payment-confirmation') and status_value = 'not_applicable' and work.payment_applicability = 'unresolved' then raise exception using errcode = '22023', message = 'Resolve payment applicability before skipping payment.'; end if;
     if step_code_value in ('payment', 'payment-client-approval', 'payment-confirmation') and status_value = 'not_applicable' and work.payment_applicability = 'required' then raise exception using errcode = '22023', message = 'Payment is required for this return and cannot be skipped.'; end if;
     if step_code_value = 'payment-confirmation' and status_value = 'complete' and work.payment_amount is null then raise exception using errcode = '22023', message = 'Record the payment amount before confirming payment.'; end if;
+    if step_code_value = 'esubmission' and status_value = 'complete' and (acknowledged_on_value is null or validated_on_value is null) then raise exception using errcode = '22023', message = 'Record the BIR acknowledgment and validation dates before completing eSubmission.'; end if;
     if is_elevated and override_reason is null then raise exception using errcode = '22023', message = 'An elevated override reason is required.'; end if;
     insert into public.generated_work_process_steps (generated_work_id, step_code, bundle, label, owner_role, step_order, status, started_at, completed_at, updated_at)
     values (p_work_id, step_code_value, case when step_code_value in ('payment', 'payment-client-approval', 'payment-confirmation') then 'payment' when step_code_value = 'esubmission' then 'attachments' when step_code_value = 'evidence' then 'archiving' else 'filing' end,
@@ -357,9 +364,9 @@ begin
       status_value, case when status_value = 'in_progress' then now() end, case when status_value in ('complete', 'not_applicable') then now() end, now())
     on conflict (generated_work_id, step_code) do update set status = excluded.status, started_at = coalesce(public.generated_work_process_steps.started_at, excluded.started_at), completed_at = excluded.completed_at, updated_at = now();
     if status_value in ('complete', 'not_applicable') then
-      insert into public.generated_work_evidence (generated_work_id, step_code, evidence_kind, reference, external_date, external_reference, external_channel, sharepoint_url, result_status, note, actor_id)
+      insert into public.generated_work_evidence (generated_work_id, step_code, evidence_kind, reference, external_date, acknowledged_on, validated_on, attachment_name, external_reference, external_channel, sharepoint_url, result_status, note, actor_id)
       values (p_work_id, step_code_value, case when step_code_value = 'filing' then 'filing' when step_code_value in ('payment', 'payment-client-approval', 'payment-confirmation') then 'payment' when step_code_value = 'esubmission' then 'attachment' when step_code_value = 'evidence' then 'archive' when step_code_value = 'client-approval' then 'client_approval' else 'result' end,
-        evidence_reference, nullif(p_payload ->> 'externalDate', '')::date, nullif(trim(p_payload ->> 'externalReference'), ''), nullif(trim(p_payload ->> 'externalChannel'), ''), nullif(trim(p_payload ->> 'sharepointUrl'), ''), case when status_value = 'not_applicable' then 'verified' else nullif(trim(p_payload ->> 'resultStatus'), '') end, note_value, actor_id);
+        evidence_reference, nullif(p_payload ->> 'externalDate', '')::date, acknowledged_on_value, validated_on_value, attachment_name_value, nullif(trim(p_payload ->> 'externalReference'), ''), nullif(trim(p_payload ->> 'externalChannel'), ''), nullif(trim(p_payload ->> 'sharepointUrl'), ''), case when status_value = 'not_applicable' then 'verified' else nullif(trim(p_payload ->> 'resultStatus'), '') end, note_value, actor_id);
     end if;
     update public.generated_compliance_work
     set lifecycle_stage = case

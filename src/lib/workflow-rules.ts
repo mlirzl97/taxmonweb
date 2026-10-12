@@ -31,6 +31,7 @@ export const roleQuestions: Record<WorkflowRole, readonly WorkflowQuestion[]> = 
     { id: "vouching-sufficient", label: "Vouching and documentary requirements are sufficient for the work performed." },
     { id: "tie-outs-satisfactory", label: "Books-to-schedule, expense-to-return, and return-to-books tie-outs are satisfactory." },
     { id: "exceptions-documented", label: "Differences, exceptions, and review notes are resolved or properly documented." },
+    { id: "tax-due-recorded", label: "Tax due amount is recorded from the approved return or working papers, including a documented zero amount where applicable." },
     { id: "ready-for-review", label: "Return, QAP/alphalist, and working papers agree and are ready for Reviewer." },
   ],
   REVIEWER: [
@@ -46,6 +47,10 @@ export const roleQuestions: Record<WorkflowRole, readonly WorkflowQuestion[]> = 
 export const roleLabels: Record<WorkflowRole, string> = { PREPARER: "Preparer", CHECKER: "Checker", REVIEWER: "Reviewer" };
 const processOwnerLabels: Record<WorkflowProcessOwner, string> = { ...roleLabels, TAX_CONTROL: "Tax Control" };
 
+export function isValidTaxDueAmount(value: number | null | undefined) {
+  return value !== null && value !== undefined && Number.isFinite(value) && value >= 0;
+}
+
 export function workflowProcessRole(stepId: string): WorkflowProcessOwner {
   if (stepId === "check") return "CHECKER";
   if (stepId === "review") return "REVIEWER";
@@ -58,6 +63,22 @@ export function workflowProcessRoleLabel(role: WorkflowProcessOwner): string {
 
 export const paymentProcessStepIds = new Set(["payment", "payment-client-approval", "payment-confirmation"]);
 
+export function orderedProcessStatuses(work: FixtureWorkItem, statuses: Readonly<Record<string, WorkflowProcessStatus>>): Record<string, WorkflowProcessStatus> {
+  const projected: Record<string, WorkflowProcessStatus> = {};
+  if (work.blocker?.category === "CLIENT DATA") {
+    for (const step of work.steps) projected[step.id] = paymentProcessStepIds.has(step.id) && work.paymentApplicability === "NOT_APPLICABLE" ? "NOT_APPLICABLE" : "NOT_STARTED";
+    return projected;
+  }
+  let priorStepsComplete = true;
+  for (const step of work.steps) {
+    const paymentNotApplicable = paymentProcessStepIds.has(step.id) && work.paymentApplicability === "NOT_APPLICABLE";
+    const status = paymentNotApplicable ? "NOT_APPLICABLE" : statuses[step.id] ?? "NOT_STARTED";
+    projected[step.id] = priorStepsComplete ? status : "NOT_STARTED";
+    priorStepsComplete = projected[step.id] === "DONE" || projected[step.id] === "NOT_APPLICABLE";
+  }
+  return projected;
+}
+
 export function initialProcessStatuses(work: FixtureWorkItem): Readonly<Record<string, WorkflowProcessStatus>> {
   const statuses: Record<string, WorkflowProcessStatus> = {};
   for (const step of work.steps) {
@@ -68,9 +89,10 @@ export function initialProcessStatuses(work: FixtureWorkItem): Readonly<Record<s
         : "NOT_STARTED";
   }
 
-  const firstIncomplete = work.steps.find((step) => statuses[step.id] === "NOT_STARTED");
-  if (firstIncomplete) statuses[firstIncomplete.id] = "IN_PROGRESS";
-  return statuses;
+  const orderedStatuses = orderedProcessStatuses(work, statuses);
+  const firstIncomplete = work.steps.find((step) => orderedStatuses[step.id] === "NOT_STARTED");
+  if (firstIncomplete) orderedStatuses[firstIncomplete.id] = "IN_PROGRESS";
+  return orderedStatuses;
 }
 
 export function initialGate(work: FixtureWorkItem): WorkflowRole | null {
@@ -95,7 +117,10 @@ export function recordForWork(work: FixtureWorkItem, stored?: StoredWorkflowReco
   for (const step of work.steps) {
     if (!recordedStepIds.has(step.id)) processStatuses[step.id] = seed.processStatuses[step.id];
   }
-  return { ...persisted, processStatuses, processHistory, checklistAnswers: persisted.checklistAnswers ?? seed.checklistAnswers, checklistHistory: persisted.checklistHistory ?? seed.checklistHistory, changeHistory: persisted.changeHistory ?? seed.changeHistory, periodLock: persisted.periodLock ?? seed.periodLock, periodLockHistory: persisted.periodLockHistory ?? seed.periodLockHistory };
+  const orderedStatuses = orderedProcessStatuses(work, processStatuses);
+  const firstIncomplete = work.steps.find((step) => orderedStatuses[step.id] === "NOT_STARTED");
+  if (firstIncomplete && !Object.values(orderedStatuses).some((status) => status === "IN_PROGRESS" || status === "NEEDS_ATTENTION")) orderedStatuses[firstIncomplete.id] = "IN_PROGRESS";
+  return { ...persisted, processStatuses: orderedStatuses, processHistory, checklistAnswers: persisted.checklistAnswers ?? seed.checklistAnswers, checklistHistory: persisted.checklistHistory ?? seed.checklistHistory, changeHistory: persisted.changeHistory ?? seed.changeHistory, periodLock: persisted.periodLock ?? seed.periodLock, periodLockHistory: persisted.periodLockHistory ?? seed.periodLockHistory };
 }
 
 export function stageForProcessStep(stepId: string): FixtureWorkItem["stage"] {
@@ -146,7 +171,7 @@ export function transition(role: WorkflowRole, decision: WorkflowDecision, note:
 }
 
 export function applyWorkflowStepState(work: FixtureWorkItem, currentGate: WorkflowRole | null, stage: FixtureWorkItem["stage"], processStatuses?: Readonly<Record<string, WorkflowProcessStatus>>): FixtureWorkItem["steps"] {
-  const activeProcessStep = processStatuses && work.steps.find((step) => processStatuses[step.id] === "IN_PROGRESS" || processStatuses[step.id] === "NEEDS_ATTENTION");
+  const activeProcessStep = processStatuses && work.steps.find((step) => paymentProcessStepIds.has(step.id) && work.paymentApplicability === "NOT_APPLICABLE" ? false : processStatuses[step.id] === "IN_PROGRESS" || processStatuses[step.id] === "NEEDS_ATTENTION");
   const firstIncomplete = processStatuses && work.steps.find((step) => {
     if (work.paymentApplicability === "NOT_APPLICABLE" && paymentProcessStepIds.has(step.id)) return false;
     const status = processStatuses[step.id];
@@ -156,7 +181,8 @@ export function applyWorkflowStepState(work: FixtureWorkItem, currentGate: Workf
   const completeBefore = currentStepId === "check" ? new Set(["prepare"]) : currentStepId === "review" ? new Set(["prepare", "check"]) : currentStepId === "client-approval" ? new Set(["prepare", "check", "review"]) : new Set<string>();
   return work.steps.map((step) => {
     const processStatus = processStatuses?.[step.id];
-    const state = processStatus === "DONE" || processStatus === "NOT_APPLICABLE" ? "complete" : processStatus === "NEEDS_ATTENTION" ? "unresolved" : step.state === "blocked" && step.id === currentStepId ? "blocked" : step.id === currentStepId ? "current" : processStatus === "IN_PROGRESS" ? "current" : processStatuses ? "not-started" : completeBefore.has(step.id) ? "complete" : "not-started";
+    const notApplicable = paymentProcessStepIds.has(step.id) && work.paymentApplicability === "NOT_APPLICABLE";
+    const state = notApplicable || processStatus === "DONE" || processStatus === "NOT_APPLICABLE" ? "complete" : processStatus === "NEEDS_ATTENTION" ? "unresolved" : step.state === "blocked" && step.id === currentStepId ? "blocked" : step.id === currentStepId ? "current" : processStatus === "IN_PROGRESS" ? "current" : processStatuses ? "not-started" : completeBefore.has(step.id) ? "complete" : "not-started";
     return { ...step, state };
   });
 }

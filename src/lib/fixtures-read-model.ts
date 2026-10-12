@@ -132,6 +132,14 @@ export function operationalToday(prototypeMode: boolean): string {
   return prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10);
 }
 
+export function hasOutstandingCompletionAction(work: Pick<(typeof fixtureWork)[number], "nextAction">) {
+  return /\bcomplete\b/i.test(work.nextAction);
+}
+
+export function isWorkAttention(work: Pick<(typeof fixtureWork)[number], "status" | "blocker" | "nextAction">) {
+  return work.status !== "GREEN" || Boolean(work.blocker) || hasOutstandingCompletionAction(work);
+}
+
 export function getFixtureOperationalRecord(workId: string, workItems: readonly (typeof fixtureWork)[number][] = fixtureWork): FixtureOperationalRecord | undefined {
   return getFixtureOperationalRecords(workItems).find((record) => record.work.id === workId);
 }
@@ -152,7 +160,7 @@ export function filterFixtureOperationalRecords(
     if (filters.due === "next-5" && (daysFromReview < 0 || daysFromReview > 5)) return false;
     if (filters.due === "week" && (daysFromReview < 0 || daysFromReview > 7)) return false;
     if (filters.due === "overdue" && daysFromReview >= 0 && !work.deadline.toLowerCase().includes("overdue") && !item.internalDeadline.toLowerCase().includes("overdue")) return false;
-    if (filters.due === "attention" && work.status === "GREEN") return false;
+    if (filters.due === "attention" && !isWorkAttention(work)) return false;
     if (filters.due === "blocked" && !work.blocker) return false;
     if (filters.due === "statutory" && (item.statutoryDeadline === "Rule unresolved" || work.status !== "RED")) return false;
     if (filters.status !== "all" && work.status !== filters.status) return false;

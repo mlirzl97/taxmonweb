@@ -9,6 +9,8 @@ const migration = readFileSync(migrationPath, "utf8");
 const executionMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261108000000_work_execution_commands.sql"), "utf8");
 const periodCloseMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261118000000_accounting_period_close.sql"), "utf8");
 const periodCloseHardeningMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261118010000_harden_period_close_triggers.sql"), "utf8");
+const returnPeriodLockMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261119000000_return_period_locks.sql"), "utf8");
+const preparerPaymentAmountMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261121000000_preparer_payment_amount_control.sql"), "utf8");
 
 describe("generated work persistence contract", () => {
   it("uses one generated-work source with idempotent identity", () => {
@@ -52,5 +54,23 @@ describe("generated work persistence contract", () => {
     expect(periodCloseMigration).toContain("generated_work_process_period_guard");
     expect(periodCloseHardeningMigration).toContain("revoke execute on function public.block_closed_generated_work_change()");
     expect(periodCloseHardeningMigration).toContain("set search_path = public");
+  });
+
+  it("moves the operational lock boundary to one return within one compliance period", () => {
+    expect(returnPeriodLockMigration).toContain("lock_key text");
+    expect(returnPeriodLockMigration).toContain("generated_work_return_lock_key");
+    expect(returnPeriodLockMigration).toContain("A return cannot be locked before its governed due date.");
+    expect(returnPeriodLockMigration).toContain("Only authorized Tax Team or HOD users can reopen a return lock.");
+    expect(returnPeriodLockMigration).toContain("record_generated_return_lock");
+    expect(returnPeriodLockMigration).toContain("Return lock changes must be made through centralized Tax Team control.");
+    expect(returnPeriodLockMigration).not.toContain("Every active work item in the accounting period must be archived and closure-certified before close.");
+  });
+
+  it("locks the payment amount to the Preparer certification", () => {
+    expect(preparerPaymentAmountMigration).toContain("guard_preparer_payment_amount");
+    expect(preparerPaymentAmountMigration).toContain("Only the assigned Preparer can record the amount to pay.");
+    expect(preparerPaymentAmountMigration).toContain("already recorded and cannot be edited");
+    expect(preparerPaymentAmountMigration).toContain("record_payment_amount_evidence");
+    expect(preparerPaymentAmountMigration).toContain("Amount to pay captured at Preparer certification");
   });
 });

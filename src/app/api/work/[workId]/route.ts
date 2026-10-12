@@ -16,7 +16,7 @@ const commandCapabilities: Record<string, readonly string[]> = {
   process_status: ["ExecuteGeneratedComplianceWork"],
   final_certification: ["ExecuteGeneratedComplianceWork"],
   qa_finding: ["PerformWorkQA", "ValidateTaxProfile", "ViewTaxControlHistory"],
-  period_lock: ["ManageWorkPeriodLock", "ValidateTaxProfile"],
+  period_lock: ["ManageWorkPeriodLock", "PerformElevatedOverride"],
 };
 
 function workIdFromParams(params: { workId: string }) {

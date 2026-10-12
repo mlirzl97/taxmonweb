@@ -70,6 +70,7 @@ export type LiveGeneratedWork = {
     decision: "certify" | "approve" | "return";
     note: string;
     answers: Record<string, boolean>;
+    tax_due_amount: number | null;
     actor_id: string;
     override_reason: string | null;
     recorded_at: string;
@@ -85,7 +86,11 @@ export type LiveGeneratedWork = {
     step_code: string;
     evidence_kind: "result" | "filing" | "payment" | "attachment" | "archive" | "client_approval" | "other";
     reference: string;
+    amount?: number | null;
     external_date: string | null;
+    acknowledged_on: string | null;
+    validated_on: string | null;
+    attachment_name: string | null;
     external_reference: string | null;
     external_channel: string | null;
     sharepoint_url: string | null;
@@ -191,6 +196,7 @@ export async function listLiveGeneratedWork(): Promise<LiveGeneratedWork[]> {
         decision,
         note,
         answers,
+        tax_due_amount,
         actor_id,
         override_reason,
         recorded_at
@@ -207,6 +213,9 @@ export async function listLiveGeneratedWork(): Promise<LiveGeneratedWork[]> {
         evidence_kind,
         reference,
         external_date,
+        acknowledged_on,
+        validated_on,
+        attachment_name,
         external_reference,
         external_channel,
         sharepoint_url,
@@ -257,6 +266,16 @@ export async function getLiveGeneratedWorkDetail(workId: string) {
 export async function recordLiveGeneratedWorkCommand(workId: string, command: string, payload: Record<string, unknown>, idempotencyKey: string) {
   const client = await createSupabaseServerClient();
   if (!client) throw new Error("Supabase is not configured for this environment.");
+  if (command === "period_lock") {
+    const { data, error } = await client.rpc("record_generated_return_lock", {
+      p_work_id: workId,
+      p_locked: Boolean(payload.locked),
+      p_reason: typeof payload.reason === "string" ? payload.reason : "",
+      p_idempotency_key: idempotencyKey,
+    });
+    if (error) throw new Error(`Unable to record return lock: ${error.message}`);
+    return data as Record<string, unknown>;
+  }
   const { data, error } = await client.rpc("record_generated_work_command", {
     p_work_id: workId,
     p_command: command,

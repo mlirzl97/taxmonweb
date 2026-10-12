@@ -22,6 +22,8 @@ export type FixtureWorkComponent = {
   label: "Submission" | "Payment" | "Attachments" | "Evidence";
   state: string;
   detail: string;
+  /** Component deadline from the governed work read model, when available. */
+  deadline?: string | null;
 };
 
 export type FixturePaymentApplicability = "REQUIRED" | "NOT_APPLICABLE" | "UNRESOLVED";
@@ -34,6 +36,7 @@ export type FixtureWorkflowSnapshot = {
     decision: "CERTIFY" | "APPROVE" | "RETURN";
     note: string;
     answers: Record<string, boolean>;
+    taxDueAmount?: number;
     actor: string;
     recordedAt: string;
     elevatedOverride?: boolean;
@@ -56,6 +59,10 @@ export type FixtureWorkflowSnapshot = {
     actor: string;
     recordedAt: string;
     evidenceReference?: string;
+    completedOn?: string;
+    acknowledgedOn?: string;
+    validatedOn?: string;
+    attachmentName?: string;
     sharepointUrl?: string;
     elevatedOverride?: boolean;
     overrideReason?: string;
@@ -77,6 +84,8 @@ export type FixtureWorkItem = {
   /** Governed requirement context used to join live work to released calendar entries. */
   requirementId?: string;
   requirementVersionId?: string;
+  /** Stable governed return code used by Tax Team's centralized lock control. */
+  requirementCode?: string;
   /** Stable accounting-period key used by the period-close boundary. */
   periodKey?: string;
   clientId: string;
@@ -92,6 +101,8 @@ export type FixtureWorkItem = {
   status: FixtureStatus;
   statusReason: string;
   deadline: string;
+  /** Governed due date used to prevent locking a return before it is due. */
+  dueDate?: string | null;
   deadlineType: "TMF internal target" | "Client / service milestone" | "Control milestone";
   owner: string;
   scope: FixtureScope;

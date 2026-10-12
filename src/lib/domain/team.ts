@@ -7,6 +7,7 @@ import {
   type FixtureWorkItem,
 } from "@/lib/fixtures";
 import type { RbacPersona } from "@/lib/domain/access";
+import { isWorkAttention } from "@/lib/fixtures-read-model";
 
 export const careerServiceLevelLabels = {
   "5.2": "Senior Manager",
@@ -314,9 +315,9 @@ export type PersonalControlPulse = {
  * the visual reward points to a safe operational action, not speed.
  */
 export function derivePersonalControlPulse(work: readonly FixtureWorkItem[]): PersonalControlPulse {
-  const clearWork = work.filter((item) => item.status === "GREEN" && !item.blocker).length;
+  const clearWork = work.filter((item) => !isWorkAttention(item)).length;
   const blockedWork = work.filter((item) => Boolean(item.blocker)).length;
-  const attentionWork = work.filter((item) => item.status !== "GREEN" || item.blocker).length;
+  const attentionWork = work.filter((item) => isWorkAttention(item)).length;
   const rankedWork = [...work].sort((left, right) => {
     const rank = (item: FixtureWorkItem) => item.blocker ? 0 : item.status === "RED" ? 1 : item.status === "AMBER" ? 2 : item.status === "UNRESOLVED" ? 3 : 4;
     return rank(left) - rank(right);
@@ -348,9 +349,9 @@ export function deriveTeamControlPulses(work: readonly FixtureWorkItem[]): TeamC
 
   return scopes.map((scope) => {
     const scopedWork = work.filter((item) => item.scope === scope);
-    const clearWork = scopedWork.filter((item) => item.status === "GREEN" && !item.blocker).length;
+    const clearWork = scopedWork.filter((item) => !isWorkAttention(item)).length;
     const blockedWork = scopedWork.filter((item) => Boolean(item.blocker)).length;
-    const attentionWork = scopedWork.filter((item) => item.status !== "GREEN" || item.blocker).length;
+    const attentionWork = scopedWork.filter((item) => isWorkAttention(item)).length;
     const totalWork = scopedWork.length;
 
     return {

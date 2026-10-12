@@ -75,6 +75,10 @@ function workflowSnapshotFor(work: LiveGeneratedWork, userNames: UserNameMap): F
     actor: actorName(evidence.actor_id, userNames),
     recordedAt: evidence.recorded_at,
     evidenceReference: evidence.reference,
+    completedOn: evidence.external_date ?? undefined,
+    acknowledgedOn: evidence.acknowledged_on ?? undefined,
+    validatedOn: evidence.validated_on ?? undefined,
+    attachmentName: evidence.attachment_name ?? undefined,
     sharepointUrl: evidence.sharepoint_url ?? undefined,
   }));
   for (const step of work.generated_work_process_steps ?? []) {
@@ -88,6 +92,7 @@ function workflowSnapshotFor(work: LiveGeneratedWork, userNames: UserNameMap): F
     decision: attempt.decision.toUpperCase() as "CERTIFY" | "APPROVE" | "RETURN",
     note: attempt.note,
     answers: attempt.answers,
+    ...(attempt.tax_due_amount !== null ? { taxDueAmount: attempt.tax_due_amount } : {}),
     actor: actorName(attempt.actor_id, userNames),
     recordedAt: attempt.recorded_at,
     ...(attempt.override_reason ? { elevatedOverride: true, overrideReason: attempt.override_reason } : {}),
@@ -139,12 +144,13 @@ export function adaptLiveGeneratedWork(work: LiveGeneratedWork, userNames: UserN
     const state: FixtureWorkStepState = persisted === "complete" || persisted === "not_applicable" ? "complete" : persisted === "needs_attention" ? "unresolved" : persisted === "in_progress" ? "current" : stepState(work.lifecycle_stage, id as LiveGeneratedWork["lifecycle_stage"]);
     return { id: stepId, label, state, detail: "State is read from the governed compliance work record." };
   });
-  const components = work.generated_compliance_work_components.map((component) => ({ label: componentLabel(component), state: componentState(component), detail: `${component.label}${component.statutory_deadline ? ` · statutory ${component.statutory_deadline}` : ""}` }));
+  const components = work.generated_compliance_work_components.map((component) => ({ label: componentLabel(component), state: componentState(component), deadline: component.statutory_deadline, detail: `${component.label}${component.statutory_deadline ? ` · statutory ${component.statutory_deadline}` : ""}` }));
   const blocker = work.data_readiness === "not_ready" ? { category: "CLIENT DATA" as const, reason: "Data readiness is not confirmed." } : work.engagement_status === "open" && work.rag_status === "red" ? { category: "INTERNAL" as const, reason: "This work object is carrying a red control signal." } : undefined;
   return {
     id: work.id,
     requirementId: work.requirement_id,
     requirementVersionId: work.requirement_version_id,
+    ...(requirement?.requirement_code ? { requirementCode: requirement.requirement_code } : {}),
     clientId: client?.reference_code ?? `registration-unit-${work.registration_unit_id}`,
     client: client?.display_name ?? "Taxpayer unresolved",
     entity: entity?.display_name ?? "Taxpayer entity unresolved",
@@ -160,6 +166,7 @@ export function adaptLiveGeneratedWork(work: LiveGeneratedWork, userNames: UserN
     statusReason: work.statutory_deadline_missed ? "Statutory deadline missed." : work.internal_target_missed ? "TMF package target missed." : "Projected from the governed work state.",
     deadline: deadline.value,
     deadlineType: deadline.type,
+    dueDate: work.adjusted_statutory_deadline ?? work.base_statutory_deadline,
     owner,
     scope: scopeFromUnit(tower?.name),
     ...(cluster?.name ? { cluster: cluster.name } : {}),

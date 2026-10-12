@@ -17,6 +17,7 @@ export const priorityCapabilities = {
     "ViewScopedPortfolio",
     "ValidateTaxProfile",
     "MaintainDeadlineControl",
+    "ManageWorkPeriodLock",
     "ViewTaxControlHistory",
     "MaintainClientRepository",
   ],

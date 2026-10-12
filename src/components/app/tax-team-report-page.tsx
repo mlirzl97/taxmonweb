@@ -29,6 +29,7 @@ import { TaxTeamDeadlineControl } from "./tax-team-deadline-control";
 import { PeriodLocksView } from "./tax-team-period-locks";
 import { useWorkflow } from "@/lib/workflow-state";
 import { liveWorkToTaxTeamReportRow } from "@/lib/domain/live-tax-team-adapter";
+import { deriveWorkReturnOutcome, taxTeamStatusFromOutcome } from "@/lib/domain/work-outcome";
 
 function reportTitle(filters: TaxTeamReportFilters) {
   return taxTeamReportTypes.find((report) => report.id === filters.reportType)?.label ?? "Tax Team report";
@@ -132,7 +133,7 @@ function AuditDetail({ rows, filters, onSelectRow }: { rows: readonly TaxTeamRep
 }
 
 export default function TaxTeamReportPage({ initialView = "overview" }: { initialView?: TaxTeamView }) {
-  const { prototypeMode } = useWorkflow();
+  const { getEffectiveWork, getRecord, getWorkItems, operationalToday, prototypeMode } = useWorkflow();
   const initialReportType = initialView === "monthly" || initialView === "qa" || initialView === "rca" || initialView === "audit"
     ? initialView
     : defaultTaxTeamReportFilters.reportType;
@@ -158,7 +159,15 @@ export default function TaxTeamReportPage({ initialView = "overview" }: { initia
       .catch(() => { if (!cancelled) setLiveRows([]); });
     return () => { cancelled = true; };
   }, [prototypeMode]);
-  const allRows = useMemo(() => prototypeMode ? getTaxTeamReportRows() : liveRows, [liveRows, prototypeMode]);
+  const allRows = useMemo(() => {
+    if (!prototypeMode) return liveRows;
+    const workById = new Map(getWorkItems().map((work) => [work.id, getEffectiveWork(work)]));
+    return getTaxTeamReportRows().map((row) => {
+      const work = workById.get(row.id);
+      if (!work) return row;
+      return { ...row, monthlyStatus: taxTeamStatusFromOutcome(deriveWorkReturnOutcome(work, getRecord(work), operationalToday)) };
+    });
+  }, [getEffectiveWork, getRecord, getWorkItems, liveRows, operationalToday, prototypeMode]);
   const filteredRows = useMemo(() => filterTaxTeamReportRows(allRows, filters), [allRows, filters]);
   const filteredTransactionReviews = useMemo(() => filterTaxTeamTransactionReviews(transactionReviews, filters), [transactionReviews, filters]);
   const summary = useMemo(() => summarizeTaxTeamReport(filteredRows), [filteredRows]);
