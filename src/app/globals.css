@@ -2500,6 +2500,7 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
 .admin-provisioning-grid textarea { resize: vertical; }
 .admin-provisioning-actions { align-items: center; display: flex; gap: 14px; justify-content: space-between; }
 .admin-provisioning-actions .admin-placeholder-note { margin: 0; }
+.admin-access-launchers { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .admin-access-launcher { align-items: center; display: flex; gap: 16px; justify-content: space-between; margin-bottom: 14px; }
 .admin-access-launcher h2 { font-size: 18px; letter-spacing: -.03em; margin: 3px 0 0; }
 .admin-access-launcher p { color: var(--slate); font-size: 11px; margin: 4px 0 0; }
@@ -2532,6 +2533,7 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
   .admin-provisioning-actions__buttons { justify-content: flex-end; }
   .admin-access-launcher { align-items: stretch; flex-direction: column; }
   .admin-access-launcher .button { align-self: start; }
+  .admin-access-launchers { grid-template-columns: 1fr; }
 }
 .admin-data-panel { margin-top: 14px; }
 .admin-data-grid { border-top: 1px solid var(--border); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -87,6 +87,7 @@ function AccessMatrixEditor() {
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [staffDrawerOpen, setStaffDrawerOpen] = useState(false);
   const [accessDrawerOpen, setAccessDrawerOpen] = useState(false);
+  const [templateDrawerOpen, setTemplateDrawerOpen] = useState(false);
   const [reasonDrawerOpen, setReasonDrawerOpen] = useState(false);
 
   useEffect(() => {
@@ -139,14 +140,22 @@ function AccessMatrixEditor() {
   }
 
   return <>
-    <section className="panel admin-access-launcher" aria-labelledby="admin-access-launcher-title">
-      <div><span className="meta-label">Administration</span><h2 id="admin-access-launcher-title">Users & access</h2><p>{staffMembers.length} people with access · templates and scope controls</p></div>
-      <button className="button button--primary" onClick={() => setAccessDrawerOpen(true)} type="button">Open Users & access</button>
-    </section>
+    <div className="admin-access-launchers">
+      <section className="panel admin-access-launcher" aria-labelledby="admin-access-launcher-title">
+        <div><span className="meta-label">Administration</span><h2 id="admin-access-launcher-title">Users & access</h2><p>{staffMembers.length} people with access</p></div>
+        <button className="button button--primary" onClick={() => setAccessDrawerOpen(true)} type="button">Open Users & access</button>
+      </section>
+      <section className="panel admin-access-launcher" aria-labelledby="admin-template-launcher-title">
+        <div><span className="meta-label">Administration</span><h2 id="admin-template-launcher-title">Access templates</h2><p>{rbacPersonaOptions.length} governed role templates</p></div>
+        <button className="button button--primary" onClick={() => setTemplateDrawerOpen(true)} type="button">Open Access templates</button>
+      </section>
+    </div>
     {accessDrawerOpen && <DetailDrawer eyebrow="Administration" title="Users & access" subtitle="People, scope and role templates" onClose={() => { setAccessDrawerOpen(false); setStaffDrawerOpen(false); setSelectedStaffId(null); setReasonDrawerOpen(false); }}>
     <StaffAccessRoster members={staffMembers} canManage={canProvisionStaff} onAdd={() => setStaffDrawerOpen(true)} onSelect={(id) => { setSelectedStaffId(id); setStaffDrawerOpen(false); }} />
     {staffDrawerOpen && <DetailDrawer eyebrow="Users & access" title="Add staff member" subtitle="Create the identity, access bundle and scope in one audited step." onClose={() => setStaffDrawerOpen(false)}><StaffProvisioningForm canManage={canProvisionStaff} onClose={() => setStaffDrawerOpen(false)} /></DetailDrawer>}
     {selectedStaffId && <StaffAccessDrawer member={staffMembers.find((member) => member.id === selectedStaffId)} onClose={() => setSelectedStaffId(null)} />}
+    </DetailDrawer>}
+    {templateDrawerOpen && <DetailDrawer eyebrow="Administration" title="Access templates" subtitle="Role-level capability defaults" onClose={() => { setTemplateDrawerOpen(false); setReasonDrawerOpen(false); }}>
     <section className="panel admin-access-editor" aria-labelledby="access-editor-title">
     <SectionHeading detail="Role-level defaults. Individual scope and segregation controls still apply." title="Access templates" />
     <div className="admin-access-editor__toolbar">
