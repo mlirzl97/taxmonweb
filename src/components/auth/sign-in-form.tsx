@@ -2,7 +2,6 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
@@ -15,8 +14,6 @@ export function SignInForm({ isConfigured }: SignInFormProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const router = useRouter();
-
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -38,8 +35,9 @@ export function SignInForm({ isConfigured }: SignInFormProps) {
         return;
       }
 
-      router.replace("/app/control-tower");
-      router.refresh();
+      // A full same-origin navigation lets the server proxy consume the freshly
+      // persisted Supabase session before rendering the protected layout.
+      window.location.assign(new URL("/app/control-tower", window.location.origin).toString());
     } catch {
       setError("Unable to sign in right now. Try again.");
     } finally {
