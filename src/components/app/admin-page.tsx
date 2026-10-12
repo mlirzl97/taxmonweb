@@ -86,6 +86,8 @@ function AccessMatrixEditor() {
   const [staffMembers, setStaffMembers] = useState<FixtureTeamMember[]>(() => prototypeMode ? [...fixtureOrgDirectoryMembers] : []);
   const [selectedStaffId, setSelectedStaffId] = useState<string | null>(null);
   const [staffDrawerOpen, setStaffDrawerOpen] = useState(false);
+  const [accessDrawerOpen, setAccessDrawerOpen] = useState(false);
+  const [reasonDrawerOpen, setReasonDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (prototypeMode) return;
@@ -130,15 +132,23 @@ function AccessMatrixEditor() {
     const nextMatrix: AccessMatrix = { ...accessMatrix, [selectedPersona]: { ...draft } };
     const result = commitAccessMatrix(nextMatrix, reason);
     setFeedback(result.ok ? `${rbacPersonaOptions.find((option) => option.id === selectedPersona)?.label ?? selectedPersona} access template saved.` : result.error ?? "Access template could not be saved.");
-    if (result.ok) setReason("");
+    if (result.ok) {
+      setReason("");
+      setReasonDrawerOpen(false);
+    }
   }
 
   return <>
+    <section className="panel admin-access-launcher" aria-labelledby="admin-access-launcher-title">
+      <div><span className="meta-label">Administration</span><h2 id="admin-access-launcher-title">Users & access</h2><p>{staffMembers.length} people with access · templates and scope controls</p></div>
+      <button className="button button--primary" onClick={() => setAccessDrawerOpen(true)} type="button">Open Users & access</button>
+    </section>
+    {accessDrawerOpen && <DetailDrawer eyebrow="Administration" title="Users & access" subtitle="People, scope and role templates" onClose={() => { setAccessDrawerOpen(false); setStaffDrawerOpen(false); setSelectedStaffId(null); setReasonDrawerOpen(false); }}>
     <StaffAccessRoster members={staffMembers} canManage={canProvisionStaff} onAdd={() => setStaffDrawerOpen(true)} onSelect={(id) => { setSelectedStaffId(id); setStaffDrawerOpen(false); }} />
     {staffDrawerOpen && <DetailDrawer eyebrow="Users & access" title="Add staff member" subtitle="Create the identity, access bundle and scope in one audited step." onClose={() => setStaffDrawerOpen(false)}><StaffProvisioningForm canManage={canProvisionStaff} onClose={() => setStaffDrawerOpen(false)} /></DetailDrawer>}
     {selectedStaffId && <StaffAccessDrawer member={staffMembers.find((member) => member.id === selectedStaffId)} onClose={() => setSelectedStaffId(null)} />}
     <section className="panel admin-access-editor" aria-labelledby="access-editor-title">
-    <SectionHeading detail="Choose one effective level per module. The strongest level is applied as a governed template; capabilities, scope and segregation of duties still apply." title="Users & access" />
+    <SectionHeading detail="Role-level defaults. Individual scope and segregation controls still apply." title="Access templates" />
     <div className="admin-access-editor__toolbar">
       <label className="admin-access-editor__role" htmlFor="access-role-template">
         <span>Role template</span>
@@ -159,13 +169,7 @@ function AccessMatrixEditor() {
       </div>)}
     </div>
 
-    <div className="admin-access-editor__footer">
-      <label className="admin-access-editor__reason" htmlFor="access-change-reason">
-        <span>Reason for change</span>
-        <textarea id="access-change-reason" disabled={!canManageAccess} onChange={(event) => setReason(event.target.value)} placeholder="Required for an audited access-template change" value={reason} />
-      </label>
-      <button className="button button--primary" disabled={!canManageAccess || !reason.trim()} onClick={saveTemplate} type="button">Save access template</button>
-    </div>
+    <div className="admin-access-editor__footer"><span className="admin-access-editor__note">A reason is required and recorded with the change.</span><button className="button button--primary" disabled={!canManageAccess} onClick={() => setReasonDrawerOpen(true)} type="button">Review and save</button></div>
     <p aria-live="polite" className="inline-feedback">{feedback || (canManageAccess ? "Changes are staged until you save with a reason." : "Read-only access view. HOD, Tax Control and Super Admin manage access templates.")}</p>
 
     <div className="admin-access-editor__history">
@@ -174,6 +178,13 @@ function AccessMatrixEditor() {
     </div>
     <p className="admin-placeholder-note">Technical administration does not grant tax-control authority. Production enforcement belongs to authenticated server commands, RLS and audited actor history.</p>
     </section>
+    {reasonDrawerOpen && <DetailDrawer eyebrow="Access template" title="Reason for change" subtitle="Required for the audit trail" onClose={() => setReasonDrawerOpen(false)}>
+      <div className="admin-reason-drawer">
+        <label className="form-field" htmlFor="access-change-reason"><span>Reason</span><textarea id="access-change-reason" autoFocus onChange={(event) => setReason(event.target.value)} placeholder="Explain why this access template is changing." rows={5} value={reason} /></label>
+        <div className="admin-reason-drawer__actions"><button className="button button--quiet" onClick={() => setReasonDrawerOpen(false)} type="button">Cancel</button><button className="button button--primary" disabled={!reason.trim()} onClick={saveTemplate} type="button">Save access template</button></div>
+      </div>
+    </DetailDrawer>}
+    </DetailDrawer>}
   </>;
 }
 
