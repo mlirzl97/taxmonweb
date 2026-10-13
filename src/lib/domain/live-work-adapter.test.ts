@@ -61,4 +61,27 @@ describe("live generated work adapter", () => {
     const projected = adaptLiveGeneratedWork({ ...work, data_readiness: "not_ready" });
     expect(projected.blocker?.category).toBe("CLIENT DATA");
   });
+
+  it("normalizes live process aliases to the Work journey identifiers", () => {
+    const projected = adaptLiveGeneratedWork({
+      ...work,
+      lifecycle_stage: "preparation",
+      current_gate: "preparer",
+      generated_work_process_steps: [{
+        step_code: "preparer",
+        bundle: "filing",
+        label: "Preparation",
+        owner_role: "preparer",
+        step_order: 1,
+        status: "in_progress",
+        started_at: "2026-10-13T01:00:00Z",
+        completed_at: null,
+        updated_at: "2026-10-13T01:00:00Z",
+      }],
+    });
+    expect(projected.steps[0]?.id).toBe("prepare");
+    expect(projected.steps[0]?.state).toBe("current");
+    expect(projected.workflowSnapshot?.currentGate).toBe("PREPARER");
+    expect(projected.workflowSnapshot?.processStatuses.prepare).toBe("IN_PROGRESS");
+  });
 });

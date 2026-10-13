@@ -31,6 +31,20 @@ function stageFromLifecycle(stage: LiveGeneratedWork["lifecycle_stage"]): Fixtur
   return "POST-FILING";
 }
 
+function normalizeWorkStepId(stepCode: string) {
+  const aliases: Record<string, string> = {
+    preparation: "prepare",
+    preparer: "prepare",
+    checking: "check",
+    checker: "check",
+    reviewer: "review",
+    client_approval: "client-approval",
+    other_submissions: "esubmission",
+    complete: "evidence",
+  };
+  return aliases[stepCode] ?? stepCode;
+}
+
 function statusFromRag(status: LiveGeneratedWork["rag_status"]): FixtureStatus {
   return status.toUpperCase() as FixtureStatus;
 }
@@ -81,7 +95,7 @@ function workflowSnapshotFor(work: LiveGeneratedWork, userNames: UserNameMap): F
   });
   const processHistory: Array<FixtureWorkflowSnapshot["processHistory"][number]> = (work.generated_work_evidence ?? []).map((evidence, index) => ({
     id: `${work.id}-evidence-${index + 1}`,
-    stepId: evidence.step_code,
+    stepId: normalizeWorkStepId(evidence.step_code),
     status: "DONE" as const,
     actor: actorName(evidence.actor_id, userNames),
     recordedAt: evidence.recorded_at,
@@ -93,15 +107,16 @@ function workflowSnapshotFor(work: LiveGeneratedWork, userNames: UserNameMap): F
     sharepointUrl: evidence.sharepoint_url ?? undefined,
   }));
   const latestEvidenceByStep = new Map<string, NonNullable<LiveGeneratedWork["generated_work_evidence"]>[number]>();
-  for (const evidence of work.generated_work_evidence ?? []) latestEvidenceByStep.set(evidence.step_code, evidence);
+  for (const evidence of work.generated_work_evidence ?? []) latestEvidenceByStep.set(normalizeWorkStepId(evidence.step_code), evidence);
   for (const step of work.generated_work_process_steps ?? []) {
+    const stepId = normalizeWorkStepId(step.step_code);
     const status = step.status === "complete" ? "DONE" : step.status === "not_applicable" ? "NOT_APPLICABLE" : step.status === "in_progress" ? "IN_PROGRESS" : step.status === "needs_attention" ? "NEEDS_ATTENTION" : "NOT_STARTED";
-    const latestEvidence = latestEvidenceByStep.get(step.step_code);
+    const latestEvidence = latestEvidenceByStep.get(stepId);
     const evidenceRecordedAfterStep = latestEvidence && latestEvidence.recorded_at >= step.updated_at;
-    if (status !== "DONE" && status !== "NOT_APPLICABLE" && !evidenceRecordedAfterStep) processHistory.push({ id: `${work.id}-${step.step_code}-${step.updated_at}`, stepId: step.step_code, status, actor: "System", recordedAt: step.updated_at });
+    if (status !== "DONE" && status !== "NOT_APPLICABLE" && !evidenceRecordedAfterStep) processHistory.push({ id: `${work.id}-${stepId}-${step.updated_at}`, stepId, status, actor: "System", recordedAt: step.updated_at });
   }
-  const processStatuses = Object.fromEntries((work.generated_work_process_steps ?? []).map((step) => [step.step_code, step.status === "complete" ? "DONE" : step.status === "not_applicable" ? "NOT_APPLICABLE" : step.status === "in_progress" ? "IN_PROGRESS" : step.status === "needs_attention" ? "NEEDS_ATTENTION" : "NOT_STARTED"])) as FixtureWorkflowSnapshot["processStatuses"];
-  const latestArchiveEvidence = [...(work.generated_work_evidence ?? [])].reverse().find((evidence) => evidence.step_code === "evidence");
+  const processStatuses = Object.fromEntries((work.generated_work_process_steps ?? []).map((step) => [normalizeWorkStepId(step.step_code), step.status === "complete" ? "DONE" : step.status === "not_applicable" ? "NOT_APPLICABLE" : step.status === "in_progress" ? "IN_PROGRESS" : step.status === "needs_attention" ? "NEEDS_ATTENTION" : "NOT_STARTED"])) as FixtureWorkflowSnapshot["processStatuses"];
+  const latestArchiveEvidence = [...(work.generated_work_evidence ?? [])].reverse().find((evidence) => normalizeWorkStepId(evidence.step_code) === "evidence");
   const archiveFacts = latestArchiveEvidence
     ? archiveFactsFromNote(latestArchiveEvidence.note)
     : undefined;
@@ -155,11 +170,11 @@ export function adaptLiveGeneratedWork(work: LiveGeneratedWork, userNames: UserN
   const ownerId = work.current_owner_user_id ?? work.preparer_user_id;
   const owner = ownerId ? userNames.get(ownerId) ?? "Assigned user" : "Unassigned";
   const persistedSteps = work.generated_work_process_steps ?? [];
-  const persistedStatus = new Map(persistedSteps.map((step) => [step.step_code, step.status]));
+  const persistedStatus = new Map(persistedSteps.map((step) => [normalizeWorkStepId(step.step_code), step.status]));
   const steps: FixtureWorkStep[] = [
     ["preparation", "Preparation"], ["checking", "Checking"], ["review", "Review"], ["client_approval", "Client approval"], ["filing", "Filing"], ["payment", "Payment"], ["other_submissions", "Attachments"], ["complete", "Archiving"],
   ].map(([id, label]) => {
-    const stepId = id === "other_submissions" ? "esubmission" : id === "complete" ? "evidence" : id;
+    const stepId = normalizeWorkStepId(id);
     const persisted = persistedStatus.get(stepId);
     const state: FixtureWorkStepState = persisted === "complete" || persisted === "not_applicable" ? "complete" : persisted === "needs_attention" ? "unresolved" : persisted === "in_progress" ? "current" : stepState(work.lifecycle_stage, id as LiveGeneratedWork["lifecycle_stage"]);
     return { id: stepId, label, state, detail: "State is read from the governed compliance work record." };
