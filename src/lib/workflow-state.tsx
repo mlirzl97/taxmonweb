@@ -514,7 +514,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   const buildWorkItem = useCallback((input: WorkAdminInput, existing?: FixtureWorkItem): { work?: FixtureWorkItem; error?: string } => {
     const client = fixtureClients.find((candidate) => candidate.id === input.clientId);
     if (!client) return { error: "Choose a taxpayer before saving the work item." };
-    if (!input.title.trim() || !input.period.trim() || !input.deadline.trim() || !input.owner.trim() || !input.nextAction.trim()) return { error: "Complete the work, period, target, owner, and next action fields." };
+    if (!input.title.trim() || !input.period.trim() || !input.deadline.trim() || !input.owner.trim()) return { error: "Complete the return, period, target, and starting owner fields." };
 
     const entity = client.entities[0];
     const units = entity?.units ?? [];
@@ -555,7 +555,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
         deadline: input.deadline.trim(),
         detail: input.detail.trim() || "Prototype work record.",
         stage: input.stage,
-        nextAction: input.nextAction.trim(),
+        nextAction: input.nextAction.trim() || "Complete preparation",
         status: input.status,
         statusReason: input.detail.trim() || "Status recorded by Master Admin.",
         deadlineType: existing?.deadlineType ?? "TMF internal target",

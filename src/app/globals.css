@@ -992,6 +992,10 @@ body { font-size: 13px; }
 .work-admin-form label > span { color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .work-admin-form input, .work-admin-form select, .work-admin-form textarea { background: var(--surface); border: 1px solid var(--border-strong); color: var(--ink); font: inherit; font-size: 13px; min-height: 36px; padding: 8px 10px; width: 100%; }
 .work-admin-form textarea { min-height: 72px; resize: vertical; }
+.work-assignment-summary { background: var(--surface-soft); border-left: 3px solid var(--border-strong); display: grid; gap: 8px; padding: 11px 13px; }
+.work-assignment-summary > div { display: grid; gap: 4px; }
+.work-assignment-summary > div span { display: flex; gap: 7px; font-size: 12px; }
+.work-assignment-summary > div b { color: var(--muted); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; width: 68px; }
 .next-action-box { border-radius: 6px; }
 .calendar-event { border-radius: 4px; }
 .calendar-day--selected { background: #fff8f7; }

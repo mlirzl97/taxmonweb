@@ -12,6 +12,7 @@ const periodCloseHardeningMigration = readFileSync(join(process.cwd(), "supabase
 const returnPeriodLockMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261119000000_return_period_locks.sql"), "utf8");
 const preparerPaymentAmountMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261121000000_preparer_payment_amount_control.sql"), "utf8");
 const manualWorkMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261123000000_enable_authorized_manual_work.sql"), "utf8");
+const manualWorkAssignmentMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261124000000_manual_work_uses_effective_unit_assignments.sql"), "utf8");
 
 describe("generated work persistence contract", () => {
   it("uses one generated-work source with idempotent identity", () => {
@@ -83,5 +84,12 @@ describe("generated work persistence contract", () => {
     expect(manualWorkMigration).toContain("generation_key_value");
     expect(manualWorkMigration).toContain("public.append_audit_event");
     expect(manualWorkMigration).toContain("generated_compliance_work_events");
+  });
+
+  it("snapshots effective Registration Unit assignments when manual Work is created", () => {
+    expect(manualWorkAssignmentMigration).toContain("registration_unit_team_assignments");
+    expect(manualWorkAssignmentMigration).toContain("client_team_assignments");
+    expect(manualWorkAssignmentMigration).toContain("source_priority");
+    expect(manualWorkAssignmentMigration).toContain("current_owner_user_id");
   });
 });

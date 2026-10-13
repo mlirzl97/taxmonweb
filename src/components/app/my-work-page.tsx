@@ -6,7 +6,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { DueRegisterWorkspace, WorkRegisterView } from "@/components/app/control-tower-views";
 import { MyRunView } from "@/components/app/my-run-view";
 import { DetailDrawer, FixturePageFrame, PageHeader } from "@/components/app/workspace-components";
-import { fixtureClients, fixtureWork, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
+import { fixtureClients, fixtureWork } from "@/lib/fixtures";
 import type { DuePreset } from "@/lib/fixtures-read-model";
 import { useWorkflow, type WorkAdminInput } from "@/lib/workflow-state";
 
@@ -54,6 +54,14 @@ function AddWorkDrawer({ onClose }: { onClose: () => void }) {
   const [requirements, setRequirements] = useState<RequirementOption[]>(prototypeMode ? prototypeRequirementOptions : []);
   const [requirementsLoading, setRequirementsLoading] = useState(!prototypeMode);
   const clients = prototypeMode ? fixtureClients : clientRegistry;
+  const selectedClient = clients.find((client) => client.id === draft.clientId);
+  const assignmentOptions = selectedClient
+    ? [
+        { role: "Preparer", name: selectedClient.assignment.preparer },
+        { role: "Checker", name: selectedClient.assignment.checker },
+        { role: "Reviewer", name: selectedClient.assignment.reviewer },
+      ].filter((assignment, index, options) => assignment.name !== "Unassigned" && options.findIndex((candidate) => candidate.name === assignment.name) === index)
+    : [];
 
   useEffect(() => {
     if (prototypeMode) return;
@@ -92,21 +100,17 @@ function AddWorkDrawer({ onClose }: { onClose: () => void }) {
   const canSubmit = !liveClientsLoading && !requirementsLoading && requirements.length > 0;
   return <DetailDrawer eyebrow="Work register" title="Add work" subtitle="Start the work record with a taxpayer, approved requirement, period, and target date." onClose={onClose}>
     <form className="work-admin-form" onSubmit={submit}>
-      <label><span>Taxpayer</span><select disabled={liveClientsLoading} onChange={(event) => update("clientId", event.target.value)} required value={draft.clientId}><option value="">{liveClientsLoading ? "Loading taxpayers…" : "Select taxpayer"}</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
+      <label><span>Taxpayer</span><select disabled={liveClientsLoading} onChange={(event) => { const clientId = event.target.value; const client = clients.find((candidate) => candidate.id === clientId); setDraft((current) => ({ ...current, clientId, owner: prototypeMode && client?.assignment.preparer !== "Unassigned" ? client?.assignment.preparer ?? "" : current.owner })); setError(""); }} required value={draft.clientId}><option value="">{liveClientsLoading ? "Loading taxpayers…" : "Select taxpayer"}</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
       <label><span>Return / submission</span><select disabled={requirementsLoading || requirements.length === 0} onChange={(event) => update("title", event.target.value)} required value={draft.title}><option value="">{requirementsLoading ? "Loading approved returns…" : requirements.length === 0 ? "No approved returns available" : "Select return or submission"}</option>{requirements.map((requirement) => <option key={requirement.code} value={requirement.code}>{requirement.code} — {requirement.name}</option>)}</select></label>
       <label><span>Period</span><input onChange={(event) => update("period", event.target.value)} required type="month" value={draft.period.match(/^\d{4}-\d{2}$/) ? draft.period : ""} /></label>
       <label><span>TMF target</span><input onChange={(event) => update("deadline", event.target.value)} required type="date" value={draft.deadline.match(/^\d{4}-\d{2}-\d{2}$/) ? draft.deadline : ""} /></label>
-      {prototypeMode && <>
-        <label><span>Owner</span><input onChange={(event) => update("owner", event.target.value)} placeholder="Preparer or accountable owner" required value={draft.owner} /></label>
-        <div className="form-grid form-grid--compact">
-          <label><span>Stage</span><select onChange={(event) => update("stage", event.target.value as FixtureWorkItem["stage"])} value={draft.stage}><option value="PREPARE">Preparation</option><option value="REVIEW">Review</option><option value="CLIENT">Client approval</option><option value="FILE">Filing</option><option value="POST-FILING">Post-filing</option></select></label>
-          <label><span>RAG</span><select onChange={(event) => update("status", event.target.value as FixtureStatus)} value={draft.status}><option value="UNRESOLVED">Unresolved</option><option value="GREEN">Green</option><option value="AMBER">Amber</option><option value="RED">Red</option></select></label>
-        </div>
-        <label><span>Next action</span><input onChange={(event) => update("nextAction", event.target.value)} placeholder="What needs to happen next?" required value={draft.nextAction} /></label>
-      </>}
+      {prototypeMode ? <>
+        <label><span>Starting owner</span><select onChange={(event) => update("owner", event.target.value)} required value={draft.owner}><option value="">Select from client setup</option>{assignmentOptions.map((assignment) => <option key={assignment.name} value={assignment.name}>{assignment.role} · {assignment.name}</option>)}</select></label>
+        <p className="form-help">The package starts with the effective client setup assignment. RAG and next action are derived after creation.</p>
+      </> : selectedClient && <section className="work-assignment-summary" aria-label="Assignments from client setup"><span className="meta-label">Assigned from client setup</span><div>{["Preparer", "Checker", "Reviewer"].map((role) => <span key={role}><b>{role}</b>{selectedClient.assignment[role.toLowerCase() as "preparer" | "checker" | "reviewer"]}</span>)}</div></section>}
       {prototypeMode && <label><span>Note</span><textarea onChange={(event) => update("detail", event.target.value)} placeholder="Short context or blocker" value={draft.detail} /></label>}
       {error && <div className="callout callout--error" role="alert">{error}</div>}
-      {!prototypeMode && <p className="form-help">Payment and components are resolved from the approved requirement and client profile after the work is created.</p>}
+      {!prototypeMode && <p className="form-help">The package can be created before it appears in the client’s expected-compliance setup. The approved requirement is the governed source; assignments are inherited from client setup, and RAG/next action are derived.</p>}
       <div className="team-editor__footer"><button className="button button--quiet" onClick={onClose} type="button">Cancel</button><button className="button button--primary" disabled={!canSubmit} type="submit">Add work</button></div>
     </form>
   </DetailDrawer>;
