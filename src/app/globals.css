@@ -1497,7 +1497,6 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
 .work-course-map__stage--needs-attention .work-course-map__state { color: var(--amber); }
 .work-course-map__stage--not-applicable .work-course-map__state { color: var(--slate); }
 .work-course-map__stage .work-step__action { min-width: 115px; }
-.work-verified-badge { align-items: center; color: var(--green); display: inline-flex; font-size: 9px; font-weight: 800; gap: 3px; margin-top: 2px; }
 .work-course-map__tools { align-items: center; display: flex; gap: 10px; justify-content: flex-end; }
 .work-course-map__bulk-toggle { font-size: 20px; font-weight: 500; line-height: 1; min-width: 22px; padding: 2px 4px; }
 .work-override-trigger { color: var(--brand-red-dark); }
@@ -1608,7 +1607,6 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
 .work-detail-page__role-tag--c strong { color: var(--green); }
 .work-detail-page__role-tag--r { background: var(--violet-bg); border-color: #ddd3eb; }
 .work-detail-page__role-tag--r strong { color: var(--violet); }
-.work-journey-table__amount { color: var(--ink); font-size: 10px; font-weight: 800; }
 .work-detail-identity { align-items: end; display: flex; gap: 12px; justify-content: space-between; margin: 2px 0 14px; }
 .work-detail-identity__client { color: var(--brand-red-dark); display: inline-block; font-size: 16px; font-weight: 850; letter-spacing: -.02em; text-decoration: underline; text-decoration-color: #e9b8b1; text-underline-offset: 3px; }
 .work-detail-identity__meta { color: var(--slate); display: flex; flex-wrap: wrap; font-size: 10px; gap: 6px 12px; margin: 5px 0 0; }
