@@ -211,12 +211,14 @@ function WorkflowPerspectiveControl({ pathname }: { pathname: string }) {
 
 function PersonaNavigation({ pathname, firstNavLinkRef, onNavigate }: { pathname: string; firstNavLinkRef: React.RefObject<HTMLAnchorElement | null>; onNavigate: () => void }) {
   const { accessMatrix, workPerspective } = useWorkflow();
+  const router = useRouter();
   const navigation = canAccessModule(workPerspective, "tax_team", undefined, accessMatrix) ? [...primaryNavigation, ...restrictedNavigation] : primaryNavigation;
   const visibleNavigation = navigation.filter((item) => personaNavigation(workPerspective, item.href, accessMatrix));
 
   return <>{visibleNavigation.map((item, index) => {
     const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
-    return <Link aria-current={isActive ? "page" : undefined} className={isActive ? "primary-nav__link primary-nav__link--active" : "primary-nav__link"} data-usage-action={`open_${item.label.toLowerCase().replace(/\s+/g, "_")}`} data-usage-event="navigation" href={item.href} key={item.href} onClick={onNavigate} ref={index === 0 ? firstNavLinkRef : undefined} title={item.label}><Icon name={item.icon} /><span>{item.label}</span></Link>;
+    const warmRoute = () => router.prefetch(item.href);
+    return <Link aria-current={isActive ? "page" : undefined} className={isActive ? "primary-nav__link primary-nav__link--active" : "primary-nav__link"} data-usage-action={`open_${item.label.toLowerCase().replace(/\s+/g, "_")}`} data-usage-event="navigation" href={item.href} key={item.href} onClick={onNavigate} onFocus={warmRoute} onPointerEnter={warmRoute} onTouchStart={warmRoute} ref={index === 0 ? firstNavLinkRef : undefined} title={item.label}><Icon name={item.icon} /><span>{item.label}</span></Link>;
   })}</>;
 }
 
