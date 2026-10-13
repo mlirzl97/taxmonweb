@@ -7,6 +7,7 @@ import { fixtureClients, type FixtureClient, type FixtureException, type Fixture
 import { scopeLabelForValue, scopeOptions, scopeValueForFilter, type ScopeFilter } from "@/lib/control-tower-state";
 import { canUseElevatedOverride, useWorkflow, workflowPerspectiveLabel, workflowProcessRoleLabel, workflowRoleLabel, type WorkflowDecision, type WorkflowProcessOwner, type WorkflowProcessStatus } from "@/lib/workflow-state";
 import { generateWorkflowReportPdf } from "@/lib/workflow-report";
+import { buildWorkflowFactsCsv, buildWorkflowProcessingLogCsv } from "@/lib/workflow-export";
 import { StatusPill } from "../ui/status-pill";
 
 export { scopeOptions };
@@ -328,6 +329,7 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
     { code: "R", label: "Reviewer", person: client.assignment.reviewer },
   ] : [];
   const activityEvents = [...workflowRecord.processHistory.map((event) => ({ id: event.id, label: `${processBundleForStep[event.stepId] ?? "Process"} · ${processStatusLabels[event.status]}`, detail: `${event.actor} · ${event.recordedAt}` })), ...workflowRecord.checklistHistory.map((event) => ({ id: event.id, label: `${workflowRoleLabel(event.role)} checklist`, detail: `${event.completed ? "Completed" : "Reopened"} · ${event.actor} · ${event.recordedAt}` })), ...workflowRecord.attempts.map((event) => ({ id: event.id, label: `${workflowRoleLabel(event.role)} · ${event.decision === "RETURN" ? "Returned for correction" : event.decision === "CERTIFY" ? "Certified" : "Approved"}`, detail: `${event.actor} · ${event.recordedAt}` })), ...workflowRecord.periodLockHistory.map((event, index) => ({ id: `period-lock-${index}-${event.recordedAt}`, label: event.locked ? "Accounting period closed" : "Historical lock event", detail: `${event.actor} · ${event.recordedAt}` })), ...workflowRecord.changeHistory.map((event) => ({ id: event.id, label: event.detail, detail: `${event.actor} · ${event.recordedAt}` }))].reverse().slice(0, 12);
+  const latestEvidenceForStep = (stepId: string) => [...workflowRecord.processHistory].reverse().find((event) => event.stepId === stepId && event.evidenceReference);
   const packageStages: ReadonlyArray<{ id: string; label: string; stepIds: string[] }> = [
     { id: "filing", label: "Filing", stepIds: ["prepare", "check", "review", "client-approval", "filing"] },
     { id: "payment", label: "Payment", stepIds: ["payment", "payment-client-approval", "payment-confirmation"] },
@@ -348,19 +350,20 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
       const step = stage.stepId ? stepById.get(stage.stepId) : undefined;
       const status = step ? processStatusForStep(step) : stage.id === "data" && processStatusForStep(stepById.get("prepare") ?? effectiveWork.steps[0]) === "DONE" ? "DONE" as const : undefined;
       const update = step ? getLatestProcessUpdate(effectiveWork, step.id) : undefined;
+      const evidence = step ? latestEvidenceForStep(step.id) : undefined;
       return {
         bundle: stage.bundle,
         label: stage.label,
         owner: workflowProcessRoleLabel(stage.owner),
         stepId: stage.stepId,
         status: status ? processStatusLabels[status] : stage.state,
-        evidenceReference: update?.evidenceReference,
-        completedOn: update?.completedOn,
-        acknowledgedOn: update?.acknowledgedOn,
-        validatedOn: update?.validatedOn,
-        attachmentName: update?.attachmentName,
-        recordedBy: update?.actor,
-        recordedAt: update?.recordedAt,
+        evidenceReference: evidence?.evidenceReference ?? update?.evidenceReference,
+        completedOn: evidence?.completedOn ?? update?.completedOn,
+        acknowledgedOn: evidence?.acknowledgedOn ?? update?.acknowledgedOn,
+        validatedOn: evidence?.validatedOn ?? update?.validatedOn,
+        attachmentName: evidence?.attachmentName ?? update?.attachmentName,
+        recordedBy: evidence?.actor ?? update?.actor,
+        recordedAt: evidence?.recordedAt ?? update?.recordedAt,
       };
     });
     const pdfBytes = await generateWorkflowReportPdf({
@@ -382,6 +385,22 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
     anchor.download = `taxmonweb-return-journey-${effectiveWork.id}.pdf`;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  function downloadCsv(filename: string, content: string) {
+    const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportWorkflowData(kind: "facts" | "processing") {
+    const returns = getWorkItems().filter(isWorkVisible).map((item) => ({ work: getEffectiveWork(item), record: getRecord(item) }));
+    const filename = kind === "facts" ? "taxmonweb-filing-facts.csv" : "taxmonweb-processing-log.csv";
+    const content = kind === "facts" ? buildWorkflowFactsCsv(returns) : buildWorkflowProcessingLogCsv(returns);
+    downloadCsv(filename, content);
   }
 
   useEffect(() => {
@@ -586,13 +605,14 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
             return <Fragment key={bundle}><tr className="work-journey-table__bundle"><th colSpan={2} scope="rowgroup"><span>{bundle}</span>{bundleNotApplicable && <small>Not applicable</small>}</th></tr>{bundleStages.map((stage) => {
               const step = stage.stepId ? stepById.get(stage.stepId) : undefined;
               const processStatus = step ? processStatusForStep(step) : undefined;
+              const latestEvidence = step ? latestEvidenceForStep(step.id) : undefined;
               const isCurrentStep = Boolean(step && currentProcessStep?.id === step.id);
               const canEditStatus = Boolean(!periodLock.locked && !dataBlocked && step && processStatus && canActOnProcessStep(step.id, effectiveWork) && isCurrentStep);
               const dataComplete = stage.id === "data" && processStatusForStep(stepById.get("prepare") ?? effectiveWork.steps[0]) === "DONE";
               const archiveVerified = step?.id === "evidence" && processStatus === "DONE";
               const visibleStageNumber = visibleJourneyStages.findIndex((candidate) => candidate.id === stage.id) + 1;
               const statusClass = (processStatus ?? "NOT_STARTED").toLowerCase().replaceAll("_", "-");
-              return <tr className={`work-journey-table__row${isCurrentStep ? " work-journey-table__row--current" : ""}`} key={stage.id}><th scope="row"><div className="work-journey-table__step"><span className="work-journey-table__number" aria-hidden="true">{visibleStageNumber}</span><div><span>{stage.label}</span>{archiveVerified && <small className="work-verified-badge" aria-label="Filing and submission evidence verified">✓ Evidence verified</small>}</div></div></th><td><div className="work-journey-table__status-stack">{processStatus ? canEditStatus ? <button aria-label={`Change ${stage.label} status`} className={`work-journey-table__status work-journey-table__status-button work-journey-table__status--${statusClass}`} onClick={() => openStatusDialog(step!.id, processStatus)} title="Change status" type="button">{processStatusLabels[processStatus]}</button> : <span aria-label={`${stage.label} status`} className={`work-journey-table__status work-journey-table__status--${statusClass}`}>{processStatusLabels[processStatus]}</span> : dataComplete ? <span aria-label="Get data status" className="work-journey-table__status work-journey-table__status--done">Complete</span> : <span className="work-journey-table__status work-journey-table__status--ready">{stage.state}</span>}{stage.id === "prepare" && paymentAmountRecorded && <small className="work-journey-table__amount" aria-label={`Payment amount ${paymentAmountLabel}`}>{paymentAmountLabel}</small>}</div></td></tr>;
+              return <tr className={`work-journey-table__row${isCurrentStep ? " work-journey-table__row--current" : ""}`} key={stage.id}><th scope="row"><div className="work-journey-table__step"><span className="work-journey-table__number" aria-hidden="true">{visibleStageNumber}</span><div><span>{stage.label}</span>{archiveVerified && <small className="work-verified-badge" aria-label="Filing and submission evidence verified">✓ Evidence verified</small>}</div></div></th><td><div className="work-journey-table__status-stack">{processStatus ? canEditStatus ? <button aria-label={`Change ${stage.label} status`} className={`work-journey-table__status work-journey-table__status-button work-journey-table__status--${statusClass}`} onClick={() => openStatusDialog(step!.id, processStatus)} title="Change status" type="button">{processStatusLabels[processStatus]}</button> : <span aria-label={`${stage.label} status`} className={`work-journey-table__status work-journey-table__status--${statusClass}`}>{processStatusLabels[processStatus]}</span> : dataComplete ? <span aria-label="Get data status" className="work-journey-table__status work-journey-table__status--done">Complete</span> : <span className="work-journey-table__status work-journey-table__status--ready">{stage.state}</span>}{stage.id === "prepare" && paymentAmountRecorded && <small className="work-journey-table__amount" aria-label={`Payment amount ${paymentAmountLabel}`}>{paymentAmountLabel}</small>}{latestEvidence?.evidenceReference && <small className="work-journey-table__evidence" title={latestEvidence.evidenceReference}>Evidence recorded</small>}</div></td></tr>;
             })}</Fragment>;
           })}
         </tbody></table></div> : <ol aria-label="End-to-end return process">
@@ -642,6 +662,7 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
       </section>
       {pendingProcessStatus && <div className="work-evidence-dialog-layer" role="presentation"><section aria-labelledby="work-evidence-dialog-title" aria-modal="true" className="work-evidence-dialog" onKeyDown={(event) => { if (event.key === "Escape") setPendingProcessStatus(null); }} role="dialog"><div className="work-evidence-dialog__header"><div><p className="eyebrow">{pendingProcessStatus.stepId === "evidence" && pendingProcessStatus.status === "DONE" ? "Archive record" : "Required before saving"}</p><h2 id="work-evidence-dialog-title">{pendingProcessStatus.stepId === "evidence" && pendingProcessStatus.status === "DONE" ? "Archive return package" : pendingProcessStatus.status === "DONE" ? "Record result / evidence" : "Record why this is not applicable"}</h2><p>{courseStages.find((stage) => stage.stepId === pendingProcessStatus.stepId)?.label ?? "Process step"}</p></div><button aria-label="Close evidence dialog" className="icon-button" onClick={() => setPendingProcessStatus(null)} type="button">×</button></div>{pendingProcessStatus.stepId === "evidence" && pendingProcessStatus.status === "DONE" ? <><label className="work-evidence-dialog__field"><span>Naming convention</span><input autoFocus onChange={(event) => setPendingArchiveNaming(event.target.value)} placeholder="Final return package name" value={pendingArchiveNaming} /></label><label className="work-evidence-dialog__field"><span>Package contents / archive reference</span><textarea aria-label="Package contents / archive reference" onChange={(event) => setPendingArchiveContents(event.target.value)} placeholder="Working paper, approved return, FRN, payment proof, attachments" value={pendingArchiveContents} /></label><label className="work-evidence-dialog__field"><span>SharePoint link <small>(optional)</small></span><input aria-label="SharePoint link" onChange={(event) => setPendingArchiveSharePoint(event.target.value)} placeholder="Paste the final folder or file link" type="url" value={pendingArchiveSharePoint} /></label></> : <label className="work-evidence-dialog__field"><span>{pendingProcessStatus.status !== "DONE" ? "N/A reason" : pendingProcessStatus.stepId === "filing" ? "Filing reference number" : pendingProcessStatus.stepId === "payment-client-approval" ? "Proceed to pay / equivalent reference" : pendingProcessStatus.stepId === "payment-confirmation" ? "Payment acknowledgement / proof" : pendingProcessStatus.stepId === "esubmission" ? "eSubmission submission evidence" : "Result / evidence ref"}</span><input autoFocus onChange={(event) => setPendingProcessEvidence(event.target.value)} placeholder={pendingProcessStatus.status === "DONE" ? "Enter the retained reference" : "Explain why this step does not apply"} value={pendingProcessEvidence} /></label>}{["filing", "payment-confirmation", "esubmission"].includes(pendingProcessStatus.stepId) && pendingProcessStatus.status === "DONE" && <label className="work-evidence-dialog__field"><span>{pendingProcessStatus.stepId === "filing" ? "Filing date" : pendingProcessStatus.stepId === "payment-confirmation" ? "Payment acknowledgement date" : "eSubmission submission date"}</span><input aria-label="Process completion date" onChange={(event) => setPendingProcessDate(event.target.value)} required type="date" value={pendingProcessDate} /></label>}{pendingProcessStatus.stepId === "esubmission" && pendingProcessStatus.status === "DONE" && <><label className="work-evidence-dialog__field"><span>Date acknowledged by BIR</span><input aria-label="Date acknowledged by BIR" onChange={(event) => setPendingProcessAcknowledgedDate(event.target.value)} required type="date" value={pendingProcessAcknowledgedDate} /></label><label className="work-evidence-dialog__field"><span>Date validated by BIR</span><input aria-label="Date validated by BIR" onChange={(event) => setPendingProcessValidatedDate(event.target.value)} required type="date" value={pendingProcessValidatedDate} /></label></>}{processFeedback && <p className="work-process-feedback" role="alert">{processFeedback}</p>}<div className="work-evidence-dialog__actions"><button className="button button--quiet" onClick={() => setPendingProcessStatus(null)} type="button">Cancel</button><button className="button button--primary" disabled={(!pendingProcessEvidence.trim() && !(pendingProcessStatus.stepId === "evidence" && pendingArchiveNaming.trim() && pendingArchiveContents.trim())) || (["filing", "payment-confirmation", "esubmission"].includes(pendingProcessStatus.stepId) && pendingProcessStatus.status === "DONE" && !pendingProcessDate) || (pendingProcessStatus.stepId === "esubmission" && pendingProcessStatus.status === "DONE" && (!pendingProcessAcknowledgedDate || !pendingProcessValidatedDate)) || periodLock.locked} onClick={confirmPendingProcessStatus} type="button">Save {pendingProcessStatus.status === "DONE" ? "complete" : "N/A"}</button></div></section></div>}
       {activityEvents.length > 0 && <details className="work-activity-history"><summary>Transaction history</summary><div>{activityEvents.map((event) => <div className="work-activity-history__event" key={event.id}><strong>{event.label}</strong><small>{event.detail}</small></div>)}</div></details>}
+      <details className="work-data-exports"><summary>Data exports</summary><div><p>Download the authorized Work data for all returns in this view.</p><button className="text-button" onClick={() => exportWorkflowData("facts")} type="button">Download filing facts CSV</button><button className="text-button" onClick={() => exportWorkflowData("processing")} type="button">Download processing log CSV</button></div></details>
       {archiveComplete && <div className="work-journey-actions"><span>Archive report</span><button className="text-button" onClick={() => void downloadJourneyReport()} type="button">Download report</button></div>}
     </div>
   );
