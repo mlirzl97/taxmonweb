@@ -466,18 +466,23 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     // completed; bypassing this projection leaves the next applicable step
     // locked on first load.
     const record = recordForWork(work, records[work.id]);
-    const { blocker, ...patchWithoutBlocker } = record.patch;
+    const { blocker: baseBlocker, ...workWithoutBlocker } = work;
+    const { blocker: patchedBlocker, ...patchWithoutBlocker } = record.patch;
     const stage = record.patch.stage ?? work.stage;
-    const clientApprovalComplete = record.processStatuses["client-approval"] === "DONE" || record.processStatuses["client-approval"] === "NOT_APPLICABLE";
+    const blocker = patchedBlocker === undefined ? baseBlocker : patchedBlocker;
+    const clientApprovalComplete = record.processStatuses["client-approval"] === "DONE" || record.processStatuses["client-approval"] === "NOT_APPLICABLE" || work.steps.find((step) => step.id === "client-approval")?.state === "complete";
     const staleClientApprovalBlocker = blocker?.category === "CLIENT APPROVAL" && clientApprovalComplete;
-    const effectiveWork = { ...work, ...patchWithoutBlocker, ...(blocker === null || staleClientApprovalBlocker ? { blocker: undefined } : blocker === undefined ? {} : { blocker }) };
+    const effectiveBlocker = blocker === null || staleClientApprovalBlocker ? undefined : blocker;
+    const effectiveWork = { ...workWithoutBlocker, ...patchWithoutBlocker, ...(effectiveBlocker ? { blocker: effectiveBlocker } : {}) };
     const steps = applyWorkflowStepState(effectiveWork, record.currentGate, stage, record.processStatuses);
     const activeStep = steps.find((step) => step.state === "current" || step.state === "unresolved" || step.state === "blocked");
     const activeStatus = activeStep ? record.processStatuses[activeStep.id] : undefined;
     const derivedNextAction = activeStep && activeStatus ? actionForProcessStep(activeStep.id, activeStatus) : undefined;
-    const nextAction = !effectiveWork.blocker && derivedNextAction ? derivedNextAction : effectiveWork.nextAction;
-    const statusReason = !effectiveWork.blocker && activeStep && activeStatus ? actionForProcessStep(activeStep.id, activeStatus) ?? effectiveWork.statusReason : effectiveWork.statusReason;
-    return { ...effectiveWork, nextAction, statusReason, steps };
+    const packageComplete = steps.length > 0 && steps.every((step) => step.state === "complete");
+    const nextAction = packageComplete ? "No action due" : !effectiveWork.blocker && derivedNextAction ? derivedNextAction : effectiveWork.nextAction;
+    const statusReason = packageComplete ? "Return package complete." : !effectiveWork.blocker && activeStep && activeStatus ? actionForProcessStep(activeStep.id, activeStatus) ?? effectiveWork.statusReason : effectiveWork.statusReason;
+    const status = packageComplete && !effectiveWork.blocker ? "GREEN" : effectiveWork.status;
+    return { ...effectiveWork, nextAction, statusReason, status, steps };
   }, [records]);
 
   const getWorkItems = useCallback(() => workItems, [workItems]);

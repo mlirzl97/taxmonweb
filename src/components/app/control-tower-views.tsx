@@ -17,10 +17,6 @@ function compactReturnPackageLabel(milestones: readonly (typeof fixtureCalendar)
   return primary ? compactReturnLabel(primary.returnLabel) : "Return package";
 }
 
-function returnPackageDetail(milestones: readonly (typeof fixtureCalendar)[number][], fallback: string) {
-  return milestones.some((item) => /QAP/i.test(item.returnLabel)) ? "QAP sequence included" : fallback;
-}
-
 function OperationalRegisterHeader({ mode }: { mode: "due" | "work" }) {
   return <div className={mode === "due" ? "due-register__header" : "work-register__header"}><span>Target</span><span>{mode === "due" ? "Taxpayer" : "Client"}</span><span>Return / submission</span><span>Period</span><span>Stage / status</span><span>Owner</span><span>Attention</span></div>;
 }
@@ -38,7 +34,7 @@ function OperationalRegisterRow({ mode, record, onSelect }: { mode: "due" | "wor
   return <button className={rowClass} key={mode === "due" ? item.id : work.id} onClick={() => onSelect(work.id)} type="button">
     <span className={`${dateClass} ${dateClass}--${work.status.toLowerCase()}`}><strong>{item.calendarDate.slice(-2)}</strong><small>{item.internalDeadline.replace(/^.*?·\s*/, "")}</small></span>
     <span><strong>{item.client}</strong><small>{mode === "due" ? scopeLabelForValue(item.scope) : `${work.registrationUnit} · ${scopeLabelForValue(work.scope)}`}</small></span>
-    <span><strong>{mode === "work" ? compactReturnPackageLabel(milestones) : compactReturnLabel(primaryReturn.returnLabel)}</strong><small>{mode === "work" ? returnPackageDetail(milestones, item.milestone) : item.milestone}</small></span>
+    <span><strong>{mode === "work" ? compactReturnPackageLabel(milestones) : compactReturnLabel(primaryReturn.returnLabel)}</strong><small>{mode === "work" ? (work.steps.every((step) => step.state === "complete") ? "Complete" : currentStep?.label ?? work.nextAction) : item.milestone}</small></span>
     <span className={periodClass}>{item.period}</span>
     {mode === "due" ? <span><span className={`rag-text rag-text--${work.status.toLowerCase()}`}>{work.stage}</span><small>{work.statusReason}</small></span> : <span><span className={`rag-text rag-text--${work.status.toLowerCase()}`}>{work.status}</span><strong>{currentStep?.label}</strong><small>{stepCount(work)}</small></span>}
     <span><strong>{work.owner}</strong>{mode === "due" && <small>{scopeLabelForValue(item.scope)}</small>}</span>
@@ -154,7 +150,7 @@ export function WorkRegisterView({ scope, initialDue = "all", initialQueue = "al
       </div>
       <section aria-labelledby="work-register-title" className="panel panel--table due-register-panel work-register-panel">
         <div className="section-heading section-heading--queue"><div><h2 id="work-register-title">Work register</h2></div><div className="section-heading__actions"><span className="section-heading__note">{counts.all} in scope</span><Link className="text-link" href={queue === "all" ? "/app/work?queue=attention" : "/app/work?queue=all"}>{queue === "all" ? "Needs attention" : "View all"}</Link></div></div>
-        <FilterTabs label="Work queue" onChange={setQueue} options={[{ id: "all", label: "All", count: counts.all }, { id: "today", label: "Do today", count: counts.today }, { id: "waiting", label: "Waiting", count: counts.waiting }, { id: "attention", label: "Needs attention", count: counts.attention }]} value={queue} />
+        <FilterTabs label="Work queue" onChange={(nextQueue) => { setQueue(nextQueue); setDue(nextQueue === "today" ? "today" : nextQueue === "waiting" ? "blocked" : nextQueue === "attention" ? "attention" : "all"); }} options={[{ id: "all", label: "All", count: counts.all }, { id: "today", label: "Do today", count: counts.today }, { id: "waiting", label: "Waiting", count: counts.waiting }, { id: "attention", label: "Needs attention", count: counts.attention }]} value={queue} />
         <div className="work-register" aria-label="Work register">
           {records.length === 0 ? <div className="inline-empty">No work matches these filters.</div> : <><OperationalRegisterHeader mode="work" />{records.map((record) => <OperationalRegisterRow key={record.work.id} mode="work" onSelect={setSelectedWorkId} record={record} />)}</>}
         </div>
