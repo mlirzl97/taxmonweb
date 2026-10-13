@@ -474,7 +474,8 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     const activeStatus = activeStep ? record.processStatuses[activeStep.id] : undefined;
     const derivedNextAction = activeStep && activeStatus ? actionForProcessStep(activeStep.id, activeStatus) : undefined;
     const nextAction = !effectiveWork.blocker && derivedNextAction ? derivedNextAction : effectiveWork.nextAction;
-    return { ...effectiveWork, nextAction, steps };
+    const statusReason = !effectiveWork.blocker && activeStep && activeStatus ? actionForProcessStep(activeStep.id, activeStatus) ?? effectiveWork.statusReason : effectiveWork.statusReason;
+    return { ...effectiveWork, nextAction, statusReason, steps };
   }, [records]);
 
   const getWorkItems = useCallback(() => workItems, [workItems]);
