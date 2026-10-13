@@ -468,7 +468,9 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     const record = recordForWork(work, records[work.id]);
     const { blocker, ...patchWithoutBlocker } = record.patch;
     const stage = record.patch.stage ?? work.stage;
-    const effectiveWork = { ...work, ...patchWithoutBlocker, ...(blocker === null ? { blocker: undefined } : blocker === undefined ? {} : { blocker }) };
+    const clientApprovalComplete = record.processStatuses["client-approval"] === "DONE" || record.processStatuses["client-approval"] === "NOT_APPLICABLE";
+    const staleClientApprovalBlocker = blocker?.category === "CLIENT APPROVAL" && clientApprovalComplete;
+    const effectiveWork = { ...work, ...patchWithoutBlocker, ...(blocker === null || staleClientApprovalBlocker ? { blocker: undefined } : blocker === undefined ? {} : { blocker }) };
     const steps = applyWorkflowStepState(effectiveWork, record.currentGate, stage, record.processStatuses);
     const activeStep = steps.find((step) => step.state === "current" || step.state === "unresolved" || step.state === "blocked");
     const activeStatus = activeStep ? record.processStatuses[activeStep.id] : undefined;
@@ -754,6 +756,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     const activeStepId = nextStep && nextStatus ? nextStep.id : status === "NOT_STARTED" ? stepId : stepId;
     const patch: WorkflowPatch = {
       ...record.patch,
+      ...(status === "DONE" || status === "NOT_APPLICABLE" ? { blocker: null } : {}),
       stage: stageForProcessStep(activeStepId),
       nextAction: actionForProcessStep(activeStepId, processStatuses[activeStepId]),
     };
