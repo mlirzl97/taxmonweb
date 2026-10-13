@@ -1650,7 +1650,7 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
 .work-course-map__status-control select { appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 11px) 11px, calc(100% - 7px) 11px; background-repeat: no-repeat; background-size: 4px 4px, 4px 4px; border-radius: 5px; cursor: pointer; line-height: 1.1; max-width: 150px; min-width: 132px; overflow: hidden; padding: 6px 24px 6px 8px; text-overflow: ellipsis; white-space: nowrap; }
 .work-course-map__status-control select:disabled { cursor: not-allowed; }
 .work-evidence-dialog-layer { align-items: center; background: rgb(31 31 31 / 38%); display: flex; inset: 0; justify-content: center; padding: 18px; position: fixed; z-index: 80; }
-.work-evidence-dialog { background: var(--surface); border: 1px solid var(--border); box-shadow: 0 18px 50px rgb(31 31 31 / 22%); max-width: 430px; padding: 18px; width: min(100%, 430px); }
+.work-evidence-dialog { background: var(--surface); border: 1px solid var(--border); box-shadow: 0 18px 50px rgb(31 31 31 / 22%); max-height: min(760px, calc(100dvh - 36px)); max-width: 430px; overflow-y: auto; overscroll-behavior: contain; padding: 18px; width: min(100%, 430px); }
 .work-evidence-dialog__header { align-items: flex-start; border-bottom: 1px solid var(--border); display: flex; gap: 14px; justify-content: space-between; padding-bottom: 14px; }
 .work-evidence-dialog__header h2 { font-size: 17px; letter-spacing: -.03em; margin: 3px 0 0; }
 .work-evidence-dialog__header p:last-child { color: var(--slate); font-size: 11px; margin: 5px 0 0; }
