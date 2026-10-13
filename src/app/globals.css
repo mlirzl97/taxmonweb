@@ -1602,9 +1602,8 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
 .work-detail-identity__meta { color: var(--slate); display: flex; flex-wrap: wrap; font-size: 10px; gap: 6px 12px; margin: 5px 0 0; }
 .work-detail-identity__meta span + span { border-left: 1px solid var(--border-strong); padding-left: 12px; }
 .work-validation-badge { align-items: center; background: var(--green-bg); border: 1px solid #bfe0c9; color: var(--green-dark); display: inline-flex; font-size: 9px; font-weight: 850; gap: 3px; padding: 4px 7px; white-space: nowrap; }
-.work-journey-actions { align-items: center; background: var(--surface-soft); border: 1px solid var(--border); display: flex; gap: 12px; justify-content: space-between; margin: 14px 0; padding: 8px 10px; }
-.work-journey-actions > div { display: grid; gap: 2px; min-width: 0; }
-.work-journey-actions span { color: var(--slate); font-size: 10px; }
+.work-journey-actions { align-items: center; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; margin: 18px 0 0; padding: 10px 2px 0; }
+.work-journey-actions span { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .work-package-timeline { background: var(--surface); border: 1px solid var(--border); margin: 14px 0 18px; padding: 14px 16px 12px; }
 .work-package-timeline .section-heading { margin-bottom: 14px; }
 .work-package-timeline .section-heading p:not(.eyebrow) { color: var(--slate); font-size: 10px; line-height: 1.4; margin: 4px 0 0; max-width: 72ch; }
