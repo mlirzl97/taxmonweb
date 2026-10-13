@@ -1537,10 +1537,12 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
 .work-journey-table__status--not-applicable { color: var(--muted); }
 .work-journey-table__status--ready { background: transparent; border: 0; color: var(--muted); padding-left: 0; }
 .work-journey-table__status-stack { align-items: flex-start; display: grid; gap: 4px; justify-items: start; }
-.work-journey-table__undo-bar { align-items: center; background: var(--surface-soft); border: 1px solid var(--border); display: flex; gap: 10px; justify-content: space-between; margin-bottom: 8px; padding: 6px 8px; }
-.work-journey-table__undo-bar > span { color: var(--slate); font-size: 9px; }
-.work-journey-table__undo-bar button { align-items: center; display: inline-flex; gap: 5px; }
-.work-journey-table__undo-bar button small { color: var(--muted); font-size: 8px; font-variant-numeric: tabular-nums; }
+.work-journey-table__status-stack > .button--primary.button--small { align-items: center; background: var(--amber-bg); border: 1px solid #ead3a9; border-radius: 999px; color: var(--amber-dark); display: inline-flex; font-size: 9px; font-weight: 800; height: 27px; justify-content: center; min-width: 104px; padding: 2px 7px; }
+.work-undo-toast { align-items: center; background: var(--ink); border: 1px solid rgb(255 255 255 / 18%); border-radius: 8px; bottom: max(18px, env(safe-area-inset-bottom)); box-shadow: 0 12px 34px rgb(31 31 31 / 24%); color: #fff; display: flex; gap: 16px; justify-content: space-between; left: 50%; max-width: min(420px, calc(100vw - 28px)); padding: 8px 10px 8px 13px; position: fixed; transform: translateX(-50%); width: max-content; z-index: 1100; }
+.work-undo-toast span { font-size: 11px; font-weight: 700; }
+.work-undo-toast .button { background: #fff; border-color: #fff; color: var(--ink); }
+.work-undo-toast small { color: inherit; font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) { .work-undo-toast { gap: 10px; width: calc(100vw - 28px); } }
 .work-journey-table__action > small { color: var(--slate); flex-basis: 100%; font-size: 9px; line-height: 1.3; }
 .work-journey-table__next { align-items: center; color: var(--slate); display: inline-flex; font-size: 9px; min-height: 28px; }
 .work-journey-table__empty { align-items: center; color: var(--muted); display: inline-flex; min-height: 28px; }
