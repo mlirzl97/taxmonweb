@@ -80,7 +80,7 @@ function AddWorkDrawer({ onClose }: { onClose: () => void }) {
       {draft.paymentApplicability === "REQUIRED" && <label><span>Amount to pay</span><input inputMode="decimal" min="0" onChange={(event) => update("paymentAmount", event.target.value === "" ? null : Number(event.target.value))} placeholder="PHP" type="number" value={draft.paymentAmount ?? ""} /></label>}
       {prototypeMode && <label><span>Note</span><textarea onChange={(event) => update("detail", event.target.value)} placeholder="Short context or blocker" value={draft.detail} /></label>}
       {error && <div className="callout callout--error" role="alert">{error}</div>}
-      {!prototypeMode && <p className="form-help">The signed-in user is recorded as the preparer. Status starts unresolved until the governed workflow advances it.</p>}
+      {!prototypeMode && <p className="form-help">The signed-in user is recorded as the creator. Current client-team assignments provide the preparer, checker, and reviewer. Status starts unresolved until the governed workflow advances it.</p>}
       <div className="team-editor__footer"><button className="button button--quiet" onClick={onClose} type="button">Cancel</button><button className="button button--primary" disabled={liveClientsLoading} type="submit">Add work</button></div>
     </form>
   </DetailDrawer>;
