@@ -25,6 +25,14 @@ describe("workflow exports", () => {
     expect(csv).toContain("100");
   });
 
+  it("uses the archive reconciliation facts to complete one return row", () => {
+    const csv = buildWorkflowFactsCsv([{
+      work: { ...work, paymentApplicability: "NOT_APPLICABLE" } as FixtureWorkItem,
+      record: { ...record, archiveFacts: { filingDate: "2026-10-01", filingReferenceNumber: "FRN-1", proceedToPay: "Not applicable", paymentAcknowledgementDate: "Not applicable", paymentAcknowledgement: "Not applicable", eSubmissionSubmission: "DAT-1", eSubmissionSubmissionDate: "2026-10-02", birAcknowledgedDate: "2026-10-02", birValidatedDate: "2026-10-03", attachmentName: "final-package" } },
+    }]);
+    expect(csv).toContain("2026-10-01,FRN-1,Not applicable,Not applicable,Not applicable,Not applicable,DAT-1,2026-10-02,2026-10-02,2026-10-03,final-package");
+  });
+
   it("exports processing events separately from facts", () => {
     const csv = buildWorkflowProcessingLogCsv([{ work, record }]);
     expect(csv).toContain("process");

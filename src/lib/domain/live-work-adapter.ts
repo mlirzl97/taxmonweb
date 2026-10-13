@@ -1,5 +1,6 @@
 import type { FixtureScope, FixtureStatus, FixtureWorkComponent, FixtureWorkItem, FixtureWorkStep, FixtureWorkStepState, FixtureWorkflowSnapshot } from "@/lib/fixtures";
 import type { LiveGeneratedWork } from "@/lib/server/generated-work-repository";
+import type { WorkflowArchiveFacts } from "@/lib/workflow-state";
 
 type UserNameMap = ReadonlyMap<string, string>;
 
@@ -58,6 +59,16 @@ function actorName(actorId: string | null | undefined, userNames: UserNameMap) {
   return actorId ? userNames.get(actorId) ?? "Authenticated user" : "Authenticated user";
 }
 
+function archiveFactsFromNote(note: string | null | undefined): WorkflowArchiveFacts | undefined {
+  if (!note) return undefined;
+  try {
+    const parsed = JSON.parse(note) as { archiveFacts?: WorkflowArchiveFacts };
+    return parsed.archiveFacts && typeof parsed.archiveFacts === "object" ? parsed.archiveFacts : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function workflowSnapshotFor(work: LiveGeneratedWork, userNames: UserNameMap): FixtureWorkflowSnapshot | undefined {
   const hasHistory = Boolean(work.generated_work_process_steps?.length || work.generated_work_gate_attempts?.length || work.generated_work_checklist_updates?.length || work.generated_work_evidence?.length || work.generated_work_period_lock_events?.length || work.final_certified_at);
   if (!hasHistory) return undefined;
@@ -81,11 +92,19 @@ function workflowSnapshotFor(work: LiveGeneratedWork, userNames: UserNameMap): F
     attachmentName: evidence.attachment_name ?? undefined,
     sharepointUrl: evidence.sharepoint_url ?? undefined,
   }));
+  const latestEvidenceByStep = new Map<string, NonNullable<LiveGeneratedWork["generated_work_evidence"]>[number]>();
+  for (const evidence of work.generated_work_evidence ?? []) latestEvidenceByStep.set(evidence.step_code, evidence);
   for (const step of work.generated_work_process_steps ?? []) {
     const status = step.status === "complete" ? "DONE" : step.status === "not_applicable" ? "NOT_APPLICABLE" : step.status === "in_progress" ? "IN_PROGRESS" : step.status === "needs_attention" ? "NEEDS_ATTENTION" : "NOT_STARTED";
-    if (status !== "DONE" && status !== "NOT_APPLICABLE") processHistory.push({ id: `${work.id}-${step.step_code}-${step.updated_at}`, stepId: step.step_code, status, actor: "System", recordedAt: step.updated_at });
+    const latestEvidence = latestEvidenceByStep.get(step.step_code);
+    const evidenceRecordedAfterStep = latestEvidence && latestEvidence.recorded_at >= step.updated_at;
+    if (status !== "DONE" && status !== "NOT_APPLICABLE" && !evidenceRecordedAfterStep) processHistory.push({ id: `${work.id}-${step.step_code}-${step.updated_at}`, stepId: step.step_code, status, actor: "System", recordedAt: step.updated_at });
   }
   const processStatuses = Object.fromEntries((work.generated_work_process_steps ?? []).map((step) => [step.step_code, step.status === "complete" ? "DONE" : step.status === "not_applicable" ? "NOT_APPLICABLE" : step.status === "in_progress" ? "IN_PROGRESS" : step.status === "needs_attention" ? "NEEDS_ATTENTION" : "NOT_STARTED"])) as FixtureWorkflowSnapshot["processStatuses"];
+  const latestArchiveEvidence = [...(work.generated_work_evidence ?? [])].reverse().find((evidence) => evidence.step_code === "evidence");
+  const archiveFacts = latestArchiveEvidence
+    ? archiveFactsFromNote(latestArchiveEvidence.note)
+    : undefined;
   const attempts = (work.generated_work_gate_attempts ?? []).map((attempt, index) => ({
     id: `${work.id}-attempt-${index + 1}`,
     role: attempt.role.toUpperCase() as "PREPARER" | "CHECKER" | "REVIEWER",
@@ -105,6 +124,7 @@ function workflowSnapshotFor(work: LiveGeneratedWork, userNames: UserNameMap): F
     checklistHistory,
     processStatuses,
     processHistory,
+    ...(archiveFacts ? { archiveFacts } : {}),
     changeHistory: [],
     periodLock: lockHistory.at(-1) ?? (work.period_locked ? { locked: true, reason: "Accounting period closed by Tax Team." } : { locked: false }),
     periodLockHistory: lockHistory,

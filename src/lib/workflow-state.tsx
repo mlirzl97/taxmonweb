@@ -50,6 +50,18 @@ export type WorkflowProcessUpdate = {
   elevatedOverride?: boolean;
   overrideReason?: string;
 };
+export type WorkflowArchiveFacts = {
+  filingDate?: string;
+  filingReferenceNumber?: string;
+  proceedToPay?: string;
+  paymentAcknowledgementDate?: string;
+  paymentAcknowledgement?: string;
+  eSubmissionSubmission?: string;
+  eSubmissionSubmissionDate?: string;
+  birAcknowledgedDate?: string;
+  birValidatedDate?: string;
+  attachmentName?: string;
+};
 export type WorkflowChangeEvent = {
   id: string;
   kind: "PAYMENT_AMOUNT" | "PAYMENT_PROFILE";
@@ -94,6 +106,7 @@ export type WorkflowRecord = {
   checklistHistory: readonly WorkflowChecklistUpdate[];
   processStatuses: Readonly<Record<string, WorkflowProcessStatus>>;
   processHistory: readonly WorkflowProcessUpdate[];
+  archiveFacts?: WorkflowArchiveFacts;
   changeHistory: readonly WorkflowChangeEvent[];
   periodLock: WorkflowPeriodLock;
   periodLockHistory: readonly WorkflowPeriodLock[];
@@ -195,7 +208,7 @@ type WorkflowContextValue = {
   setPaymentAmount: (work: FixtureWorkItem, amount: number | null) => Promise<{ ok: boolean; error?: string }>;
   getPeriodLock: (work: FixtureWorkItem) => WorkflowPeriodLock;
   setPeriodLock: (work: FixtureWorkItem, locked: boolean, reason: string) => Promise<{ ok: boolean; error?: string }>;
-  setProcessStatus: (work: FixtureWorkItem, stepId: string, status: WorkflowProcessStatus, evidenceReference?: string, overrideReason?: string, sharepointUrl?: string, completedOn?: string, acknowledgedOn?: string, validatedOn?: string, attachmentName?: string) => Promise<{ ok: boolean; error?: string }>;
+  setProcessStatus: (work: FixtureWorkItem, stepId: string, status: WorkflowProcessStatus, evidenceReference?: string, overrideReason?: string, sharepointUrl?: string, completedOn?: string, acknowledgedOn?: string, validatedOn?: string, attachmentName?: string, archiveFacts?: WorkflowArchiveFacts, paymentAmountOverride?: number | null) => Promise<{ ok: boolean; error?: string }>;
   getChecklistAnswers: (work: FixtureWorkItem, role: WorkflowRole) => Readonly<Record<string, boolean>>;
   setChecklistAnswer: (work: FixtureWorkItem, role: WorkflowRole, questionId: string, completed: boolean) => Promise<{ ok: boolean; error?: string }>;
   getQuestions: (role: WorkflowRole) => readonly WorkflowQuestion[];
@@ -661,8 +674,8 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     return { ok: true };
   }, [canActOnWorkflow, executeLiveCommand, periodLocks, prototypeMode, records, workPerspective]);
 
-  const setProcessStatus = useCallback(async (work: FixtureWorkItem, stepId: string, status: WorkflowProcessStatus, evidenceReference = "", overrideReason = "", sharepointUrl = "", completedOn = "", acknowledgedOn = "", validatedOn = "", attachmentName = "") => {
-    if (!prototypeMode) return executeLiveCommand(work, "process_status", { stepCode: stepId, status: status.toLowerCase(), evidenceReference, overrideReason, sharepointUrl, externalDate: completedOn, acknowledgedOn, validatedOn, attachmentName, role: workflowProcessRole(stepId).toLowerCase() });
+  const setProcessStatus = useCallback(async (work: FixtureWorkItem, stepId: string, status: WorkflowProcessStatus, evidenceReference = "", overrideReason = "", sharepointUrl = "", completedOn = "", acknowledgedOn = "", validatedOn = "", attachmentName = "", archiveFacts?: WorkflowArchiveFacts, paymentAmountOverride?: number | null) => {
+    if (!prototypeMode) return executeLiveCommand(work, "process_status", { stepCode: stepId, status: status.toLowerCase(), evidenceReference, overrideReason, sharepointUrl, externalDate: completedOn, acknowledgedOn, validatedOn, attachmentName, ...(archiveFacts ? { note: JSON.stringify({ archiveFacts }) } : {}), ...(paymentAmountOverride !== undefined ? { paymentAmount: paymentAmountOverride } : {}), role: workflowProcessRole(stepId).toLowerCase() });
     const record = recordForWork(work, records[work.id]);
     if (periodLocks[workReturnLockKey(work)]?.locked || record.periodLock.locked) return { ok: false, error: "This return and compliance period are locked by Tax Team and cannot be edited." };
     const currentStep = work.steps.find((step) => step.state === "current" || step.state === "unresolved" || step.state === "blocked");
@@ -676,7 +689,8 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (!step) return { ok: false, error: "That process step is not configured for this work item." };
     if (isGateStep && (status === "DONE" || status === "NOT_APPLICABLE")) return { ok: false, error: "Complete this step through its certification gate." };
     if (status === "NOT_APPLICABLE" && paymentProcessStepIds.has(stepId) && work.paymentApplicability === "UNRESOLVED") return { ok: false, error: "Resolve payment applicability before skipping the payment branch." };
-    if (status === "DONE" && stepId === "payment-confirmation" && (work.paymentAmount === null || work.paymentAmount === undefined || !Number.isFinite(work.paymentAmount) || work.paymentAmount < 0)) return { ok: false, error: "Record the payment amount before confirming payment." };
+    const paymentAmount = paymentAmountOverride !== undefined ? paymentAmountOverride : work.paymentAmount;
+    if (status === "DONE" && stepId === "payment-confirmation" && (paymentAmount === null || paymentAmount === undefined || !Number.isFinite(paymentAmount) || paymentAmount < 0)) return { ok: false, error: "Record the amount to pay in the Preparer gate before confirming payment." };
     if ((status === "DONE" || status === "NOT_APPLICABLE") && !evidenceReference.trim()) return { ok: false, error: status === "NOT_APPLICABLE" ? "Record why this process step is not applicable." : "Record the result or evidence reference before marking this step complete." };
     if (status === "DONE" && ["filing", "payment-confirmation", "esubmission"].includes(stepId) && !/^\d{4}-\d{2}-\d{2}$/.test(completedOn)) return { ok: false, error: "Record the actual completion date before marking this outcome complete." };
     if (status === "DONE" && stepId === "esubmission" && (!/^\d{4}-\d{2}-\d{2}$/.test(acknowledgedOn) || !/^\d{4}-\d{2}-\d{2}$/.test(validatedOn))) return { ok: false, error: "Record the BIR acknowledgment and validation dates before completing eSubmission." };
@@ -710,6 +724,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
         patch,
         processStatuses,
         processHistory: [...record.processHistory, ...updates],
+        ...(archiveFacts ? { archiveFacts } : {}),
       },
     }));
     return { ok: true };

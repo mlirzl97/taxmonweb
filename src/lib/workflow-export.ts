@@ -17,14 +17,32 @@ function returnFields(work: FixtureWorkItem) {
 }
 
 export function buildWorkflowFactsCsv(returns: readonly ExportReturn[]) {
-  const headers = ["work_id", "client", "return", "period", "registration_unit", "work_status", "step", "status", "evidence_reference", "completion_date", "acknowledged_date", "validated_date", "attachment_name", "sharepoint_url", "recorded_by", "recorded_at", "amount_to_pay"];
+  const headers = ["work_id", "client", "return", "period", "registration_unit", "work_status", "filing_date", "filing_reference_number", "amount_to_pay", "proceed_to_pay", "payment_acknowledgement_date", "payment_acknowledgement", "esubmission_submission", "esubmission_submission_date", "date_acknowledged_by_bir", "date_validated_by_bir", "attachment_evidence_name", "sharepoint_url"];
   const rows: unknown[][] = [];
   for (const { work, record } of returns) {
-    const evidence = record.processHistory.filter((update) => update.evidenceReference || update.completedOn || update.acknowledgedOn || update.validatedOn || update.attachmentName);
-    if (evidence.length === 0) rows.push([...returnFields(work), "", "", "", "", "", "", "", "", "", work.paymentAmount ?? ""]);
-    for (const update of evidence) {
-      rows.push([...returnFields(work), update.stepId, update.status, update.evidenceReference ?? "", update.completedOn ?? "", update.acknowledgedOn ?? "", update.validatedOn ?? "", update.attachmentName ?? "", update.sharepointUrl ?? "", update.actor, update.recordedAt, work.paymentAmount ?? ""]);
-    }
+    const latest = (stepId: string) => [...record.processHistory].reverse().find((update) => update.stepId === stepId && update.evidenceReference);
+    const facts = record.archiveFacts ?? {};
+    const filing = latest("filing");
+    const paymentApproval = latest("payment-client-approval") ?? latest("payment");
+    const paymentConfirmation = latest("payment-confirmation");
+    const esubmission = latest("esubmission");
+    const archive = latest("evidence");
+    const paymentNotApplicable = work.paymentApplicability === "NOT_APPLICABLE";
+    rows.push([
+      ...returnFields(work),
+      facts.filingDate ?? filing?.completedOn ?? "",
+      facts.filingReferenceNumber ?? filing?.evidenceReference ?? "",
+      paymentNotApplicable ? "Not applicable" : work.paymentAmount ?? "",
+      paymentNotApplicable ? "Not applicable" : facts.proceedToPay ?? paymentApproval?.evidenceReference ?? "",
+      paymentNotApplicable ? "Not applicable" : facts.paymentAcknowledgementDate ?? paymentConfirmation?.completedOn ?? "",
+      paymentNotApplicable ? "Not applicable" : facts.paymentAcknowledgement ?? paymentConfirmation?.evidenceReference ?? "",
+      facts.eSubmissionSubmission ?? esubmission?.evidenceReference ?? "",
+      facts.eSubmissionSubmissionDate ?? esubmission?.completedOn ?? "",
+      facts.birAcknowledgedDate ?? esubmission?.acknowledgedOn ?? "",
+      facts.birValidatedDate ?? esubmission?.validatedOn ?? "",
+      facts.attachmentName ?? archive?.attachmentName ?? "",
+      archive?.sharepointUrl ?? "",
+    ]);
   }
   return csv(headers, rows);
 }

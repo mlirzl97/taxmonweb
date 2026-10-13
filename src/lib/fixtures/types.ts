@@ -67,6 +67,18 @@ export type FixtureWorkflowSnapshot = {
     elevatedOverride?: boolean;
     overrideReason?: string;
   }[];
+  archiveFacts?: {
+    filingDate?: string;
+    filingReferenceNumber?: string;
+    proceedToPay?: string;
+    paymentAcknowledgementDate?: string;
+    paymentAcknowledgement?: string;
+    eSubmissionSubmission?: string;
+    eSubmissionSubmissionDate?: string;
+    birAcknowledgedDate?: string;
+    birValidatedDate?: string;
+    attachmentName?: string;
+  };
   changeHistory: readonly {
     id: string;
     kind: "PAYMENT_AMOUNT" | "PAYMENT_PROFILE";
