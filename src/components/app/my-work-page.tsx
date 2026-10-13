@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import { DueRegisterWorkspace, WorkRegisterView } from "@/components/app/control-tower-views";
 import { MyRunView } from "@/components/app/my-run-view";
 import { DetailDrawer, FixturePageFrame, PageHeader } from "@/components/app/workspace-components";
-import { fixtureClients, type FixturePaymentApplicability, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
+import { fixtureClients, fixtureWork, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
 import type { DuePreset } from "@/lib/fixtures-read-model";
 import { useWorkflow, type WorkAdminInput } from "@/lib/workflow-state";
 
@@ -40,11 +40,38 @@ const emptyWorkDraft: WorkAdminInput = {
   paymentAmount: null,
 };
 
+type RequirementOption = { code: string; name: string; operatingCategory?: string; frequency?: string; version?: string };
+
+const prototypeRequirementOptions: RequirementOption[] = [...new Map(fixtureWork.map((work) => [work.requirementCode ?? work.title, {
+  code: work.requirementCode ?? work.title,
+  name: work.title,
+}])).values()];
+
 function AddWorkDrawer({ onClose }: { onClose: () => void }) {
   const { clientRegistry, createLiveWorkItem, createWorkItem, prototypeMode } = useWorkflow();
   const [draft, setDraft] = useState<WorkAdminInput>(emptyWorkDraft);
   const [error, setError] = useState("");
+  const [requirements, setRequirements] = useState<RequirementOption[]>(prototypeMode ? prototypeRequirementOptions : []);
+  const [requirementsLoading, setRequirementsLoading] = useState(!prototypeMode);
   const clients = prototypeMode ? fixtureClients : clientRegistry;
+
+  useEffect(() => {
+    if (prototypeMode) return;
+    let cancelled = false;
+    fetch("/api/requirements/approved", { headers: { accept: "application/json" }, cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json() as { data?: RequirementOption[]; error?: string };
+        if (!response.ok) throw new Error(payload.error ?? "Unable to load the approved requirement pool.");
+        if (!cancelled) setRequirements(payload.data ?? []);
+      })
+      .catch((reason: unknown) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "Unable to load the approved requirement pool.");
+      })
+      .finally(() => {
+        if (!cancelled) setRequirementsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [prototypeMode]);
 
   function update<K extends keyof WorkAdminInput>(key: K, value: WorkAdminInput[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -62,12 +89,13 @@ function AddWorkDrawer({ onClose }: { onClose: () => void }) {
   }
 
   const liveClientsLoading = !prototypeMode && clients.length === 0;
-  return <DetailDrawer eyebrow="Work register" title="Add work" subtitle={prototypeMode ? "Create a sanitized work record." : "Create a governed Work record from an approved taxpayer and BIR requirement."} onClose={onClose}>
+  const canSubmit = !liveClientsLoading && !requirementsLoading && requirements.length > 0;
+  return <DetailDrawer eyebrow="Work register" title="Add work" subtitle="Start the work record with a taxpayer, approved requirement, period, and target date." onClose={onClose}>
     <form className="work-admin-form" onSubmit={submit}>
       <label><span>Taxpayer</span><select disabled={liveClientsLoading} onChange={(event) => update("clientId", event.target.value)} required value={draft.clientId}><option value="">{liveClientsLoading ? "Loading taxpayers…" : "Select taxpayer"}</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
-      <label><span>Approved requirement code</span><input onChange={(event) => update("title", event.target.value)} placeholder={prototypeMode ? "e.g. WHT 1601EQ" : "e.g. BIR-1601-EQ"} required value={draft.title} /></label>
-      <label><span>Period</span><input onChange={(event) => update("period", event.target.value)} placeholder="e.g. October 2026" required value={draft.period} /></label>
-      <label><span>TMF target</span><input onChange={(event) => update("deadline", event.target.value)} placeholder="e.g. 2026-11-09" required value={draft.deadline} /></label>
+      <label><span>Return / submission</span><select disabled={requirementsLoading || requirements.length === 0} onChange={(event) => update("title", event.target.value)} required value={draft.title}><option value="">{requirementsLoading ? "Loading approved returns…" : requirements.length === 0 ? "No approved returns available" : "Select return or submission"}</option>{requirements.map((requirement) => <option key={requirement.code} value={requirement.code}>{requirement.code} — {requirement.name}</option>)}</select></label>
+      <label><span>Period</span><input onChange={(event) => update("period", event.target.value)} required type="month" value={draft.period.match(/^\d{4}-\d{2}$/) ? draft.period : ""} /></label>
+      <label><span>TMF target</span><input onChange={(event) => update("deadline", event.target.value)} required type="date" value={draft.deadline.match(/^\d{4}-\d{2}-\d{2}$/) ? draft.deadline : ""} /></label>
       {prototypeMode && <>
         <label><span>Owner</span><input onChange={(event) => update("owner", event.target.value)} placeholder="Preparer or accountable owner" required value={draft.owner} /></label>
         <div className="form-grid form-grid--compact">
@@ -76,12 +104,10 @@ function AddWorkDrawer({ onClose }: { onClose: () => void }) {
         </div>
         <label><span>Next action</span><input onChange={(event) => update("nextAction", event.target.value)} placeholder="What needs to happen next?" required value={draft.nextAction} /></label>
       </>}
-      <label><span>Payment</span><select onChange={(event) => update("paymentApplicability", event.target.value as FixturePaymentApplicability)} value={draft.paymentApplicability}><option value="UNRESOLVED">Unresolved</option><option value="REQUIRED">Required</option><option value="NOT_APPLICABLE">Not applicable</option></select></label>
-      {draft.paymentApplicability === "REQUIRED" && <label><span>Amount to pay</span><input inputMode="decimal" min="0" onChange={(event) => update("paymentAmount", event.target.value === "" ? null : Number(event.target.value))} placeholder="PHP" type="number" value={draft.paymentAmount ?? ""} /></label>}
       {prototypeMode && <label><span>Note</span><textarea onChange={(event) => update("detail", event.target.value)} placeholder="Short context or blocker" value={draft.detail} /></label>}
       {error && <div className="callout callout--error" role="alert">{error}</div>}
-      {!prototypeMode && <p className="form-help">The signed-in user is recorded as the creator. Current client-team assignments provide the preparer, checker, and reviewer. Status starts unresolved until the governed workflow advances it.</p>}
-      <div className="team-editor__footer"><button className="button button--quiet" onClick={onClose} type="button">Cancel</button><button className="button button--primary" disabled={liveClientsLoading} type="submit">Add work</button></div>
+      {!prototypeMode && <p className="form-help">Payment and components are resolved from the approved requirement and client profile after the work is created.</p>}
+      <div className="team-editor__footer"><button className="button button--quiet" onClick={onClose} type="button">Cancel</button><button className="button button--primary" disabled={!canSubmit} type="submit">Add work</button></div>
     </form>
   </DetailDrawer>;
 }

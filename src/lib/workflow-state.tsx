@@ -503,8 +503,6 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
         title: input.title,
         period: input.period,
         deadline: input.deadline,
-        paymentApplicability: input.paymentApplicability,
-        paymentAmount: input.paymentAmount,
         idempotencyKey,
       }),
     });

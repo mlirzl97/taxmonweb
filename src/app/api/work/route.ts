@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Request body must be valid JSON." }, { status: 400 });
   }
   const input = asRecord(body);
-  const paymentApplicability = typeof input?.paymentApplicability === "string" ? input.paymentApplicability.toLowerCase() : "";
+  const paymentApplicability = typeof input?.paymentApplicability === "string" ? input.paymentApplicability.toLowerCase() : "unresolved";
   const paymentAmount = input?.paymentAmount === null || input?.paymentAmount === undefined || input?.paymentAmount === ""
     ? null
     : typeof input.paymentAmount === "number" ? input.paymentAmount : Number(input.paymentAmount);
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Taxpayer, requirement code, period, and idempotency key are required." }, { status: 400 });
   }
   if (!["required", "not_applicable", "unresolved"].includes(paymentApplicability)) {
-    return NextResponse.json({ error: "Choose a valid payment applicability." }, { status: 400 });
+    return NextResponse.json({ error: "Payment applicability must be resolved by the governed requirement/profile context." }, { status: 400 });
   }
   if (paymentAmount !== null && (!Number.isFinite(paymentAmount) || paymentAmount < 0)) {
     return NextResponse.json({ error: "Payment amount must be a non-negative number." }, { status: 400 });
