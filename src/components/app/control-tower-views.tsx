@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { fixtureCalendar, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
-import { dateValue, filterFixtureOperationalRecords, getFixtureWorkRegisterRecords, hasOutstandingCompletionAction, isWorkAttention, type DuePreset } from "@/lib/fixtures-read-model";
+import { dateValue, filterFixtureOperationalRecords, getFixtureWorkRegisterRecords, hasOutstandingCompletionAction, isWorkAttention, type DuePreset, type FixtureWorkRegisterRecord } from "@/lib/fixtures-read-model";
 import { useWorkflow } from "@/lib/workflow-state";
 import { FilterTabs, isInScope, scopeLabelForValue, type ScopeFilter, WorkDetail } from "./workspace-components";
 
@@ -25,9 +25,10 @@ function OperationalRegisterHeader({ mode }: { mode: "due" | "work" }) {
   return <div className={mode === "due" ? "due-register__header" : "work-register__header"}><span>Target</span><span>{mode === "due" ? "Taxpayer" : "Client"}</span><span>Return / submission</span><span>Period</span><span>Stage / status</span><span>Owner</span><span>Attention</span></div>;
 }
 
-function OperationalRegisterRow({ mode, record, onSelect }: { mode: "due" | "work"; record: { calendar: (typeof fixtureCalendar)[number]; work: FixtureWorkItem; milestones?: readonly (typeof fixtureCalendar)[number][] }; onSelect: (workId: string) => void }) {
+function OperationalRegisterRow({ mode, record, onSelect }: { mode: "due" | "work"; record: FixtureWorkRegisterRecord; onSelect: (workId: string) => void }) {
   const { calendar: item, work } = record;
   const milestones = record.milestones ?? [item];
+  const primaryReturn = milestones.find((milestone) => !/QAP/i.test(milestone.returnLabel)) ?? item;
   const currentStep = work.steps.find((step) => step.state === "current" || step.state === "blocked" || step.state === "waiting") ?? work.steps[work.steps.length - 1];
   const rowClass = mode === "due" ? "due-register__row" : "work-register__row";
   const dateClass = mode === "due" ? "due-register__date" : "work-register__date";
@@ -37,7 +38,7 @@ function OperationalRegisterRow({ mode, record, onSelect }: { mode: "due" | "wor
   return <button className={rowClass} key={mode === "due" ? item.id : work.id} onClick={() => onSelect(work.id)} type="button">
     <span className={`${dateClass} ${dateClass}--${work.status.toLowerCase()}`}><strong>{item.calendarDate.slice(-2)}</strong><small>{item.internalDeadline.replace(/^.*?·\s*/, "")}</small></span>
     <span><strong>{item.client}</strong><small>{mode === "due" ? scopeLabelForValue(item.scope) : `${work.registrationUnit} · ${scopeLabelForValue(work.scope)}`}</small></span>
-    <span><strong>{mode === "work" ? compactReturnPackageLabel(milestones) : compactReturnLabel(item.returnLabel)}</strong><small>{mode === "work" ? returnPackageDetail(milestones, item.milestone) : item.milestone}</small></span>
+    <span><strong>{mode === "work" ? compactReturnPackageLabel(milestones) : compactReturnLabel(primaryReturn.returnLabel)}</strong><small>{mode === "work" ? returnPackageDetail(milestones, item.milestone) : item.milestone}</small></span>
     <span className={periodClass}>{item.period}</span>
     {mode === "due" ? <span><span className={`rag-text rag-text--${work.status.toLowerCase()}`}>{work.stage}</span><small>{work.statusReason}</small></span> : <span><span className={`rag-text rag-text--${work.status.toLowerCase()}`}>{work.status}</span><strong>{currentStep?.label}</strong><small>{stepCount(work)}</small></span>}
     <span><strong>{work.owner}</strong><small>{scopeLabelForValue(mode === "due" ? item.scope : work.scope)}</small></span>
@@ -58,7 +59,15 @@ export function DueRegisterView({ scope, preset = "all", dateFilter, onClearDate
     const work = getEffectiveWork(record.work);
     return (prototypeMode ? isWorkVisible(work) : true) ? [{ ...record, work, status: work.status }] : [];
   }), [getEffectiveWork, getOperationalRecords, isWorkVisible, prototypeMode]);
-  const rows = useMemo(() => filterFixtureOperationalRecords(operationalRecords, { dateFilter, due, scope, search, status, today }).sort((a, b) => dateValue(a.calendar.calendarDate) - dateValue(b.calendar.calendarDate)), [dateFilter, due, operationalRecords, scope, search, status, today]);
+  const rows = useMemo(() => {
+    const matching = filterFixtureOperationalRecords(operationalRecords, { dateFilter, due, scope, search, status, today });
+    const matchingIds = new Set(matching.map((record) => record.work.id));
+    const matchingDates = new Map(matching.map((record) => [record.work.id, record.calendar]));
+    return getFixtureWorkRegisterRecords(operationalRecords, today)
+      .filter((record) => matchingIds.has(record.work.id))
+      .map((record) => dateFilter && matchingDates.has(record.work.id) ? { ...record, calendar: matchingDates.get(record.work.id)! } : record)
+      .sort((a, b) => dateValue(a.calendar.calendarDate) - dateValue(b.calendar.calendarDate));
+  }, [dateFilter, due, operationalRecords, scope, search, status, today]);
 
   const selectedWork = selectedWorkId ? workItems.find((work) => work.id === selectedWorkId) : undefined;
 
@@ -193,7 +202,8 @@ export function CalendarView({ scope, selectedDate, onSelectDate, includeDueRegi
     return (prototypeMode ? isWorkVisible(work) : true) ? [{ ...record, work, status: work.status }] : [];
   }), [getEffectiveWork, getOperationalRecords, isWorkVisible, prototypeMode]);
   const scopedItems = operationalRecords.filter((record) => isInScope(record.scope, scope));
-  const monthItems = scopedItems.filter(({ calendar: item }) => item.calendarDate.startsWith(monthKey));
+  const calendarRecords = getFixtureWorkRegisterRecords(scopedItems, runtimeToday);
+  const monthItems = calendarRecords.filter(({ calendar: item }) => item.calendarDate.startsWith(monthKey));
 
   function moveMonth(delta: number) {
     const next = new Date(year, month + delta, 1);
@@ -208,7 +218,7 @@ export function CalendarView({ scope, selectedDate, onSelectDate, includeDueRegi
         <div className="calendar-month__days calendar-month__days--compact">
           {cells.map((day, index) => {
             const date = day ? `${monthKey}-${String(day).padStart(2, "0")}` : null;
-            const items = date ? scopedItems.filter(({ calendar: item }) => item.calendarDate === date) : [];
+            const items = date ? calendarRecords.filter(({ calendar: item }) => item.calendarDate === date) : [];
             return <div className={`calendar-day${date && date === selectedDate ? " calendar-day--selected" : ""}${!day ? " calendar-day--empty" : ""}`} key={date ?? `empty-${index}`}>
               {day && <button aria-label={`${monthLabel} ${day}${items.length ? `, ${items.length} scheduled item${items.length === 1 ? "" : "s"}` : ""}`} className="calendar-day__date" onClick={() => { if (date) onSelectDate?.(date); }} type="button"><span className="calendar-day__number">{day}</span></button>}
               {items.slice(0, 2).map(({ calendar: item, status, work }) => <button aria-label={`${compactReturnLabel(item.returnLabel)}, ${status}`} className={`calendar-event calendar-event--${status.toLowerCase()}`} key={item.id} onClick={() => { onSelectDate?.(item.calendarDate); setSelectedWorkId(work.id); }} type="button"><span className="calendar-event__label">{compactReturnLabel(item.returnLabel)}</span></button>)}

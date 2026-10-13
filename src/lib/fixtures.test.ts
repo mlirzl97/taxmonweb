@@ -48,6 +48,12 @@ describe("demo fixture mechanism", () => {
     expect(records.find((record) => record.work.id === "work-02")?.work.steps.find((step) => step.id === "payment")?.state).toBe("current");
   });
 
+  it("keeps package milestones attached to the parent return projection", () => {
+    const packageRecord = getFixtureWorkRegisterRecords(getFixtureOperationalRecords()).find((record) => record.work.id === "work-02");
+    expect(packageRecord?.milestones.map((item) => item.returnLabel)).toEqual(["WHT · 1601EQ", "WHT · QAP"]);
+    expect(packageRecord?.calendar.returnLabel).toBe("WHT · 1601EQ");
+  });
+
   it("shares due filtering semantics with the Due Register", () => {
     const records = getFixtureOperationalRecords();
     const today = filterFixtureOperationalRecords(records, { due: "today", scope: "all", status: "all" });
