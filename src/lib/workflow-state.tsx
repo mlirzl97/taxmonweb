@@ -559,6 +559,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
             { label: "Attachments", state: "Not configured", detail: "Attachment requirements are not configured for this prototype record." },
             { label: "Evidence", state: "Not started", detail: "Evidence follows the relevant action." },
           ],
+          blocker: { category: "CLIENT DATA", reason: "Data readiness is not confirmed." },
           paymentApplicability: "UNRESOLVED",
           paymentAmount: null,
         }),

@@ -84,6 +84,8 @@ describe("generated work persistence contract", () => {
     expect(manualWorkMigration).toContain("generation_key_value");
     expect(manualWorkMigration).toContain("public.append_audit_event");
     expect(manualWorkMigration).toContain("generated_compliance_work_events");
+    expect(manualWorkMigration).toContain("'not_ready'");
+    expect(manualWorkMigration).toContain("'preparer'");
   });
 
   it("snapshots effective Registration Unit assignments when manual Work is created", () => {
