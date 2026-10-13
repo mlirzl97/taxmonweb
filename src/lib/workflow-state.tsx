@@ -168,6 +168,22 @@ const accessMatrixStorageKey = "taxmonweb.prototype.access-matrix";
 const accessHistoryStorageKey = "taxmonweb.prototype.access-history";
 const periodLocksStorageKey = "taxmonweb.prototype.period-locks";
 
+function prototypeWorkSeed(): FixtureWorkItem[] {
+  return fixtureWork.map((work) => work.id === "work-02"
+    ? {
+        ...work,
+        detail: "Payment applies; record the amount during Preparer certification.",
+        stage: "PREPARE",
+        nextAction: "Complete preparation",
+        status: "AMBER",
+        statusReason: "The return package is reset for a fresh Preparer certification.",
+        steps: work.steps.map((step, index) => ({ ...step, state: index === 0 ? "current" : "not-started" })),
+        components: work.components.map((component) => component.label === "Payment" ? { ...component, state: "Required · amount not recorded", detail: "Record the amount during Preparer certification." } : { ...component, state: component.label === "Submission" ? "Not started" : component.label === "Attachments" ? "Waiting" : "Not started" }),
+        returnedFrom: undefined,
+      }
+    : work);
+}
+
 function readPrototypeState(key: string) {
   return window.localStorage.getItem(key) ?? window.sessionStorage.getItem(key);
 }
@@ -239,7 +255,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   const [operationalRecordsHydrated, setOperationalRecordsHydrated] = useState(prototypeMode);
   // Production starts with an empty server-backed projection. The fixture
   // work register exists only for the explicit sanitized prototype mode.
-  const [workItems, setWorkItems] = useState<FixtureWorkItem[]>(() => prototypeMode ? [...fixtureWork] : []);
+  const [workItems, setWorkItems] = useState<FixtureWorkItem[]>(() => prototypeMode ? prototypeWorkSeed() : []);
 
   const refreshClientRegistry = useCallback(async () => {
     if (prototypeMode) {

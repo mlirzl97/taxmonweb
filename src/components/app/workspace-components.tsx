@@ -633,6 +633,10 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
     const gateTitle = workflowRecord.currentGate === "PREPARER" ? "Preparer to draft return" : `${workflowRoleLabel(workflowRecord.currentGate)} certification`;
     const gateStatusLabel = processStatusLabels[pendingGateStatus ?? "DONE"];
     return <>
+      <section className="workflow-final-control-launcher" aria-labelledby="workflow-gate-launcher-title">
+        <div><p className="eyebrow">Pending certification</p><strong id="workflow-gate-launcher-title">{gateTitle}</strong><small>Open the gate to record required control facts before continuing.</small></div>
+        <button className="button button--primary button--small" onClick={() => { setFeedback(""); setGateChecklistOpen(true); }} type="button">Open gate</button>
+      </section>
       {gateChecklistOpen && <div className="work-evidence-dialog-layer" role="presentation"><section aria-labelledby="workflow-gate-title" aria-modal="true" className="work-evidence-dialog workflow-gate-dialog" onKeyDown={(event) => { if (event.key === "Escape") setGateChecklistOpen(false); }} role="dialog"><div className="work-evidence-dialog__header"><div><p className="eyebrow">Certification checklist</p><h2 id="workflow-gate-title">{gateTitle}</h2><p>Complete the checks, then certify the selected status. Each change is saved with the acting persona and time.</p></div><button aria-label="Close certification checklist" autoFocus className="icon-button" onClick={() => setGateChecklistOpen(false)} type="button">×</button></div>
         <p className="workflow-gate-panel__state">Waiting for {workflowRoleLabel(workflowRecord.currentGate)}</p>
         <p className="workflow-gate-panel__hint">Selected outcome: {gateStatusLabel}. {workPerspective === "MASTER_ADMIN" ? `HOD preview · acting for ${workflowRoleLabel(role)}.` : `Acting view: ${workflowPerspectiveLabel(workPerspective)}.`}</p>
