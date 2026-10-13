@@ -196,6 +196,7 @@ type WorkflowContextValue = {
   getOperationalRecords: () => readonly FixtureOperationalRecord[];
   operationalToday: string;
   createWorkItem: (input: WorkAdminInput) => { ok: boolean; work?: FixtureWorkItem; error?: string };
+  createLiveWorkItem: (input: WorkAdminInput) => Promise<{ ok: boolean; workId?: string; error?: string }>;
   updateWorkItem: (workId: string, input: WorkAdminInput) => { ok: boolean; work?: FixtureWorkItem; error?: string };
   deleteWorkItem: (workId: string) => { ok: boolean; error?: string };
   isWorkVisible: (work: FixtureWorkItem) => boolean;
@@ -490,6 +491,28 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     await refreshLiveWork();
     return { ok: true, data: result.data };
   }, [refreshLiveWork]);
+
+  const createLiveWorkItem = useCallback(async (input: WorkAdminInput) => {
+    if (prototypeMode) return { ok: false, error: "Live Work creation is unavailable in prototype mode." };
+    const idempotencyKey = globalThis.crypto?.randomUUID?.() ?? `manual-work-${Date.now()}`;
+    const response = await fetch("/api/work", {
+      method: "POST",
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: JSON.stringify({
+        clientId: input.clientId,
+        title: input.title,
+        period: input.period,
+        deadline: input.deadline,
+        paymentApplicability: input.paymentApplicability,
+        paymentAmount: input.paymentAmount,
+        idempotencyKey,
+      }),
+    });
+    const result = await response.json() as { data?: { id?: string }; error?: string };
+    if (!response.ok) return { ok: false, error: result.error ?? "The Work record could not be created." };
+    await refreshLiveWork();
+    return { ok: true, workId: result.data?.id };
+  }, [prototypeMode, refreshLiveWork]);
   const buildWorkItem = useCallback((input: WorkAdminInput, existing?: FixtureWorkItem): { work?: FixtureWorkItem; error?: string } => {
     const client = fixtureClients.find((candidate) => candidate.id === input.clientId);
     if (!client) return { error: "Choose a taxpayer before saving the work item." };
@@ -804,7 +827,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
 
   const getModuleAccess = useCallback((module: ModuleKey) => moduleAccessForPersona(workPerspective, module, accessMatrix), [accessMatrix, workPerspective]);
   const canAccess = useCallback((module: ModuleKey, allowed: readonly AccessLevel[] = ["VIEW", "ACT", "APPROVE", "GOVERN", "OVERRIDE"]) => canAccessModule(workPerspective, module, allowed, accessMatrix), [accessMatrix, workPerspective]);
-  const value = useMemo<WorkflowContextValue>(() => ({ prototypeMode, clientRegistry, clientRegistryState, refreshClientRegistry, currentRole, setCurrentRole, workPerspective, setWorkPerspective, applyAccessPerspective, accessMatrix, accessPolicyHistory, commitAccessMatrix, canManageAccess, getModuleAccess, canAccessModule: canAccess, getRecord, getEffectiveWork, getWorkItems, getOperationalRecords, operationalToday: prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10), createWorkItem, updateWorkItem, deleteWorkItem, isWorkVisible, isClientVisible, canActOnWorkflow, canActOnProcessStep, getProcessStatus, getLatestProcessUpdate, setPaymentApplicability, setPaymentAmount, getPeriodLock, setPeriodLock, setProcessStatus, getChecklistAnswers, setChecklistAnswer, getQuestions: (role: WorkflowRole) => roleQuestions[role], submitDecision, recordFinalCertification }), [accessMatrix, accessPolicyHistory, applyAccessPerspective, canAccess, canActOnProcessStep, canActOnWorkflow, canManageAccess, clientRegistry, clientRegistryState, commitAccessMatrix, createWorkItem, currentRole, deleteWorkItem, getChecklistAnswers, getEffectiveWork, getLatestProcessUpdate, getModuleAccess, getOperationalRecords, getPeriodLock, getProcessStatus, getRecord, getWorkItems, isClientVisible, isWorkVisible, prototypeMode, recordFinalCertification, refreshClientRegistry, setChecklistAnswer, setPaymentApplicability, setPaymentAmount, setPeriodLock, setProcessStatus, submitDecision, updateWorkItem, workPerspective]);
+  const value = useMemo<WorkflowContextValue>(() => ({ prototypeMode, clientRegistry, clientRegistryState, refreshClientRegistry, currentRole, setCurrentRole, workPerspective, setWorkPerspective, applyAccessPerspective, accessMatrix, accessPolicyHistory, commitAccessMatrix, canManageAccess, getModuleAccess, canAccessModule: canAccess, getRecord, getEffectiveWork, getWorkItems, getOperationalRecords, operationalToday: prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10), createWorkItem, createLiveWorkItem, updateWorkItem, deleteWorkItem, isWorkVisible, isClientVisible, canActOnWorkflow, canActOnProcessStep, getProcessStatus, getLatestProcessUpdate, setPaymentApplicability, setPaymentAmount, getPeriodLock, setPeriodLock, setProcessStatus, getChecklistAnswers, setChecklistAnswer, getQuestions: (role: WorkflowRole) => roleQuestions[role], submitDecision, recordFinalCertification }), [accessMatrix, accessPolicyHistory, applyAccessPerspective, canAccess, canActOnProcessStep, canActOnWorkflow, canManageAccess, clientRegistry, clientRegistryState, commitAccessMatrix, createLiveWorkItem, createWorkItem, currentRole, deleteWorkItem, getChecklistAnswers, getEffectiveWork, getLatestProcessUpdate, getModuleAccess, getOperationalRecords, getPeriodLock, getProcessStatus, getRecord, getWorkItems, isClientVisible, isWorkVisible, prototypeMode, recordFinalCertification, refreshClientRegistry, setChecklistAnswer, setPaymentApplicability, setPaymentAmount, setPeriodLock, setProcessStatus, submitDecision, updateWorkItem, workPerspective]);
   return <WorkflowContext.Provider value={value}>{children}</WorkflowContext.Provider>;
 }
 

@@ -123,6 +123,32 @@ export type LivePublishedCalendarEntry = {
   publication_status: "published";
 };
 
+export type CreateLiveGeneratedWorkInput = {
+  clientReference: string;
+  requirementCode: string;
+  periodLabel: string;
+  tmfPackageTarget: string | null;
+  paymentApplicability: "required" | "not_applicable" | "unresolved";
+  paymentAmount: number | null;
+  idempotencyKey: string;
+};
+
+export async function createLiveGeneratedWork(input: CreateLiveGeneratedWorkInput) {
+  const client = await createSupabaseServerClient();
+  if (!client) throw new Error("Supabase is not configured for this environment.");
+  const { data, error } = await client.rpc("create_manual_generated_work", {
+    p_client_reference: input.clientReference,
+    p_requirement_code: input.requirementCode,
+    p_period_label: input.periodLabel,
+    p_tmf_package_target: input.tmfPackageTarget,
+    p_payment_applicability: input.paymentApplicability,
+    p_payment_amount: input.paymentAmount,
+    p_idempotency_key: input.idempotencyKey,
+  });
+  if (error) throw new Error(`Unable to create generated compliance work: ${error.message}`);
+  return String(data);
+}
+
 export async function listLiveGeneratedWork(): Promise<LiveGeneratedWork[]> {
   const client = await createSupabaseServerClient();
   if (!client) throw new Error("Supabase is not configured for this environment.");

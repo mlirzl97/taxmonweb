@@ -41,19 +41,19 @@ const emptyWorkDraft: WorkAdminInput = {
 };
 
 function AddWorkDrawer({ onClose }: { onClose: () => void }) {
-  const { clientRegistry, createWorkItem, prototypeMode } = useWorkflow();
+  const { clientRegistry, createLiveWorkItem, createWorkItem, prototypeMode } = useWorkflow();
   const [draft, setDraft] = useState<WorkAdminInput>(emptyWorkDraft);
   const [error, setError] = useState("");
-  const clients = clientRegistry.length > 0 ? clientRegistry : fixtureClients;
+  const clients = prototypeMode ? fixtureClients : clientRegistry;
 
   function update<K extends keyof WorkAdminInput>(key: K, value: WorkAdminInput[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
     setError("");
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const result = createWorkItem(draft);
+    const result = prototypeMode ? createWorkItem(draft) : await createLiveWorkItem(draft);
     if (!result.ok) {
       setError(result.error ?? "The work item could not be added.");
       return;
@@ -61,23 +61,27 @@ function AddWorkDrawer({ onClose }: { onClose: () => void }) {
     onClose();
   }
 
-  return <DetailDrawer eyebrow="Work register" title="Add work" subtitle={prototypeMode ? "Create a sanitized work record." : "Work is generated from approved compliance setup."} onClose={onClose}>
-    {!prototypeMode && <div className="callout callout--warning" role="status">Manual creation is available in the sanitized prototype only. Authenticated work must come from approved compliance generation.</div>}
+  const liveClientsLoading = !prototypeMode && clients.length === 0;
+  return <DetailDrawer eyebrow="Work register" title="Add work" subtitle={prototypeMode ? "Create a sanitized work record." : "Create a governed Work record from an approved taxpayer and BIR requirement."} onClose={onClose}>
     <form className="work-admin-form" onSubmit={submit}>
-      <label><span>Taxpayer</span><select disabled={!prototypeMode} onChange={(event) => update("clientId", event.target.value)} required value={draft.clientId}><option value="">Select taxpayer</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
-      <label><span>Return / submission</span><input disabled={!prototypeMode} onChange={(event) => update("title", event.target.value)} placeholder="e.g. WHT 1601EQ" required value={draft.title} /></label>
-      <label><span>Period</span><input disabled={!prototypeMode} onChange={(event) => update("period", event.target.value)} placeholder="e.g. October 2026" required value={draft.period} /></label>
-      <label><span>TMF target</span><input disabled={!prototypeMode} onChange={(event) => update("deadline", event.target.value)} placeholder="e.g. 2026-11-09 · 4:00 PM" required value={draft.deadline} /></label>
-      <label><span>Owner</span><input disabled={!prototypeMode} onChange={(event) => update("owner", event.target.value)} placeholder="Preparer or accountable owner" required value={draft.owner} /></label>
-      <div className="form-grid form-grid--compact">
-        <label><span>Stage</span><select disabled={!prototypeMode} onChange={(event) => update("stage", event.target.value as FixtureWorkItem["stage"])} value={draft.stage}><option value="PREPARE">Preparation</option><option value="REVIEW">Review</option><option value="CLIENT">Client approval</option><option value="FILE">Filing</option><option value="POST-FILING">Post-filing</option></select></label>
-        <label><span>RAG</span><select disabled={!prototypeMode} onChange={(event) => update("status", event.target.value as FixtureStatus)} value={draft.status}><option value="UNRESOLVED">Unresolved</option><option value="GREEN">Green</option><option value="AMBER">Amber</option><option value="RED">Red</option></select></label>
-      </div>
-      <label><span>Next action</span><input disabled={!prototypeMode} onChange={(event) => update("nextAction", event.target.value)} placeholder="What needs to happen next?" required value={draft.nextAction} /></label>
-      <label><span>Payment</span><select disabled={!prototypeMode} onChange={(event) => update("paymentApplicability", event.target.value as FixturePaymentApplicability)} value={draft.paymentApplicability}><option value="UNRESOLVED">Unresolved</option><option value="REQUIRED">Required</option><option value="NOT_APPLICABLE">Not applicable</option></select></label>
-      <label><span>Note</span><textarea disabled={!prototypeMode} onChange={(event) => update("detail", event.target.value)} placeholder="Short context or blocker" value={draft.detail} /></label>
+      <label><span>Taxpayer</span><select disabled={liveClientsLoading} onChange={(event) => update("clientId", event.target.value)} required value={draft.clientId}><option value="">{liveClientsLoading ? "Loading taxpayers…" : "Select taxpayer"}</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
+      <label><span>Approved requirement code</span><input onChange={(event) => update("title", event.target.value)} placeholder={prototypeMode ? "e.g. WHT 1601EQ" : "e.g. BIR-1601-EQ"} required value={draft.title} /></label>
+      <label><span>Period</span><input onChange={(event) => update("period", event.target.value)} placeholder="e.g. October 2026" required value={draft.period} /></label>
+      <label><span>TMF target</span><input onChange={(event) => update("deadline", event.target.value)} placeholder="e.g. 2026-11-09" required value={draft.deadline} /></label>
+      {prototypeMode && <>
+        <label><span>Owner</span><input onChange={(event) => update("owner", event.target.value)} placeholder="Preparer or accountable owner" required value={draft.owner} /></label>
+        <div className="form-grid form-grid--compact">
+          <label><span>Stage</span><select onChange={(event) => update("stage", event.target.value as FixtureWorkItem["stage"])} value={draft.stage}><option value="PREPARE">Preparation</option><option value="REVIEW">Review</option><option value="CLIENT">Client approval</option><option value="FILE">Filing</option><option value="POST-FILING">Post-filing</option></select></label>
+          <label><span>RAG</span><select onChange={(event) => update("status", event.target.value as FixtureStatus)} value={draft.status}><option value="UNRESOLVED">Unresolved</option><option value="GREEN">Green</option><option value="AMBER">Amber</option><option value="RED">Red</option></select></label>
+        </div>
+        <label><span>Next action</span><input onChange={(event) => update("nextAction", event.target.value)} placeholder="What needs to happen next?" required value={draft.nextAction} /></label>
+      </>}
+      <label><span>Payment</span><select onChange={(event) => update("paymentApplicability", event.target.value as FixturePaymentApplicability)} value={draft.paymentApplicability}><option value="UNRESOLVED">Unresolved</option><option value="REQUIRED">Required</option><option value="NOT_APPLICABLE">Not applicable</option></select></label>
+      {draft.paymentApplicability === "REQUIRED" && <label><span>Amount to pay</span><input inputMode="decimal" min="0" onChange={(event) => update("paymentAmount", event.target.value === "" ? null : Number(event.target.value))} placeholder="PHP" type="number" value={draft.paymentAmount ?? ""} /></label>}
+      {prototypeMode && <label><span>Note</span><textarea onChange={(event) => update("detail", event.target.value)} placeholder="Short context or blocker" value={draft.detail} /></label>}
       {error && <div className="callout callout--error" role="alert">{error}</div>}
-      <div className="team-editor__footer"><button className="button button--quiet" onClick={onClose} type="button">Cancel</button><button className="button button--primary" disabled={!prototypeMode} type="submit">Add work</button></div>
+      {!prototypeMode && <p className="form-help">The signed-in user is recorded as the preparer. Status starts unresolved until the governed workflow advances it.</p>}
+      <div className="team-editor__footer"><button className="button button--quiet" onClick={onClose} type="button">Cancel</button><button className="button button--primary" disabled={liveClientsLoading} type="submit">Add work</button></div>
     </form>
   </DetailDrawer>;
 }

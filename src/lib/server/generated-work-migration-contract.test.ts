@@ -11,6 +11,7 @@ const periodCloseMigration = readFileSync(join(process.cwd(), "supabase/migratio
 const periodCloseHardeningMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261118010000_harden_period_close_triggers.sql"), "utf8");
 const returnPeriodLockMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261119000000_return_period_locks.sql"), "utf8");
 const preparerPaymentAmountMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261121000000_preparer_payment_amount_control.sql"), "utf8");
+const manualWorkMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261123000000_enable_authorized_manual_work.sql"), "utf8");
 
 describe("generated work persistence contract", () => {
   it("uses one generated-work source with idempotent identity", () => {
@@ -72,5 +73,15 @@ describe("generated work persistence contract", () => {
     expect(preparerPaymentAmountMigration).toContain("already recorded and cannot be edited");
     expect(preparerPaymentAmountMigration).toContain("record_payment_amount_evidence");
     expect(preparerPaymentAmountMigration).toContain("Amount to pay captured at Preparer certification");
+  });
+
+  it("keeps manual Work creation behind approved masters and an audited command", () => {
+    expect(manualWorkMigration).toContain("create or replace function public.create_manual_generated_work");
+    expect(manualWorkMigration).toContain("MaintainGeneratedComplianceWork");
+    expect(manualWorkMigration).toContain("requirement.status = 'active'");
+    expect(manualWorkMigration).toContain("version.status = 'approved'");
+    expect(manualWorkMigration).toContain("generation_key_value");
+    expect(manualWorkMigration).toContain("public.append_audit_event");
+    expect(manualWorkMigration).toContain("generated_compliance_work_events");
   });
 });
