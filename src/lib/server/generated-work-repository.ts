@@ -292,6 +292,17 @@ export async function getLiveGeneratedWorkDetail(workId: string) {
 export async function recordLiveGeneratedWorkCommand(workId: string, command: string, payload: Record<string, unknown>, idempotencyKey: string) {
   const client = await createSupabaseServerClient();
   if (!client) throw new Error("Supabase is not configured for this environment.");
+  if (command === "data_readiness") {
+    const { data, error } = await client.rpc("record_generated_work_readiness", {
+      p_work_id: workId,
+      p_ready: Boolean(payload.ready),
+      p_source: typeof payload.source === "string" ? payload.source : "",
+      p_reason: typeof payload.reason === "string" ? payload.reason : "",
+      p_idempotency_key: idempotencyKey,
+    });
+    if (error) throw new Error(`Unable to record data readiness: ${error.message}`);
+    return data as Record<string, unknown>;
+  }
   if (command === "period_lock") {
     const { data, error } = await client.rpc("record_generated_return_lock", {
       p_work_id: workId,

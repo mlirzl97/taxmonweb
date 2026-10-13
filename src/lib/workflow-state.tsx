@@ -210,6 +210,7 @@ type WorkflowContextValue = {
   getPeriodLock: (work: FixtureWorkItem) => WorkflowPeriodLock;
   setPeriodLock: (work: FixtureWorkItem, locked: boolean, reason: string) => Promise<{ ok: boolean; error?: string }>;
   setProcessStatus: (work: FixtureWorkItem, stepId: string, status: WorkflowProcessStatus, evidenceReference?: string, overrideReason?: string, sharepointUrl?: string, completedOn?: string, acknowledgedOn?: string, validatedOn?: string, attachmentName?: string, archiveFacts?: WorkflowArchiveFacts, paymentAmountOverride?: number | null) => Promise<{ ok: boolean; error?: string }>;
+  setDataReadiness: (work: FixtureWorkItem, ready: boolean, source: "CLIENT_RECORDS" | "TMF_BOOKS", reason: string) => Promise<{ ok: boolean; error?: string }>;
   getChecklistAnswers: (work: FixtureWorkItem, role: WorkflowRole) => Readonly<Record<string, boolean>>;
   setChecklistAnswer: (work: FixtureWorkItem, role: WorkflowRole, questionId: string, completed: boolean) => Promise<{ ok: boolean; error?: string }>;
   getQuestions: (role: WorkflowRole) => readonly WorkflowQuestion[];
@@ -451,13 +452,13 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     const record = recordForWork(work, records[work.id]);
     const { blocker, ...patchWithoutBlocker } = record.patch;
     const stage = record.patch.stage ?? work.stage;
-    const effectiveWork = { ...work, ...patchWithoutBlocker };
+    const effectiveWork = { ...work, ...patchWithoutBlocker, ...(blocker === null ? { blocker: undefined } : blocker === undefined ? {} : { blocker }) };
     const steps = applyWorkflowStepState(effectiveWork, record.currentGate, stage, record.processStatuses);
     const activeStep = steps.find((step) => step.state === "current" || step.state === "unresolved" || step.state === "blocked");
     const activeStatus = activeStep ? record.processStatuses[activeStep.id] : undefined;
     const derivedNextAction = activeStep && activeStatus ? actionForProcessStep(activeStep.id, activeStatus) : undefined;
-    const nextAction = !effectiveWork.blocker && blocker === undefined && derivedNextAction ? derivedNextAction : effectiveWork.nextAction;
-    return { ...effectiveWork, nextAction, steps, ...(blocker === null ? {} : blocker === undefined ? {} : { blocker }) };
+    const nextAction = !effectiveWork.blocker && derivedNextAction ? derivedNextAction : effectiveWork.nextAction;
+    return { ...effectiveWork, nextAction, steps };
   }, [records]);
 
   const getWorkItems = useCallback(() => workItems, [workItems]);
@@ -751,6 +752,17 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     return { ok: true };
   }, [canActOnProcessStep, executeLiveCommand, periodLocks, prototypeMode, records, workPerspective]);
 
+  const setDataReadiness = useCallback(async (work: FixtureWorkItem, ready: boolean, source: "CLIENT_RECORDS" | "TMF_BOOKS", reason: string) => {
+    if (!reason.trim()) return { ok: false, error: "Record why the source data is ready before continuing." };
+    if (!prototypeMode) return executeLiveCommand(work, "data_readiness", { ready, source, reason: reason.trim() });
+    if (periodLocks[workReturnLockKey(work)]?.locked) return { ok: false, error: "This return and compliance period are locked by Tax Team." };
+    setRecords((current) => {
+      const existing = recordForWork(work, current[work.id]);
+      return { ...current, [work.id]: { ...existing, patch: { ...existing.patch, blocker: ready ? null : { category: "CLIENT DATA", reason: reason.trim() } } } };
+    });
+    return { ok: true };
+  }, [executeLiveCommand, periodLocks, prototypeMode]);
+
   const setPaymentApplicability = useCallback(async (work: FixtureWorkItem, applicability: FixturePaymentApplicability) => {
     if (!prototypeMode) return executeLiveCommand(work, "payment_profile", { paymentApplicability: applicability.toLowerCase(), paymentAmount: applicability === "NOT_APPLICABLE" ? null : work.paymentAmount ?? null });
     const record = recordForWork(work, records[work.id]);
@@ -825,7 +837,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
 
   const getModuleAccess = useCallback((module: ModuleKey) => moduleAccessForPersona(workPerspective, module, accessMatrix), [accessMatrix, workPerspective]);
   const canAccess = useCallback((module: ModuleKey, allowed: readonly AccessLevel[] = ["VIEW", "ACT", "APPROVE", "GOVERN", "OVERRIDE"]) => canAccessModule(workPerspective, module, allowed, accessMatrix), [accessMatrix, workPerspective]);
-  const value = useMemo<WorkflowContextValue>(() => ({ prototypeMode, clientRegistry, clientRegistryState, refreshClientRegistry, currentRole, setCurrentRole, workPerspective, setWorkPerspective, applyAccessPerspective, accessMatrix, accessPolicyHistory, commitAccessMatrix, canManageAccess, getModuleAccess, canAccessModule: canAccess, getRecord, getEffectiveWork, getWorkItems, getOperationalRecords, operationalToday: prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10), createWorkItem, createLiveWorkItem, updateWorkItem, deleteWorkItem, isWorkVisible, isClientVisible, canActOnWorkflow, canActOnProcessStep, getProcessStatus, getLatestProcessUpdate, setPaymentApplicability, setPaymentAmount, getPeriodLock, setPeriodLock, setProcessStatus, getChecklistAnswers, setChecklistAnswer, getQuestions: (role: WorkflowRole) => roleQuestions[role], submitDecision, recordFinalCertification }), [accessMatrix, accessPolicyHistory, applyAccessPerspective, canAccess, canActOnProcessStep, canActOnWorkflow, canManageAccess, clientRegistry, clientRegistryState, commitAccessMatrix, createLiveWorkItem, createWorkItem, currentRole, deleteWorkItem, getChecklistAnswers, getEffectiveWork, getLatestProcessUpdate, getModuleAccess, getOperationalRecords, getPeriodLock, getProcessStatus, getRecord, getWorkItems, isClientVisible, isWorkVisible, prototypeMode, recordFinalCertification, refreshClientRegistry, setChecklistAnswer, setPaymentApplicability, setPaymentAmount, setPeriodLock, setProcessStatus, submitDecision, updateWorkItem, workPerspective]);
+  const value = useMemo<WorkflowContextValue>(() => ({ prototypeMode, clientRegistry, clientRegistryState, refreshClientRegistry, currentRole, setCurrentRole, workPerspective, setWorkPerspective, applyAccessPerspective, accessMatrix, accessPolicyHistory, commitAccessMatrix, canManageAccess, getModuleAccess, canAccessModule: canAccess, getRecord, getEffectiveWork, getWorkItems, getOperationalRecords, operationalToday: prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10), createWorkItem, createLiveWorkItem, updateWorkItem, deleteWorkItem, isWorkVisible, isClientVisible, canActOnWorkflow, canActOnProcessStep, getProcessStatus, getLatestProcessUpdate, setDataReadiness, setPaymentApplicability, setPaymentAmount, getPeriodLock, setPeriodLock, setProcessStatus, getChecklistAnswers, setChecklistAnswer, getQuestions: (role: WorkflowRole) => roleQuestions[role], submitDecision, recordFinalCertification }), [accessMatrix, accessPolicyHistory, applyAccessPerspective, canAccess, canActOnProcessStep, canActOnWorkflow, canManageAccess, clientRegistry, clientRegistryState, commitAccessMatrix, createLiveWorkItem, createWorkItem, currentRole, deleteWorkItem, getChecklistAnswers, getEffectiveWork, getLatestProcessUpdate, getModuleAccess, getOperationalRecords, getPeriodLock, getProcessStatus, getRecord, getWorkItems, isClientVisible, isWorkVisible, prototypeMode, recordFinalCertification, refreshClientRegistry, setDataReadiness, setChecklistAnswer, setPaymentApplicability, setPaymentAmount, setPeriodLock, setProcessStatus, submitDecision, updateWorkItem, workPerspective]);
   return <WorkflowContext.Provider value={value}>{children}</WorkflowContext.Provider>;
 }
 

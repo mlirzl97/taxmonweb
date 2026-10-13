@@ -15,6 +15,7 @@ const commandCapabilities: Record<string, readonly string[]> = {
   payment_profile: ["ExecuteGeneratedComplianceWork"],
   process_status: ["ExecuteGeneratedComplianceWork"],
   final_certification: ["ExecuteGeneratedComplianceWork"],
+  data_readiness: ["ExecuteGeneratedComplianceWork", "MaintainGeneratedComplianceWork"],
   qa_finding: ["PerformWorkQA", "ValidateTaxProfile", "ViewTaxControlHistory"],
   period_lock: ["ManageWorkPeriodLock", "PerformElevatedOverride"],
 };
