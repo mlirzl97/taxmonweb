@@ -672,7 +672,7 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
               const processStatus = step ? processStatusForStep(step) : undefined;
               const isCurrentStep = Boolean(step && currentProcessStep?.id === step.id);
               const canEditStatus = Boolean(!periodLock.locked && !dataBlocked && step && processStatus && canActOnProcessStep(step.id, effectiveWork) && isCurrentStep);
-              const isCurrentGateStep = Boolean(step && isCurrentStep && gateProcessStepIds.has(step.id) && workflowRecord.currentGate === stage.owner && canActOnProcessStep(step.id, effectiveWork));
+              const isCurrentGateStep = Boolean(step && gateProcessStepIds.has(step.id) && workflowRecord.currentGate === stage.owner && canActOnProcessStep(step.id, effectiveWork));
               const gateActionLabel = stage.id === "prepare" ? "Complete preparation" : stage.id === "check" ? "Complete checking" : "Complete review";
               const dataComplete = stage.id === "data" && processStatusForStep(stepById.get("prepare") ?? effectiveWork.steps[0]) === "DONE";
               const archiveVerified = step?.id === "evidence" && processStatus === "DONE";
