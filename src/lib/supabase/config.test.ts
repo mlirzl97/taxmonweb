@@ -39,4 +39,13 @@ describe("prototype access safety", () => {
     expect(isPrototypeDemoMode()).toBe(false);
     expect(isCalibrationOpenEditMode()).toBe(false);
   });
+
+  it("allows the explicitly marked sanitized preview demo", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("TAXMON_PUBLIC_SANITIZED_DEMO", "true");
+    vi.stubEnv("TAXMON_DATA_MODE", "sanitized");
+
+    expect(isPrototypeDemoMode()).toBe(true);
+  });
 });
