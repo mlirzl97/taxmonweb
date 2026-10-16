@@ -4,33 +4,90 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   buildDeadlineControlRows,
-  deadlineControlSummary,
   readDeadlinePublicationOverrides,
   writeDeadlinePublicationOverrides,
   type DeadlineControlRow,
+  type DeadlineControlHistoryEvent,
   type DeadlinePublicationOverride,
   type DeadlinePublicationStatus,
 } from "@/lib/domain/deadline-control";
-import { DetailDrawer, MetricCard, SectionHeading } from "./workspace-components";
+import { governedReturnForms } from "@/lib/domain/client-return-selection";
+import { calculateInternalTarget } from "@/lib/domain/tax-foundation";
+import { DetailDrawer, SectionHeading } from "./workspace-components";
 
-const statusLabels: Record<DeadlinePublicationStatus, string> = { generated: "Generated", needs_review: "Needs review", confirmed: "Confirmed", published: "Published", unresolved: "Unresolved", superseded: "Superseded" };
+const statusLabels: Record<DeadlinePublicationStatus, string> = { generated: "Generated", needs_review: "Unresolved", confirmed: "Confirmed", published: "Published", unresolved: "Unresolved", superseded: "Superseded" };
 type RepositorySource = "loading" | "repository" | "sanitized-fixture";
 type EditableRow = DeadlineControlRow & { calendarMonth: string; periodStart: string; periodEnd: string; sourceLocator: string; notes: string };
 const localRowsStorageKey = "taxmonweb.prototype.deadline-repository-rows";
+const localHistoryStorageKey = "taxmonweb.prototype.deadline-repository-history";
+const localHistoryActor = "Master Admin";
+const obsoleteUnresolvedNote = "Deadline unresolved: no approved rule version is mapped for this requirement context.";
+
+function readLocalHistory(): Record<string, DeadlineControlHistoryEvent[]> {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(localHistoryStorageKey) ?? "{}") as unknown;
+    if (!parsed || typeof parsed !== "object") return {};
+    return Object.fromEntries(Object.entries(parsed as Record<string, DeadlineControlHistoryEvent[]>).map(([rowId, events]) => [rowId, events.map((event) => {
+      const detail = event.detail.replace(obsoleteUnresolvedNote, "").replace(/^\s*·\s*|\s*·\s*$/g, "").trim();
+      return { ...event, detail: detail.startsWith(`${localHistoryActor} ·`) ? detail : `${localHistoryActor}${detail ? ` · ${detail}` : ""}` };
+    })]));
+  } catch {
+    return {};
+  }
+}
+
+function uniqueHistory(events: readonly DeadlineControlHistoryEvent[]) {
+  const seen = new Set<string>();
+  return events.filter((event) => {
+    if (seen.has(event.id)) return false;
+    seen.add(event.id);
+    return true;
+  });
+}
+
+function recordLocalHistory(rowId: string, label: string, detail: string) {
+  const event: DeadlineControlHistoryEvent = { id: crypto.randomUUID(), label, detail: `${localHistoryActor} · ${detail}`, recordedAt: new Date().toISOString() };
+  const history = readLocalHistory();
+  history[rowId] = [event, ...(history[rowId] ?? [])];
+  window.localStorage.setItem(localHistoryStorageKey, JSON.stringify(history));
+  return event;
+}
+
+function categoryOption(value: string): EditableRow["taxCategory"] {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("cit")) return "cit";
+  if (normalized.includes("vat") || normalized.includes("percentage")) return "vat_percentage";
+  if (normalized.includes("wht") || normalized.includes("withholding")) return "wht";
+  return "others";
+}
+
+function categoryLabel(value: string) {
+  switch (categoryOption(value)) {
+    case "cit": return "CIT";
+    case "vat_percentage": return "VAT / Percentage Tax";
+    case "wht": return "WHT";
+    default: return "Others";
+  }
+}
 
 function dateLabel(value: string | null, emptyLabel = "Unresolved") {
   if (!value) return emptyLabel;
   return new Intl.DateTimeFormat("en-PH", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Manila" }).format(new Date(`${value}T00:00:00Z`));
 }
 
+function historyTimestamp(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Time not recorded" : new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" }).format(date);
+}
+
 function toEditable(row: DeadlineControlRow): EditableRow {
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const monthIndex = Math.max(0, months.indexOf(row.activityMonth));
-  return { ...row, calendarMonth: new Date(Date.UTC(row.calendarYear, monthIndex, 1)).toISOString().slice(0, 10), periodStart: "", periodEnd: "", sourceLocator: "", notes: row.explanation };
+  return { ...row, taxCategory: categoryOption(row.taxCategory), calendarMonth: new Date(Date.UTC(row.calendarYear, monthIndex, 1)).toISOString().slice(0, 10), periodStart: row.periodStartDate, periodEnd: "", sourceLocator: "", notes: row.explanation.replace(obsoleteUnresolvedNote, "").trim() };
 }
 
 function emptyRow(year: number): EditableRow {
-  return { id: "", calendarYear: year, requirementCode: "", requirementLabel: "", formNumber: "", taxCategory: "others", cadence: "Monthly", component: "Return / filing", activityMonth: "January", activityPeriod: "", taxablePeriod: "", baseStatutoryDeadline: null, adjustedStatutoryDeadline: null, officialPublishedDeadline: null, officialCalendarReference: null, earliestApplicableDeadline: null, publishedOperationalDeadline: null, tmfPackageTarget: null, publicationStatus: "needs_review", verificationStatus: "unresolved", ruleVersionId: "unresolved", sourceCode: "", sourceLabel: "", adjustmentReason: "", explanation: "New deadline row requires source and rule review.", unresolvedReason: "new_repository_row_requires_review", calendarMonth: `${year}-01-01`, periodStart: "", periodEnd: "", sourceLocator: "", notes: "" };
+  return { id: "", calendarYear: year, requirementCode: "", requirementLabel: "", formNumber: "", taxCategory: "others", cadence: "Monthly", component: "Return / filing", activityMonth: "January", activityPeriod: "", periodStartDate: `${year}-01-01`, taxablePeriod: "", baseStatutoryDeadline: null, adjustedStatutoryDeadline: null, officialPublishedDeadline: null, officialCalendarReference: null, earliestApplicableDeadline: null, publishedOperationalDeadline: null, tmfPackageTarget: null, publicationStatus: "needs_review", verificationStatus: "unresolved", ruleVersionId: "unresolved", sourceCode: "", sourceLabel: "", adjustmentReason: "", explanation: "", unresolvedReason: "new_repository_row_requires_review", calendarMonth: `${year}-01-01`, periodStart: "", periodEnd: "", sourceLocator: "", notes: "" };
 }
 
 function effectiveRow(row: DeadlineControlRow, overrides: Readonly<Record<string, DeadlinePublicationOverride>>) {
@@ -39,18 +96,49 @@ function effectiveRow(row: DeadlineControlRow, overrides: Readonly<Record<string
   return { ...row, publicationStatus: override.status, publishedOperationalDeadline: override.status === "published" ? override.publishedOperationalDeadline ?? row.adjustedStatutoryDeadline : null };
 }
 
+function withDerivedInternalTarget(row: DeadlineControlRow): DeadlineControlRow {
+  const deadline = row.earliestApplicableDeadline ?? row.adjustedStatutoryDeadline ?? row.baseStatutoryDeadline;
+  if (!deadline || !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) return row;
+  return { ...row, tmfPackageTarget: calculateInternalTarget(deadline) };
+}
+
+function canPublish(row: DeadlineControlRow) {
+  return row.publicationStatus !== "published" && row.publicationStatus !== "superseded" && Boolean(row.earliestApplicableDeadline);
+}
+
+function canSaveAndPublish(row: DeadlineControlRow) {
+  return row.publicationStatus !== "superseded" && Boolean(row.earliestApplicableDeadline);
+}
+
+function mergeLocalRows(baseRows: DeadlineControlRow[], localRows: DeadlineControlRow[]) {
+  const localById = new Map(localRows.map((row) => [row.id, row]));
+  const baseIds = new Set(baseRows.map((row) => row.id));
+  return [...baseRows.map((row) => localById.get(row.id) ?? row), ...localRows.filter((row) => !baseIds.has(row.id))];
+}
+
+function formCadence(form: (typeof governedReturnForms)[number]): EditableRow["cadence"] {
+  if (form.usualTiming.startsWith("Annual")) return "Annual";
+  if (form.usualTiming.startsWith("Quarterly")) return "Quarterly";
+  return "Monthly";
+}
+
+function DeadlineTransactionHistory({ events }: { events: readonly DeadlineControlHistoryEvent[] }) {
+  return <details className="work-activity-history"><summary>Transaction history</summary><div>{events.length > 0 ? events.map((event) => <div className="work-activity-history__event" key={event.id}><strong>{event.label}</strong><small>{event.detail} · {historyTimestamp(event.recordedAt)}</small></div>) : <p className="work-activity-history__empty">No transaction history recorded for this deadline.</p>}</div></details>;
+}
+
 export function TaxTeamDeadlineControl() {
   const [year, setYear] = useState(2026);
   const [overrides, setOverrides] = useState<Record<string, DeadlinePublicationOverride>>(() => readDeadlinePublicationOverrides(typeof window === "undefined" ? undefined : window.localStorage));
   const [rows, setRows] = useState<DeadlineControlRow[]>([]);
   const [source, setSource] = useState<RepositorySource>("loading");
-  const [selectedRow, setSelectedRow] = useState<DeadlineControlRow | null>(null);
   const [editingRow, setEditingRow] = useState<EditableRow | null>(null);
-  const [publishingRow, setPublishingRow] = useState<DeadlineControlRow | null>(null);
-  const [publishDate, setPublishDate] = useState("");
-  const [publishReason, setPublishReason] = useState("");
+  const [publishingRows, setPublishingRows] = useState<DeadlineControlRow[]>([]);
+  const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
+  const [bulkPublishReason, setBulkPublishReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [selectedReturn, setSelectedReturn] = useState("");
+  const [selectedPeriod, setSelectedPeriod] = useState("");
 
   const loadRows = useCallback(async (nextYear = year) => {
     setSource("loading");
@@ -60,21 +148,27 @@ export function TaxTeamDeadlineControl() {
       const payload = await response.json() as { data?: DeadlineControlRow[]; source?: RepositorySource };
       const nextSource = payload.source === "repository" ? "repository" : "sanitized-fixture";
       const baseRows = payload.data ?? [];
+      let nextRows: DeadlineControlRow[];
       if (nextSource === "repository") {
-        setRows(baseRows);
+        nextRows = baseRows.map(withDerivedInternalTarget);
       } else {
         let localRows: DeadlineControlRow[] = [];
         try {
           const parsed = JSON.parse(window.localStorage.getItem(localRowsStorageKey) ?? "[]") as unknown;
           localRows = Array.isArray(parsed) ? parsed.filter((row): row is DeadlineControlRow => Boolean(row && typeof row === "object" && (row as DeadlineControlRow).calendarYear === nextYear)) : [];
         } catch { /* use the clean fixture */ }
-        setRows([...baseRows, ...localRows.filter((local) => !baseRows.some((base) => base.id === local.id))]);
+        const localHistory = readLocalHistory();
+        nextRows = mergeLocalRows(baseRows, localRows).map((row) => ({ ...row, history: uniqueHistory([...(row.history ?? []), ...(localHistory[row.id] ?? [])]) })).map(withDerivedInternalTarget);
       }
+      setRows(nextRows);
       setSource(nextSource);
+      return nextRows;
     } catch {
-      setRows(buildDeadlineControlRows(nextYear));
+      const nextRows = buildDeadlineControlRows(nextYear).map(withDerivedInternalTarget);
+      setRows(nextRows);
       setSource("sanitized-fixture");
       setMessage("Using the sanitized fixture while the governed repository is unavailable.");
+      return nextRows;
     }
   }, [year]);
 
@@ -82,26 +176,21 @@ export function TaxTeamDeadlineControl() {
     const timer = window.setTimeout(() => { void loadRows(); }, 0);
     return () => window.clearTimeout(timer);
   }, [loadRows]);
-  const visibleRows = useMemo(() => rows.map((row) => effectiveRow(row, overrides)), [rows, overrides]);
-  const summary = deadlineControlSummary(visibleRows);
+  const visibleRows = useMemo(() => rows.map((row) => withDerivedInternalTarget(effectiveRow(row, overrides))), [rows, overrides]);
+  const addingRow = Boolean(editingRow && !editingRow.id);
+  const newRowPeriods = editingRow?.formNumber ? buildDeadlineControlRows(editingRow.calendarYear, [editingRow.formNumber]) : [];
+  const returnOptions = useMemo(() => [...new Set(visibleRows.map((row) => row.formNumber).filter(Boolean))].sort(), [visibleRows]);
+  const periodOptions = useMemo(() => [...new Set(visibleRows.map((row) => row.activityPeriod || row.taxablePeriod).filter(Boolean))].sort(), [visibleRows]);
+  const filteredRows = useMemo(() => visibleRows.filter((row) => (!selectedReturn || row.formNumber === selectedReturn) && (!selectedPeriod || (row.activityPeriod || row.taxablePeriod) === selectedPeriod)), [selectedPeriod, selectedReturn, visibleRows]);
+  const publishableRows = filteredRows.filter(canPublish);
+  const selectedPublishRows = filteredRows.filter((row) => selectedRowIds.includes(row.id) && canPublish(row));
+  const allPublishableSelected = publishableRows.length > 0 && publishableRows.every((row) => selectedRowIds.includes(row.id));
 
   async function transition(row: DeadlineControlRow, status: DeadlinePublicationStatus, publishedOperationalDeadline: string | null = null, providedReason?: string) {
     const reason = providedReason?.trim() || (source === "repository" ? window.prompt(`Reason for ${statusLabels[status].toLowerCase()}:`, "Tax Team control review")?.trim() : "Tax Team prototype review simulation");
     if (!reason) return;
     if (source !== "repository") {
-      if (status === "confirmed" && row.adjustedStatutoryDeadline && (row.publicationStatus === "generated" || row.publicationStatus === "needs_review")) {
-        const nextOverrides = { ...overrides, [row.id]: { status: "confirmed" as const } };
-        writeDeadlinePublicationOverrides(window.localStorage, nextOverrides);
-        setOverrides(nextOverrides);
-        setSelectedRow(null);
-        setMessage(`${row.formNumber || row.requirementCode} confirmed for prototype review. It remains held until a verified rule can be published.`);
-        return;
-      }
       if (status === "published") {
-        if (row.verificationStatus !== "verified") {
-          setMessage(`${row.formNumber || row.requirementCode} cannot be published: its rule/source is not verified.`);
-          return;
-        }
         if (!publishedOperationalDeadline) {
           setMessage(`${row.formNumber || row.requirementCode} cannot be published without an approved deadline.`);
           return;
@@ -109,11 +198,12 @@ export function TaxTeamDeadlineControl() {
         const nextOverrides = { ...overrides, [row.id]: { status: "published" as const, publishedOperationalDeadline } };
         writeDeadlinePublicationOverrides(window.localStorage, nextOverrides);
         setOverrides(nextOverrides);
-        setSelectedRow(null);
-        setMessage(`${row.formNumber || row.requirementCode} published in the sanitized prototype. Client calendars will use this date after refresh.`);
+        const event = recordLocalHistory(row.id, "Deadline published", reason);
+        setRows((current) => current.map((candidate) => candidate.id === row.id ? { ...candidate, publicationStatus: "published", publishedOperationalDeadline, verificationStatus: "verified", unresolvedReason: undefined, history: [event, ...(candidate.history ?? [])] } : candidate));
+        setMessage(`${row.formNumber || row.requirementCode} published.`);
         return;
       }
-      setMessage("This sanitized fallback supports review simulation only. Unresolved rules remain read-only until governed source data is available.");
+      setMessage("Save the statutory date before publishing.");
       return;
     }
     setBusy(true); setMessage("");
@@ -129,35 +219,76 @@ export function TaxTeamDeadlineControl() {
     }
   }
 
-  function openPublication(row: DeadlineControlRow) {
-    setPublishingRow(row);
-    setPublishDate(row.publishedOperationalDeadline ?? row.earliestApplicableDeadline ?? "");
-    setPublishReason("");
+  function openBulkPublication() {
+    if (selectedPublishRows.length === 0) return;
+    setEditingRow(null);
+    setPublishingRows(selectedPublishRows);
+    setBulkPublishReason("");
   }
 
-  async function publishSelectedRow() {
-    if (!publishingRow || !/^\d{4}-\d{2}-\d{2}$/.test(publishDate)) {
-      setMessage("Enter a valid operational due date before publishing.");
-      return;
-    }
-    if (publishingRow.earliestApplicableDeadline && publishDate > publishingRow.earliestApplicableDeadline) {
-      setMessage(`The operational due date cannot be later than the earliest applicable deadline (${dateLabel(publishingRow.earliestApplicableDeadline)}).`);
-      return;
-    }
-    if (!publishReason.trim()) {
+  async function publishSelectedRows() {
+    const selectedRows = publishingRows;
+    const reason = bulkPublishReason.trim();
+    if (selectedRows.length === 0) return;
+    if (!reason) {
       setMessage("A reason is required for every publication decision.");
       return;
     }
-    const row = publishingRow;
-    const reason = publishReason.trim();
-    setPublishingRow(null);
-    await transition(row, "published", publishDate, reason);
+    setPublishingRows([]);
+    setSelectedRowIds([]);
+    if (source !== "repository") {
+      const nextOverrides = { ...overrides };
+      const events: Record<string, DeadlineControlHistoryEvent> = {};
+      selectedRows.forEach((row) => {
+        nextOverrides[row.id] = { status: "published", publishedOperationalDeadline: row.earliestApplicableDeadline };
+        events[row.id] = recordLocalHistory(row.id, "Deadline published", reason);
+      });
+      writeDeadlinePublicationOverrides(window.localStorage, nextOverrides);
+      setOverrides(nextOverrides);
+      setRows((current) => current.map((row) => events[row.id] ? { ...row, publicationStatus: "published", publishedOperationalDeadline: row.earliestApplicableDeadline, verificationStatus: "verified", unresolvedReason: undefined, history: [events[row.id], ...(row.history ?? [])] } : row));
+      setMessage(`${selectedRows.length} deadlines published.`);
+      return;
+    }
+    setBusy(true); setMessage("");
+    try {
+      for (const row of selectedRows) {
+        const response = await fetch("/api/deadline-control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "transition", entryId: row.id, toStatus: "published", publishedOperationalDeadline: row.earliestApplicableDeadline, reason }) });
+        if (!response.ok) throw new Error((await response.json() as { error?: string }).error ?? "Unable to publish the selected deadlines.");
+      }
+      await loadRows();
+      setMessage(`${selectedRows.length} deadlines published.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to publish the selected deadlines.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveEntry() {
-    if (!editingRow || !editingRow.requirementCode.trim() || !editingRow.requirementLabel.trim() || !editingRow.calendarMonth || !editingRow.sourceCode.trim()) { setMessage("Requirement code, name, calendar month, and source are required."); return; }
+    if (!editingRow) return;
+    if (addingRow && (!editingRow.formNumber || !editingRow.activityPeriod)) { setMessage("Select the return and period this deadline covers."); return; }
+    if (!editingRow.requirementCode.trim() || !editingRow.requirementLabel.trim() || !editingRow.calendarMonth) { setMessage("Return, period filed, and calendar month are required."); return; }
+    if (source === "repository" && !editingRow.sourceCode.trim()) { setMessage("A source is required for governed repository entries."); return; }
     if (source !== "repository") {
-      setMessage("The governed deadline repository is unavailable. The sanitized fallback is read-only.");
+      const localRow: DeadlineControlRow = { ...editingRow, id: editingRow.id || `local-deadline-${crypto.randomUUID()}`, periodStartDate: editingRow.periodStart || editingRow.periodStartDate, taxablePeriod: editingRow.taxablePeriod || editingRow.activityPeriod, earliestApplicableDeadline: editingRow.adjustedStatutoryDeadline ?? editingRow.baseStatutoryDeadline, explanation: editingRow.notes.trim() || editingRow.explanation, sourceLabel: editingRow.sourceLabel || "Local sanitized draft" };
+      let localRows: DeadlineControlRow[] = [];
+      try {
+        const parsed = JSON.parse(window.localStorage.getItem(localRowsStorageKey) ?? "[]") as unknown;
+        localRows = Array.isArray(parsed) ? parsed.filter((row): row is DeadlineControlRow => Boolean(row && typeof row === "object")) : [];
+      } catch { /* start with the current local draft */ }
+      const nextLocalRows = [...localRows.filter((row) => row.id !== localRow.id), localRow];
+      window.localStorage.setItem(localRowsStorageKey, JSON.stringify(nextLocalRows));
+      const event = recordLocalHistory(localRow.id, "Deadline saved", editingRow.notes.trim() || "Saved in this browser’s sanitized prototype.");
+      const savedRow = { ...localRow, history: [event, ...(localRow.history ?? [])] };
+      setRows((current) => mergeLocalRows(current, [savedRow]));
+      if (canSaveAndPublish(savedRow)) {
+        await transition(savedRow, "published", savedRow.earliestApplicableDeadline, editingRow.notes.trim() || "Tax Team deadline update and publication");
+        setEditingRow(null);
+      } else {
+        const nextEditingRow = toEditable(savedRow);
+        setEditingRow(nextEditingRow);
+        setMessage("Saved. Add a statutory date to publish.");
+      }
       return;
     }
     setBusy(true); setMessage("");
@@ -165,8 +296,22 @@ export function TaxTeamDeadlineControl() {
       const payload = { entryId: editingRow.id || null, calendarMonth: editingRow.calendarMonth, requirementCode: editingRow.requirementCode, requirementName: editingRow.requirementLabel, formNumber: editingRow.formNumber, operatingCategory: editingRow.taxCategory, frequencyLabel: editingRow.cadence.toLowerCase().replace(" ", "_"), periodOrEvent: editingRow.activityPeriod, periodStart: editingRow.periodStart || null, periodEnd: editingRow.periodEnd || null, baseStatutoryDeadline: editingRow.baseStatutoryDeadline, adjustedStatutoryDeadline: editingRow.adjustedStatutoryDeadline, tmfPackageTarget: editingRow.tmfPackageTarget, sourceCode: editingRow.sourceCode, sourceLocator: editingRow.sourceLocator, notes: editingRow.notes, reason: editingRow.notes || "Tax Team repository maintenance" };
       const response = await fetch("/api/deadline-control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "save", payload }) });
       if (!response.ok) throw new Error((await response.json() as { error?: string }).error ?? "Unable to save the repository entry.");
-      await loadRows();
-      setEditingRow(null); setMessage("Saved to the governed repository.");
+      const savedPayload = await response.json() as { data?: { id?: string } };
+      const nextRows = await loadRows();
+      const savedRow = nextRows.find((row) => row.id === (editingRow.id || savedPayload.data?.id));
+      if (savedRow) {
+        if (canSaveAndPublish(savedRow)) {
+          await transition(savedRow, "published", savedRow.earliestApplicableDeadline, editingRow.notes.trim() || "Tax Team deadline update and publication");
+          setEditingRow(null);
+        } else {
+          const nextEditingRow = toEditable(savedRow);
+          setEditingRow(nextEditingRow);
+          setMessage("Saved. Add a statutory date to publish.");
+        }
+      } else {
+        setEditingRow(null);
+        setMessage("Saved to the governed repository.");
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to save the deadline.");
     } finally {
@@ -174,22 +319,13 @@ export function TaxTeamDeadlineControl() {
     }
   }
 
-  function actionFor(row: DeadlineControlRow) {
-    if (row.publicationStatus === "published") return <><span className="deadline-control-action">Published</span><button className="button button--quiet button--small" disabled={busy} onClick={() => void transition(row, "superseded")} type="button">Supersede</button></>;
-    if (row.publicationStatus === "confirmed" && row.verificationStatus === "verified") return <button className="button button--primary button--small" disabled={busy} onClick={() => openPublication(row)} type="button">Set due date & publish</button>;
-    if ((row.publicationStatus === "needs_review" || row.publicationStatus === "generated") && row.adjustedStatutoryDeadline) return <button className="button button--quiet button--small" disabled={busy} onClick={() => void transition(row, "confirmed")} type="button">Confirm</button>;
-    return <span className="deadline-control-action">Review source</span>;
-  }
-
   return <>
-    <section aria-labelledby="deadline-control-title" className="module-header deadline-control-header"><div><p className="eyebrow">Tax Team · master control</p><h2 id="deadline-control-title">Deadline Control</h2><p className="module-header__description">Maintain the governed dates used by compliance work. The default due date is the earliest applicable statutory component deadline; Tax Team publishes the operational date that downstream work and calendars may use.</p></div><div className="deadline-control-header__actions"><label className="select-control"><span>Calendar year</span><select aria-label="Deadline calendar year" onChange={(event) => setYear(Number(event.target.value))} value={year}><option value={2026}>2026</option><option value={2027}>2027</option></select></label><button className="button button--primary" onClick={() => setEditingRow(emptyRow(year))} type="button">Add deadline</button></div></section>
+    <section aria-labelledby="deadline-control-title" className="module-header deadline-control-header"><div><p className="eyebrow">Tax Team · master control</p><h2 id="deadline-control-title">Deadline Control</h2><p className="module-header__description">Maintain the governed dates used by compliance work. The earliest applicable statutory date is the control date; the internal target is one day before it.</p></div><div className="deadline-control-header__actions"><label className="select-control"><span>Year</span><select aria-label="Deadline calendar year" onChange={(event) => { setSelectedRowIds([]); setSelectedReturn(""); setSelectedPeriod(""); setYear(Number(event.target.value)); }} value={year}><option value={2026}>2026</option><option value={2027}>2027</option></select></label><label className="select-control"><span>Return</span><select aria-label="Deadline return filter" onChange={(event) => { setSelectedRowIds([]); setSelectedReturn(event.target.value); }} value={selectedReturn}><option value="">All returns</option>{returnOptions.map((formNumber) => <option key={formNumber} value={formNumber}>{formNumber}</option>)}</select></label><label className="select-control"><span>Period filed</span><select aria-label="Deadline period filed filter" onChange={(event) => { setSelectedRowIds([]); setSelectedPeriod(event.target.value); }} value={selectedPeriod}><option value="">All periods</option>{periodOptions.map((period) => <option key={period} value={period}>{period}</option>)}</select></label>{source !== "repository" && <button className="button button--primary" onClick={() => { setEditingRow(emptyRow(year)); }} type="button">Add deadline</button>}</div></section>
     <div className={`repository-source repository-source--${source}`} role="status"><span aria-hidden="true" />{source === "repository" ? "Governed repository" : source === "loading" ? "Loading repository…" : "Sanitized fixture fallback · changes are local only"}</div>
     {message && <p className="deadline-control-message" role="status">{message}</p>}
-    <section aria-label="Deadline control summary" className="metric-grid tax-team-metrics"><MetricCard detail="rows in this year" label="Repository" tone="neutral" value={String(summary.total)} /><MetricCard detail="released for operational use" label="Published" tone="blue" value={String(summary.published)} /><MetricCard detail="awaiting control decision" label="Needs review" tone={summary.requiringReview > 0 ? "amber" : "blue"} value={String(summary.requiringReview)} /><MetricCard detail="cannot be released yet" label="Unresolved" tone={summary.unresolved > 0 ? "red" : "blue"} value={String(summary.unresolved)} /></section>
-    <section aria-labelledby="deadline-control-rule-title" className="panel deadline-control-rule"><SectionHeading detail="Only released rows feed operational projections." title="Master date rule · earliest applicable deadline" /><p id="deadline-control-rule-title">The earliest applicable statutory component date is the default master due date. Tax Team may publish an earlier operational date when the control decision requires it, but never a later date. Base statutory, adjusted statutory, published operational, and TMF Package Target dates remain separate and explainable.</p></section>
-    <section aria-labelledby="deadline-control-table-title" className="panel panel--table report-detail-panel"><SectionHeading detail={`${year} · ${visibleRows.length} rows`} title="Deadline repository" /><div className="report-table-wrap"><table className="report-table deadline-control-table"><thead><tr><th>Requirement / form</th><th>Period</th><th>Earliest applicable</th><th>Published operational due date</th><th>TMF target</th><th>Status</th><th>Action</th></tr></thead><tbody>{visibleRows.map((row) => <tr key={row.id}><td><button className="report-row-button" onClick={() => setSelectedRow(row)} type="button"><strong>{row.formNumber || row.requirementCode}</strong><small>{row.requirementLabel} · {row.taxCategory} · {row.cadence}</small></button></td><td>{row.activityPeriod || row.taxablePeriod}<small>{row.activityMonth}</small></td><td>{dateLabel(row.earliestApplicableDeadline)}<small>Adjusted statutory basis</small></td><td>{dateLabel(row.publishedOperationalDeadline)}<small>{row.publicationStatus === "published" ? "Released for downstream use" : "Not released"}</small></td><td>{dateLabel(row.tmfPackageTarget)}</td><td><span className={`deadline-status deadline-status--${row.publicationStatus}`}>{statusLabels[row.publicationStatus]}</span></td><td><button className="button button--quiet button--small" disabled={row.publicationStatus === "published" || row.publicationStatus === "superseded"} onClick={() => setEditingRow(toEditable(row))} type="button">Edit</button> {actionFor(row)}</td></tr>)}</tbody></table></div></section>
-    {selectedRow && <DetailDrawer eyebrow="Deadline Control · master date" title={`${selectedRow.formNumber || selectedRow.requirementCode} · ${selectedRow.activityPeriod}`} subtitle={selectedRow.requirementLabel} onClose={() => setSelectedRow(null)}><dl className="detail-list"><div><dt>Requirement</dt><dd>{selectedRow.requirementCode}</dd></div><div><dt>Official BIR calendar date</dt><dd>{dateLabel(selectedRow.officialPublishedDeadline, selectedRow.officialCalendarReference ? "Available in source · exact context required" : "No source date linked")}</dd></div>{selectedRow.officialCalendarReference && <div><dt>Official calendar reference</dt><dd>{selectedRow.officialCalendarReference}</dd></div>}<div><dt>Base statutory</dt><dd>{dateLabel(selectedRow.baseStatutoryDeadline)}</dd></div><div><dt>Adjusted statutory</dt><dd>{dateLabel(selectedRow.adjustedStatutoryDeadline)}</dd></div><div><dt>Earliest applicable deadline</dt><dd>{dateLabel(selectedRow.earliestApplicableDeadline)}</dd></div><div><dt>Published operational due date</dt><dd>{dateLabel(selectedRow.publishedOperationalDeadline)}</dd></div><div><dt>TMF package target</dt><dd>{dateLabel(selectedRow.tmfPackageTarget)}</dd></div><div><dt>Rule version</dt><dd>{selectedRow.ruleVersionId}</dd></div><div><dt>Source</dt><dd>{selectedRow.sourceLabel}</dd></div><div><dt>Why this date</dt><dd>{selectedRow.explanation}</dd></div><div><dt>State</dt><dd>{statusLabels[selectedRow.publicationStatus]}</dd></div></dl><div className="deadline-drawer-actions"><button className="button button--quiet" onClick={() => { setEditingRow(toEditable(selectedRow)); setSelectedRow(null); }} type="button">Edit</button>{actionFor(selectedRow)}</div></DetailDrawer>}
-    {publishingRow && <DetailDrawer eyebrow="Deadline Control · master date decision" title="Set operational due date" subtitle={`${publishingRow.formNumber || publishingRow.requirementCode} · ${publishingRow.activityPeriod}`} onClose={() => setPublishingRow(null)}><div className="team-editor__form"><p className="report-inline-note">The default is the earliest applicable deadline. You may publish an earlier operational date, but not a later one. This decision is the date downstream work and calendars may use.</p><label className="form-field"><span>Operational due date</span><input aria-label="Operational due date" max={publishingRow.earliestApplicableDeadline ?? undefined} onChange={(event) => setPublishDate(event.target.value)} type="date" value={publishDate} /></label><p className="team-note">Earliest applicable deadline: <strong>{dateLabel(publishingRow.earliestApplicableDeadline)}</strong></p><label className="form-field"><span>Publication reason</span><textarea aria-label="Publication reason" onChange={(event) => setPublishReason(event.target.value)} value={publishReason} /></label><div className="team-editor__footer"><p className="team-note">Publishing is a controlled decision. The source-backed rule remains unchanged, and the publication event is retained in history.</p><div className="team-editor__actions"><button className="button button--quiet" onClick={() => setPublishingRow(null)} type="button">Cancel</button><button className="button button--primary" disabled={busy} onClick={() => void publishSelectedRow()} type="button">{busy ? "Publishing…" : "Publish due date"}</button></div></div></div></DetailDrawer>}
-    {editingRow && <DetailDrawer eyebrow="Deadline repository" title={editingRow.id ? "Edit deadline" : "Add deadline"} subtitle="A row stays unresolved until its source and rule context are reviewed." onClose={() => setEditingRow(null)}><div className="team-editor__form"><div className="team-editor__grid"><label className="form-field"><span>Requirement code</span><input disabled={Boolean(editingRow.id && source === "repository")} onChange={(event) => setEditingRow({ ...editingRow, requirementCode: event.target.value })} value={editingRow.requirementCode} /></label><label className="form-field"><span>Requirement name</span><input onChange={(event) => setEditingRow({ ...editingRow, requirementLabel: event.target.value })} value={editingRow.requirementLabel} /></label><label className="form-field"><span>Form number</span><input disabled={Boolean(editingRow.id && source === "repository")} onChange={(event) => setEditingRow({ ...editingRow, formNumber: event.target.value })} value={editingRow.formNumber} /></label><label className="form-field"><span>Operating category</span><select disabled={Boolean(editingRow.id && source === "repository")} onChange={(event) => setEditingRow({ ...editingRow, taxCategory: event.target.value })} value={editingRow.taxCategory}><option value="cit">CIT</option><option value="vat_percentage">VAT / Percentage Tax</option><option value="wht">WHT</option><option value="others">Others</option></select></label><label className="form-field"><span>Frequency</span><select disabled={Boolean(editingRow.id && source === "repository")} onChange={(event) => setEditingRow({ ...editingRow, cadence: event.target.value as EditableRow["cadence"] })} value={editingRow.cadence}><option>Monthly</option><option>Quarterly</option><option>Annual</option><option>As needed</option></select></label><label className="form-field"><span>Calendar month</span><input onChange={(event) => setEditingRow({ ...editingRow, calendarMonth: event.target.value })} type="date" value={editingRow.calendarMonth} /></label><label className="form-field"><span>Period / event</span><input onChange={(event) => setEditingRow({ ...editingRow, activityPeriod: event.target.value, taxablePeriod: event.target.value })} value={editingRow.activityPeriod} /></label><label className="form-field"><span>Period start</span><input onChange={(event) => setEditingRow({ ...editingRow, periodStart: event.target.value })} type="date" value={editingRow.periodStart} /></label><label className="form-field"><span>Period end</span><input onChange={(event) => setEditingRow({ ...editingRow, periodEnd: event.target.value })} type="date" value={editingRow.periodEnd} /></label><label className="form-field"><span>Base statutory</span><input onChange={(event) => setEditingRow({ ...editingRow, baseStatutoryDeadline: event.target.value || null })} type="date" value={editingRow.baseStatutoryDeadline ?? ""} /></label><label className="form-field"><span>Adjusted statutory</span><input onChange={(event) => setEditingRow({ ...editingRow, adjustedStatutoryDeadline: event.target.value || null })} type="date" value={editingRow.adjustedStatutoryDeadline ?? ""} /></label><label className="form-field"><span>TMF package target</span><input onChange={(event) => setEditingRow({ ...editingRow, tmfPackageTarget: event.target.value || null })} type="date" value={editingRow.tmfPackageTarget ?? ""} /></label><label className="form-field"><span>Source code</span><input onChange={(event) => setEditingRow({ ...editingRow, sourceCode: event.target.value })} value={editingRow.sourceCode} /></label><label className="form-field"><span>Source locator</span><input onChange={(event) => setEditingRow({ ...editingRow, sourceLocator: event.target.value })} value={editingRow.sourceLocator} /></label><label className="form-field team-editor__remarks"><span>Notes / change reason</span><textarea onChange={(event) => setEditingRow({ ...editingRow, notes: event.target.value })} value={editingRow.notes} /></label></div><div className="team-editor__footer"><p className="team-note">Changes require a source-backed reason and remain auditable. Released rows are superseded, not deleted.</p><div className="team-editor__actions"><button className="button button--quiet" onClick={() => setEditingRow(null)} type="button">Cancel</button><button className="button button--primary" disabled={busy} onClick={() => void saveEntry()} type="button">{busy ? "Saving…" : "Save"}</button></div></div></div></DetailDrawer>}
+    <section aria-label="Bulk publication actions" className="deadline-control-bulk-actions"><label><input aria-label="Select all publishable deadlines" checked={allPublishableSelected} disabled={publishableRows.length === 0} onChange={(event) => setSelectedRowIds(event.target.checked ? publishableRows.map((row) => row.id) : [])} type="checkbox" /> Select publishable deadlines</label><span className="deadline-control-bulk-actions__hint">{publishableRows.length > 0 ? `${publishableRows.length} deadline${publishableRows.length === 1 ? "" : "s"} available` : "Enter a statutory date to publish"}</span><button className="button button--primary button--small" disabled={selectedPublishRows.length === 0 || busy} onClick={openBulkPublication} type="button">Publish selected{selectedPublishRows.length > 0 ? ` (${selectedPublishRows.length})` : ""}</button></section>
+    <section aria-labelledby="deadline-control-table-title" className="panel panel--table report-detail-panel"><SectionHeading detail={`${year} · ${filteredRows.length === visibleRows.length ? `${visibleRows.length} rows` : `${filteredRows.length} of ${visibleRows.length} rows`}`} title="Deadline repository" /><div className="report-table-wrap"><table className="report-table deadline-control-table"><thead><tr><th className="deadline-control-table__select"><span className="sr-only">Select for publication</span></th><th>Return / form</th><th>Period filed</th><th>Earliest due date</th><th>Internal target</th><th>Status</th></tr></thead><tbody>{filteredRows.map((row) => { const publishable = canPublish(row); return <tr key={row.id}><td className="deadline-control-table__select"><input aria-label={`Select ${row.formNumber || row.requirementCode} ${row.activityPeriod || row.taxablePeriod} for publication`} checked={selectedRowIds.includes(row.id)} disabled={!publishable} onChange={(event) => setSelectedRowIds((current) => event.target.checked ? [...current, row.id] : current.filter((id) => id !== row.id))} title={publishable ? "Ready for publication" : "Requires a statutory date"} type="checkbox" /></td><td><button className="report-row-button" onClick={() => { setEditingRow(toEditable(row)); }} type="button"><strong>{row.formNumber || row.requirementCode}</strong><small>{row.requirementLabel}</small><span className="deadline-control-table__meta">{categoryLabel(row.taxCategory)} <span aria-hidden="true">·</span> {row.cadence}</span></button></td><td>{row.activityPeriod || row.taxablePeriod}</td><td className="deadline-control-table__date">{dateLabel(row.earliestApplicableDeadline ?? row.adjustedStatutoryDeadline ?? row.baseStatutoryDeadline)}</td><td className="deadline-control-table__date">{dateLabel(row.tmfPackageTarget)}</td><td><span className={`deadline-status deadline-status--${row.publicationStatus}`}>{statusLabels[row.publicationStatus]}</span></td></tr>; })}</tbody></table></div></section>
+    {publishingRows.length > 0 && <DetailDrawer eyebrow="Deadline control" title={`Publish ${publishingRows.length} deadlines`} subtitle="Bulk publication" onClose={() => { setPublishingRows([]); setBulkPublishReason(""); }}><div className="team-editor__form"><p className="report-inline-note">Each selected row will publish using its own earliest applicable statutory due date. This makes the dates available to downstream calendars and compliance work.</p><div className="deadline-bulk-list">{publishingRows.map((row) => <div className="deadline-bulk-list__row" key={row.id}><strong>{row.formNumber || row.requirementCode}</strong><span>{row.activityPeriod || row.taxablePeriod}</span><span>{dateLabel(row.earliestApplicableDeadline)}</span></div>)}</div><label className="form-field"><span>Publication reason</span><textarea aria-label="Bulk publication reason" onChange={(event) => setBulkPublishReason(event.target.value)} value={bulkPublishReason} /></label><div className="team-editor__footer"><p className="team-note">Publishing is a controlled decision. Each publication event is retained in transaction history.</p><div className="team-editor__actions"><button className="button button--quiet" onClick={() => { setPublishingRows([]); setBulkPublishReason(""); }} type="button">Cancel</button><button className="button button--primary" disabled={busy} onClick={() => void publishSelectedRows()} type="button">{busy ? "Publishing…" : `Publish ${publishingRows.length} deadlines`}</button></div></div></div></DetailDrawer>}
+    {editingRow && <DetailDrawer eyebrow="Deadline control" title={<span className="deadline-drawer-title"><span>{`${editingRow.formNumber || editingRow.requirementCode} — ${editingRow.activityPeriod || "New deadline"}`}</span>{editingRow.publicationStatus === "published" && <span className="deadline-drawer-status-tag" role="status">Published</span>}</span>} subtitle={editingRow.requirementLabel || ""} onClose={() => { setEditingRow(null); }}><div className="deadline-editor"><div className="deadline-editor__list">{addingRow && <label className="deadline-editor__row"><span>Return / requirement</span><select aria-label="Return / requirement" onChange={(event) => { const form = governedReturnForms.find((candidate) => candidate.formNumber === event.target.value); setEditingRow({ ...editingRow, formNumber: form?.formNumber ?? "", requirementCode: form ? `REQ-${form.formNumber}` : "", requirementLabel: form?.title ?? "", taxCategory: form ? categoryOption(form.taxTypeCodes.join(" ")) : "others", cadence: form ? formCadence(form) : "Monthly", activityMonth: "", activityPeriod: "", periodStartDate: "", taxablePeriod: "", calendarMonth: "" }); }} value={editingRow.formNumber}><option value="">Select a governed return</option>{governedReturnForms.map((form) => <option key={form.formNumber} value={form.formNumber}>{form.formNumber} · {form.title}</option>)}</select></label>}<label className="deadline-editor__row"><span>Period filed</span>{addingRow ? <select aria-label="Period filed" disabled={!editingRow.formNumber} onChange={(event) => { const period = newRowPeriods.find((candidate) => candidate.activityPeriod === event.target.value); if (!period) return; setEditingRow({ ...editingRow, activityMonth: period.activityMonth, activityPeriod: period.activityPeriod, periodStartDate: period.periodStartDate, taxablePeriod: period.taxablePeriod, calendarMonth: `${period.periodStartDate.slice(0, 7)}-01` }); }} value={editingRow.activityPeriod}><option value="">{editingRow.formNumber ? "Select period" : "Select a return first"}</option>{newRowPeriods.map((period) => <option key={period.activityPeriod} value={period.activityPeriod}>{period.activityPeriod}</option>)}</select> : <input aria-label="Period filed" onChange={(event) => setEditingRow({ ...editingRow, calendarMonth: event.target.value ? `${event.target.value}-01` : "" })} type="month" value={editingRow.calendarMonth.slice(0, 7)} />}</label><label className="deadline-editor__row"><span>Statutory due date</span><input onChange={(event) => setEditingRow({ ...editingRow, adjustedStatutoryDeadline: event.target.value || null })} type="date" value={editingRow.adjustedStatutoryDeadline ?? editingRow.baseStatutoryDeadline ?? ""} /></label><label className="deadline-editor__row"><span>One day before due date</span><input onChange={(event) => setEditingRow({ ...editingRow, tmfPackageTarget: event.target.value || null })} type="date" value={editingRow.tmfPackageTarget ?? ""} /></label><label className="deadline-editor__row deadline-editor__row--notes"><span>Notes / change reason</span><textarea onChange={(event) => setEditingRow({ ...editingRow, notes: event.target.value })} value={editingRow.notes} /></label></div><DeadlineTransactionHistory events={editingRow.history ?? []} /><div className="deadline-editor__footer"><div className="team-editor__actions"><button className="button button--quiet" onClick={() => { setEditingRow(null); }} type="button">Cancel</button><button className="button button--primary" disabled={busy} onClick={() => void saveEntry()} type="button">{busy ? "Saving…" : canSaveAndPublish(editingRow) ? "Save and publish" : "Save"}</button></div></div></div></DetailDrawer>}
   </>;
 }

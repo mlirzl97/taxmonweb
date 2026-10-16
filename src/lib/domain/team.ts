@@ -14,12 +14,24 @@ export const careerServiceLevelLabels = {
   "5.1": "Manager",
   "4.2": "Assistant Manager",
   "4.1": "Supervisor",
-  "3.2": "Team Lead",
+  "3.2": "Team Leader",
   "3.1": "Senior Associate",
   "2.2": "Junior Associate",
   "2.1": "Associate",
   "1.1": "Intern",
 } as const;
+
+export const careerServiceLevelTitleLabels: Record<keyof typeof careerServiceLevelLabels, string> = {
+  "5.2": "Senior Manager · HOD",
+  "5.1": "Manager · Operations",
+  "4.2": "Assistant Manager · Cluster Leader",
+  "4.1": "Supervisor · Tower Leader",
+  "3.2": "Team Leader",
+  "3.1": "Senior Associate",
+  "2.2": "Junior Associate",
+  "2.1": "Associate",
+  "1.1": "Intern",
+};
 
 export type CareerServiceLevel = keyof typeof careerServiceLevelLabels;
 export type OrgChartRag = "GREEN" | "AMBER" | "RED" | "UNRESOLVED";
@@ -83,6 +95,10 @@ export function isTaxTeamOperatingModel(model: FixtureOperatingModel): boolean {
 
 export function reportingManagerLevelFor(level: CareerServiceLevel): CareerServiceLevel | null {
   return reportingManagerLevelByCareerLevel[level] ?? null;
+}
+
+export function careerServiceLevelTitle(level: CareerServiceLevel): string {
+  return careerServiceLevelTitleLabels[level];
 }
 
 /**

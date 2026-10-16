@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { careerServiceLevelTitle, type CareerServiceLevel } from "@/lib/domain/team";
 import { staffAccessProfileDefinition, isStaffAccessProfile, type StaffScopeKind } from "@/lib/domain/staff-access";
 import { apiErrorResponse, inferredApiErrorStatus } from "@/lib/server/api-error";
 import { requireApiCapabilities } from "@/lib/server/api-authorization";
@@ -40,7 +41,6 @@ export async function POST(request: Request) {
   const email = stringValue(input?.email, 254)?.toLowerCase();
   const displayName = stringValue(input?.displayName, 120);
   const accessProfile = input?.accessProfile;
-  const title = stringValue(input?.title, 120);
   const organizationUnitId = stringValue(input?.organizationUnitId, 80);
   const effectiveFrom = stringValue(input?.effectiveFrom, 10);
   const careerServiceLevel = stringValue(input?.careerServiceLevel, 3);
@@ -52,12 +52,14 @@ export async function POST(request: Request) {
   const reason = stringValue(input?.reason, 500);
 
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return NextResponse.json({ error: "Enter a valid approved work email." }, { status: 400 });
-  if (!displayName || !title || !organizationUnitId || !effectiveFrom || !careerServiceLevel || !reason) return NextResponse.json({ error: "Name, title, organizational unit, effective date, career level, and reason are required." }, { status: 400 });
+  if (!displayName || !organizationUnitId || !effectiveFrom || !careerServiceLevel || !reason) return NextResponse.json({ error: "Name, organizational unit, effective date, career level, and reason are required." }, { status: 400 });
   if (!uuidPattern.test(organizationUnitId) || (reportsToUserId && !uuidPattern.test(reportsToUserId)) || (scopeOrganizationUnitId && !uuidPattern.test(scopeOrganizationUnitId))) return NextResponse.json({ error: "The selected organization reference is invalid." }, { status: 400 });
   if (!datePattern.test(effectiveFrom) || !careerLevels.includes(careerServiceLevel as typeof careerLevels[number])) return NextResponse.json({ error: "The effective date or career level is invalid." }, { status: 400 });
   if (!isStaffAccessProfile(accessProfile) || !scopeKinds.includes(scopeKind as StaffScopeKind) || !operatingModels.includes(operatingModel as typeof operatingModels[number])) return NextResponse.json({ error: "The selected access profile, scope, or operating model is invalid." }, { status: 400 });
 
   const profile = staffAccessProfileDefinition(accessProfile);
+  const normalizedCareerServiceLevel = careerServiceLevel as CareerServiceLevel;
+  const title = careerServiceLevelTitle(normalizedCareerServiceLevel);
   const roleKey = profile.roleKey;
   if (!roleKeys.includes(roleKey)) return NextResponse.json({ error: "The selected staff profile is not supported." }, { status: 400 });
   if (scopeKind !== "team_tower" && scopeKind !== "cluster" && scopeOrganizationUnitId) return NextResponse.json({ error: "This access scope does not use an organization unit." }, { status: 400 });

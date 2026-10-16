@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { createContext, Fragment, useContext, useEffect, useId, useRef, useState, type CSSProperties } from "react";
-import { createPortal } from "react-dom";
 
 import { fixtureClients, type FixtureClient, type FixtureException, type FixturePaymentApplicability, type FixtureScope, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
 import { scopeLabelForValue, scopeOptions, scopeValueForFilter, type ScopeFilter } from "@/lib/control-tower-state";
+import { currentProcessStepId } from "@/lib/workflow-rules";
 import { canUseElevatedOverride, useWorkflow, workflowPerspectiveLabel, workflowProcessRoleLabel, workflowRoleLabel, type WorkflowArchiveFacts, type WorkflowDecision, type WorkflowProcessOwner, type WorkflowProcessStatus } from "@/lib/workflow-state";
 import { generateWorkflowReportPdf } from "@/lib/workflow-report";
 import { buildWorkflowFactsCsv, buildWorkflowProcessingLogCsv } from "@/lib/workflow-export";
@@ -179,8 +179,13 @@ export function DetailDrawer({
   const depth = parentDepth;
   const drawerRef = useRef<HTMLElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
   const titleId = useId();
   const subtitleId = useId();
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     const previousActiveElement = document.activeElement as HTMLElement | null;
@@ -193,7 +198,7 @@ export function DetailDrawer({
       if (drawers[drawers.length - 1] !== drawerRef.current) return;
 
       if (event.key === "Escape") {
-        onClose();
+        onCloseRef.current();
         return;
       }
 
@@ -217,7 +222,7 @@ export function DetailDrawer({
       document.body.style.overflow = previousOverflow;
       previousActiveElement?.focus();
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <detailDrawerDepthContext.Provider value={depth + 1}>
@@ -276,15 +281,10 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
   const [pendingArchiveSharePoint, setPendingArchiveSharePoint] = useState("");
   const [pendingArchiveAmount, setPendingArchiveAmount] = useState("");
   const [pendingArchiveFacts, setPendingArchiveFacts] = useState<WorkflowArchiveFacts>({});
-  const [undoWindow, setUndoWindow] = useState<{ stepId: string; seconds: number } | null>(null);
   const [clientPreviewOpen, setClientPreviewOpen] = useState(false);
   const [paymentAmountDraft, setPaymentAmountDraft] = useState(effectiveWork.paymentAmount === null || effectiveWork.paymentAmount === undefined ? "" : String(effectiveWork.paymentAmount));
   const [paymentAmountCorrectionOpen, setPaymentAmountCorrectionOpen] = useState(false);
-  const role = workflowRecord.currentGate ?? currentRole;
-  const elevatedOverrideAvailable = canUseElevatedOverride(workPerspective);
   const dataBlocked = effectiveWork.blocker?.category === "CLIENT DATA";
-  const canAct = !dataBlocked && canActOnWorkflow(role, effectiveWork);
-  const currentProcessStep = effectiveWork.steps.find((step) => step.state === "current" || step.state === "unresolved" || step.state === "blocked");
   const stepById = new Map(effectiveWork.steps.map((step) => [step.id, step]));
   function baselineProcessStatus(state: string): WorkflowProcessStatus {
     if (state === "complete") return "DONE";
@@ -293,6 +293,14 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
     return "NOT_STARTED";
   }
   const processStatusForStep = (step: FixtureWorkItem["steps"][number]) => effectiveWork.paymentApplicability === "NOT_APPLICABLE" && paymentProcessStepIds.has(step.id) ? "NOT_APPLICABLE" as const : dataBlocked && step.id === "prepare" ? "NOT_STARTED" as const : workflowRecord.processStatuses[step.id] ?? baselineProcessStatus(step.state);
+  const normalizedProcessStatuses = Object.fromEntries(effectiveWork.steps.map((step) => [step.id, processStatusForStep(step)]));
+  const normalizedCurrentProcessStepId = currentProcessStepId(effectiveWork, normalizedProcessStatuses);
+  const currentProcessStep = (normalizedCurrentProcessStepId ? stepById.get(normalizedCurrentProcessStepId) : undefined) ?? effectiveWork.steps.find((step) => step.state === "current" || step.state === "unresolved" || step.state === "blocked");
+  const gateStepIds: Record<"PREPARER" | "CHECKER" | "REVIEWER", string> = { PREPARER: "prepare", CHECKER: "check", REVIEWER: "review" };
+  const activeGate = workflowRecord.currentGate && currentProcessStep?.id === gateStepIds[workflowRecord.currentGate] ? workflowRecord.currentGate : null;
+  const role = activeGate ?? currentRole;
+  const elevatedOverrideAvailable = canUseElevatedOverride(workPerspective);
+  const canAct = !dataBlocked && canActOnWorkflow(role, effectiveWork);
   const processState = (stepId: string) => processStatusLabels[stepById.get(stepId) ? processStatusForStep(stepById.get(stepId)!) : "NOT_STARTED"];
   const paymentProcessIncluded = effectiveWork.paymentApplicability !== "NOT_APPLICABLE";
   const paymentApplicabilityLocked = periodLock.locked || (processStatusForStep(stepById.get("prepare") ?? effectiveWork.steps[0]) === "DONE" && effectiveWork.paymentApplicability !== "UNRESOLVED");
@@ -312,8 +320,10 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
     { id: "archive", label: "Archive the return package", bundle: "Archiving", owner: "PREPARER", stepId: "evidence", state: processState("evidence"), detail: "Compile the working paper, approval, filed return, FRN/BIR acknowledgment, payment proof where applicable, and eSubmission outputs; apply naming convention and save to the correct A&T folder or SharePoint." },
   ];
   const pendingStage = dataBlocked ? courseStages.find((stage) => stage.id === "data") : currentProcessStep ? courseStages.find((stage) => stage.stepId === currentProcessStep.id) : undefined;
-  const pendingOwner = workflowRecord.currentGate ?? pendingStage?.owner;
-  const pendingTask = pendingStage?.label ?? (pendingOwner ? "Complete the assigned gate" : undefined);
+  const pendingOwner = activeGate ?? pendingStage?.owner;
+  const paymentConfirmationStatus = processStatusForStep(stepById.get("payment-confirmation") ?? effectiveWork.steps[effectiveWork.steps.length - 1]);
+  const paymentAmountPending = effectiveWork.paymentApplicability === "REQUIRED" && !paymentAmountRecorded && (paymentConfirmationStatus === "IN_PROGRESS" || paymentConfirmationStatus === "NEEDS_ATTENTION");
+  const pendingTask = paymentAmountPending ? "Record amount to pay" : pendingStage?.label ?? (pendingOwner ? "Complete the assigned gate" : undefined);
   const pendingAssignee = pendingOwner === "PREPARER" ? client?.assignment.preparer : pendingOwner === "CHECKER" ? client?.assignment.checker : pendingOwner === "REVIEWER" ? client?.assignment.reviewer : undefined;
   const visibleProcessBundles = processBundles.filter((bundle) => bundle !== "Payment" || effectiveWork.paymentApplicability !== "NOT_APPLICABLE");
   const visibleJourneyStages = visibleProcessBundles.flatMap((bundle) => courseStages.filter((stage) => stage.bundle === bundle));
@@ -425,14 +435,8 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
     downloadCsv(filename, content);
   }
 
-  useEffect(() => {
-    if (!undoWindow) return;
-    const timer = window.setTimeout(() => setUndoWindow((current) => current && current.stepId === undoWindow.stepId ? current.seconds > 1 ? { ...current, seconds: current.seconds - 1 } : null : current), 1000);
-    return () => window.clearTimeout(timer);
-  }, [undoWindow]);
-
   const questions = getQuestions(role);
-  const isCurrentGate = workflowRecord.currentGate === role;
+  const isCurrentGate = activeGate === role;
   const allQuestionsAnswered = questions.every((question) => answers[question.id]);
   const taxDueAmountValid = role !== "CHECKER" || (taxDueAmountDraft.trim() !== "" && Number.isFinite(Number(taxDueAmountDraft)) && Number(taxDueAmountDraft) >= 0);
   const preparerAmountValid = role !== "PREPARER" || effectiveWork.paymentApplicability !== "REQUIRED" || paymentAmountRecorded || (paymentAmountDraft.trim() !== "" && Number.isFinite(Number(paymentAmountDraft)) && Number(paymentAmountDraft) >= 0);
@@ -478,20 +482,12 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
       if (elevatedOverrideAvailable) setOverrideReason("");
     }
     if (result.ok && (status === "DONE" || status === "NOT_APPLICABLE")) {
-      if (status === "DONE") setUndoWindow({ stepId, seconds: 6 });
       const stepIndex = effectiveWork.steps.findIndex((candidate) => candidate.id === stepId);
       const nextStep = effectiveWork.steps[stepIndex + 1];
       const nextBundle = nextStep ? processBundleForStep[nextStep.id] : undefined;
       setCollapsedBundles(nextBundle ? (current) => ({ ...current, [nextBundle]: false }) : Object.fromEntries(processBundles.map((bundle) => [bundle, true])));
     }
     return result;
-  }
-
-  async function undoRecentProcessStep() {
-    if (!undoWindow) return;
-    const stepId = undoWindow.stepId;
-    setUndoWindow(null);
-    await updateProcessStep(stepId, "NOT_STARTED");
   }
 
   function requestProcessStatus(stepId: string, status: WorkflowProcessStatus) {
@@ -626,8 +622,8 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
   }
 
   function renderGateChecklist() {
-    if (!workflowRecord.currentGate) return;
-    const gateTitle = workflowRecord.currentGate === "PREPARER" ? "Preparer to draft return" : `${workflowRoleLabel(workflowRecord.currentGate)} certification`;
+    if (!activeGate) return;
+    const gateTitle = activeGate === "PREPARER" ? "Preparer to draft return" : `${workflowRoleLabel(activeGate)} certification`;
     const gateStatusLabel = processStatusLabels[pendingGateStatus ?? "DONE"];
     return <>
       <section className="workflow-final-control-launcher" aria-labelledby="workflow-gate-launcher-title">
@@ -635,9 +631,9 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
         <button className="button button--primary button--small" onClick={() => { setFeedback(""); setGateChecklistOpen(true); }} type="button">Open gate</button>
       </section>
       {gateChecklistOpen && <div className="work-evidence-dialog-layer" role="presentation"><section aria-labelledby="workflow-gate-title" aria-modal="true" className="work-evidence-dialog workflow-gate-dialog" onKeyDown={(event) => { if (event.key === "Escape") setGateChecklistOpen(false); }} role="dialog"><div className="work-evidence-dialog__header"><div><p className="eyebrow">Certification checklist</p><h2 id="workflow-gate-title">{gateTitle}</h2><p>Complete the checks, then certify the selected status. Each change is saved with the acting persona and time.</p></div><button aria-label="Close certification checklist" autoFocus className="icon-button" onClick={() => setGateChecklistOpen(false)} type="button">×</button></div>
-        <p className="workflow-gate-panel__state">Waiting for {workflowRoleLabel(workflowRecord.currentGate)}</p>
+        <p className="workflow-gate-panel__state">Waiting for {workflowRoleLabel(activeGate)}</p>
         <p className="workflow-gate-panel__hint">Selected outcome: {gateStatusLabel}. {workPerspective === "MASTER_ADMIN" ? `HOD preview · acting for ${workflowRoleLabel(role)}.` : `Acting view: ${workflowPerspectiveLabel(workPerspective)}.`}</p>
-        {!canAct && <div className="workflow-gate-panel__warning"><span>View only. This checklist belongs to the {workflowRoleLabel(workflowRecord.currentGate)}.</span><button className="button button--quiet button--small" onClick={() => { const gate = workflowRecord.currentGate!; setWorkPerspective(gate); }} type="button">Switch to {workflowRoleLabel(workflowRecord.currentGate)} view</button></div>}
+        {!canAct && <div className="workflow-gate-panel__warning"><span>View only. This checklist belongs to the {workflowRoleLabel(activeGate)}.</span><button className="button button--quiet button--small" onClick={() => { setWorkPerspective(activeGate); }} type="button">Switch to {workflowRoleLabel(activeGate)} view</button></div>}
         <div className="workflow-question-list">{questions.map((question) => { const latestChecklistUpdate = [...workflowRecord.checklistHistory].reverse().find((update) => update.role === role && update.questionId === question.id); return <label className={`workflow-question${answers[question.id] ? " workflow-question--checked" : ""}`} key={question.id}><input aria-label={question.label} checked={Boolean(answers[question.id])} disabled={periodLock.locked || !canAct || !isCurrentGate} onChange={(event) => updateChecklist(question.id, event.target.checked)} type="checkbox" /><span>{question.label}</span><small>{answers[question.id] ? `Done${latestChecklistUpdate ? ` · ${latestChecklistUpdate.actor}` : ""}` : "Open"}</small></label>; })}</div>
         {role === "PREPARER" && effectiveWork.paymentApplicability === "REQUIRED" && <label className="workflow-note-field"><span>Amount to pay</span>{paymentAmountRecorded ? <strong aria-label={`Payment amount ${paymentAmountLabel}`} className="work-course-map__amount-readonly">{paymentAmountLabel}</strong> : <input aria-describedby="workflow-payment-amount-help" aria-label="Amount to pay" disabled={periodLock.locked || !canAct || !isCurrentGate} inputMode="decimal" min="0" onChange={(event) => setPaymentAmountDraft(event.target.value)} step="0.01" type="number" value={paymentAmountDraft} /> }<small id="workflow-payment-amount-help">Record the amount from the drafted return. Do not calculate it here.</small></label>}
         {role === "CHECKER" && <label className="workflow-note-field"><span>Tax due amount</span><input aria-describedby="workflow-tax-due-help" aria-label="Tax due amount" disabled={periodLock.locked || !canAct || !isCurrentGate} inputMode="decimal" min="0" onChange={(event) => setTaxDueAmountDraft(event.target.value)} step="0.01" type="number" value={taxDueAmountDraft} /><small id="workflow-tax-due-help">Record the amount from the approved return or working papers. Do not calculate it here.</small></label>}
@@ -670,12 +666,12 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
               const processStatus = step ? processStatusForStep(step) : undefined;
               const isCurrentStep = Boolean(step && currentProcessStep?.id === step.id);
               const canEditStatus = Boolean(!periodLock.locked && !dataBlocked && step && processStatus && canActOnProcessStep(step.id, effectiveWork) && isCurrentStep);
-              const isCurrentGateStep = Boolean(step && gateProcessStepIds.has(step.id) && workflowRecord.currentGate === stage.owner && canActOnProcessStep(step.id, effectiveWork));
+              const isCurrentGateStep = Boolean(step && gateProcessStepIds.has(step.id) && activeGate === stage.owner && canActOnProcessStep(step.id, effectiveWork));
               const gateActionLabel = stage.id === "prepare" ? "Complete preparation" : stage.id === "check" ? "Complete checking" : "Complete review";
               const dataComplete = stage.id === "data" && processStatusForStep(stepById.get("prepare") ?? effectiveWork.steps[0]) === "DONE";
               const visibleStageNumber = visibleJourneyStages.findIndex((candidate) => candidate.id === stage.id) + 1;
               const statusClass = (processStatus ?? "NOT_STARTED").toLowerCase().replaceAll("_", "-");
-              return <tr className={`work-journey-table__row${isCurrentStep ? " work-journey-table__row--current" : ""}`} key={stage.id}><th scope="row"><div className="work-journey-table__step"><span className="work-journey-table__number" aria-hidden="true">{visibleStageNumber}</span><div><span>{stage.label}</span></div></div></th><td><div className="work-journey-table__status-stack">{processStatus ? isCurrentGateStep ? <button aria-label={gateActionLabel} className="button button--primary button--small" onClick={() => setGateChecklistOpen(true)} type="button">{gateActionLabel}</button> : canEditStatus ? <button aria-label={`Change ${stage.label} status`} className={`work-journey-table__status work-journey-table__status-button work-journey-table__status--${statusClass}`} onClick={() => openStatusDialog(step!.id, processStatus)} title="Change status" type="button">{processStatusLabels[processStatus]}</button> : <span aria-label={`${stage.label} status`} className={`work-journey-table__status work-journey-table__status--${statusClass}`}>{processStatusLabels[processStatus]}</span> : dataBlocked && stage.id === "data" && canActOnProcessStep("prepare", effectiveWork) ? <button className="button button--primary button--small" onClick={() => setDataReadinessOpen(true)} type="button">Confirm data ready</button> : dataComplete ? <span aria-label="Get data status" className="work-journey-table__status work-journey-table__status--done">Complete</span> : <span className="work-journey-table__status work-journey-table__status--ready">{stage.state}</span>}</div></td></tr>;
+              return <tr className={`work-journey-table__row${isCurrentStep ? " work-journey-table__row--current" : ""}`} key={stage.id}><th scope="row"><div className="work-journey-table__step"><span className="work-journey-table__number" aria-hidden="true">{visibleStageNumber}</span><div><span>{stage.label}</span></div></div></th><td><div className="work-journey-table__status-stack">{processStatus ? <>{isCurrentGateStep ? <button aria-label={gateActionLabel} className="button button--primary button--small" onClick={() => setGateChecklistOpen(true)} type="button">{gateActionLabel}</button> : canEditStatus ? <button aria-label={`Change ${stage.label} status`} className={`work-journey-table__status work-journey-table__status-button work-journey-table__status--${statusClass}`} onClick={() => openStatusDialog(step!.id, processStatus)} title="Change status" type="button">{processStatusLabels[processStatus]}</button> : <span aria-label={`${stage.label} status`} className={`work-journey-table__status work-journey-table__status--${statusClass}`}>{processStatusLabels[processStatus]}</span>}</> : dataBlocked && stage.id === "data" && canActOnProcessStep("prepare", effectiveWork) ? <button className="button button--primary button--small" onClick={() => setDataReadinessOpen(true)} type="button">Confirm data ready</button> : dataComplete ? <span aria-label="Get data status" className="work-journey-table__status work-journey-table__status--done">Complete</span> : <span className="work-journey-table__status work-journey-table__status--ready">{stage.state}</span>}</div></td></tr>;
             })}</Fragment>;
           })}
         </tbody></table></div> : <ol aria-label="End-to-end return process">
@@ -696,9 +692,8 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
             const latestProcessUpdate = step ? getLatestProcessUpdate(effectiveWork, step.id) : undefined;
             const isCurrentStep = Boolean(step && currentProcessStep?.id === step.id);
             const isGateStep = Boolean(step && gateProcessStepIds.has(step.id));
-            const isCurrentGateStep = isCurrentStep && isGateStep && workflowRecord.currentGate === stage.owner;
+            const isCurrentGateStep = isCurrentStep && isGateStep && activeGate === stage.owner;
             const canCompleteHere = Boolean(!periodLock.locked && step && isCurrentStep && !isGateStep && canActOnProcessStep(step.id, effectiveWork));
-            const canUndoHere = Boolean(!periodLock.locked && step && processStatus === "DONE" && latestProcessUpdate?.status === "DONE" && !isGateStep && canActOnProcessStep(step.id, effectiveWork));
             const canEditStatus = Boolean(!periodLock.locked && step && processStatus && canActOnProcessStep(step.id, effectiveWork) && isCurrentStep);
             const processNumber = courseStages.slice(0, stageIndex + 1).filter((candidate) => candidate.stepId).length;
             const stageClassName = [`work-course-map__stage--${stage.state.toLowerCase().replaceAll(" ", "-")}`, isCurrentStep ? "work-course-map__stage--current-step" : ""].filter(Boolean).join(" ");
@@ -709,8 +704,7 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
               {!step && <div className="work-step__action">{stage.id === "data" && dataBlocked && canActOnProcessStep("prepare", effectiveWork) ? <button className="button button--primary button--small" onClick={() => setDataReadinessOpen(true)} type="button">Confirm data ready</button> : <span className="work-course-map__state">{stage.state}</span>}</div>}
               <div className="work-step__action">
                 {step && processStatus && (canEditStatus ? <label className="work-course-map__status-control"><span className="sr-only">{stage.label} status</span><select aria-label={`${stage.label} status`} onChange={(event) => requestProcessStatus(step.id, event.target.value as WorkflowProcessStatus)} value={processStatus}>{statusOptions.map((option) => <option key={option} value={option}>{processStatusLabels[option]}</option>)}</select></label> : <span aria-label={`${stage.label} status`} className={`work-course-map__status-pill work-course-map__status-pill--${processStatus.toLowerCase().replaceAll("_", "-")}`}>{processStatusLabels[processStatus]}</span>)}
-                {canUndoHere && <button className="text-button work-course-map__undo" onClick={() => updateProcessStep(stage.stepId!, "NOT_STARTED")} type="button">Undo</button>}
-                {!isCurrentGateStep && !canCompleteHere && !canUndoHere && latestProcessUpdate && <small>Recorded by {latestProcessUpdate.actor} · {latestProcessUpdate.recordedAt}</small>}
+                {!isCurrentGateStep && !canCompleteHere && latestProcessUpdate && <small>Recorded by {latestProcessUpdate.actor} · {latestProcessUpdate.recordedAt}</small>}
               </div>
             </div>
             </div>;
@@ -728,9 +722,8 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
       <details className="work-data-exports"><summary>Data exports</summary><div><p>Files for this return only.</p><button className="text-button" onClick={() => exportWorkflowData("facts")} type="button">Filing facts · CSV</button><button className="text-button" onClick={() => exportWorkflowData("processing")} type="button">Processing log · CSV</button>{archiveComplete && <button className="text-button" onClick={() => void downloadJourneyReport()} type="button">Return report · PDF</button>}</div></details>
     </div>
   );
-  const undoToast = undoWindow && typeof document !== "undefined" ? createPortal(<div aria-live="polite" className="work-undo-toast" role="status"><span>{courseStages.find((stage) => stage.stepId === undoWindow.stepId)?.label ?? "Step"} saved</span><button className="button button--quiet button--small" onClick={() => void undoRecentProcessStep()} type="button">Undo <small>{undoWindow.seconds}s</small></button></div>, document.body) : null;
-  if (fullPage) return <>{undoToast}<section className="work-detail-page" aria-labelledby="work-detail-page-title"><div className="work-detail-page__header"><div><h1 className="work-detail-page__identity" id="work-detail-page-title">{client ? <Link href={`/app/clients/${client.id}`}>{client.name}</Link> : effectiveWork.client}<span className="work-detail-page__identity-meta"><span>{periodLabel}</span><span aria-hidden="true">•</span><span>{returnPackageLabel}</span><span aria-hidden="true">•</span><span>Due {dueDateLabel}</span>{periodLock.locked && <span className="work-validation-badge">✓ Tax Team validated</span>}</span></h1>{roleRows.length > 0 && <div aria-label="Return roles" className="work-detail-page__role-tags">{roleRows.map((row) => <span className={`work-detail-page__role-tag work-detail-page__role-tag--${row.code.toLowerCase()}`} key={row.code}><strong>{row.label}</strong><span>{row.person}</span></span>)}</div>}</div><Link aria-label="Close return journey" className="icon-button work-detail-page__close" href="/app/work">×</Link></div>{detailContent}</section></>;
-  return <>{undoToast}<DetailDrawer eyebrow="Return package" title={client ? <button className="detail-drawer__title-link detail-drawer__title-button" onClick={() => setClientPreviewOpen(true)} type="button">{client.name}</button> : effectiveWork.client} subtitle={`${returnPackageLabel} · ${periodLabel} · Due ${dueDateLabel} · ${effectiveWork.registrationUnit}`} onClose={onClose}>{detailContent}{client && clientPreviewOpen && <ClientPreviewDrawer client={client} onClose={() => setClientPreviewOpen(false)} />}</DetailDrawer></>;
+  if (fullPage) return <section className="work-detail-page" aria-labelledby="work-detail-page-title"><div className="work-detail-page__header"><div><h1 className="work-detail-page__identity" id="work-detail-page-title">{client ? <Link href={`/app/clients/${client.id}`}>{client.name}</Link> : effectiveWork.client}<span className="work-detail-page__identity-meta"><span>{periodLabel}</span><span aria-hidden="true">•</span><span>{returnPackageLabel}</span><span aria-hidden="true">•</span><span>Due {dueDateLabel}</span>{periodLock.locked && <span className="work-validation-badge">✓ Tax Team validated</span>}</span></h1>{roleRows.length > 0 && <div aria-label="Return roles" className="work-detail-page__role-tags">{roleRows.map((row) => <span className={`work-detail-page__role-tag work-detail-page__role-tag--${row.code.toLowerCase()}`} key={row.code}><strong>{row.label}</strong><span>{row.person}</span></span>)}</div>}</div><Link aria-label="Close return journey" className="icon-button work-detail-page__close" href="/app/work">×</Link></div>{detailContent}</section>;
+  return <DetailDrawer eyebrow="Return package" title={client ? <button className="detail-drawer__title-link detail-drawer__title-button" onClick={() => setClientPreviewOpen(true)} type="button">{client.name}</button> : effectiveWork.client} subtitle={`${returnPackageLabel} · ${periodLabel} · Due ${dueDateLabel} · ${effectiveWork.registrationUnit}`} onClose={onClose}>{detailContent}{client && clientPreviewOpen && <ClientPreviewDrawer client={client} onClose={() => setClientPreviewOpen(false)} />}</DetailDrawer>;
 }
 
 function ClientPreviewDrawer({ client, onClose }: { client: FixtureClient; onClose: () => void }) {

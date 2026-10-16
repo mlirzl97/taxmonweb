@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixtureWork } from "./fixtures";
-import { applyWorkflowStepState, initialProcessStatuses, isValidTaxDueAmount, orderedProcessStatuses, roleQuestions, transition, workflowProcessRole } from "./workflow-rules";
+import { applyWorkflowStepState, currentProcessStepId, initialProcessStatuses, isValidTaxDueAmount, orderedProcessStatuses, roleQuestions, transition, workflowProcessRole } from "./workflow-rules";
 
 describe("workflow rules", () => {
   it("keeps the ordered process state deterministic", () => {
@@ -52,6 +52,24 @@ describe("workflow rules", () => {
     expect(statuses["payment"]).toBe("IN_PROGRESS");
     expect(statuses.esubmission).toBe("NOT_STARTED");
     expect(statuses.evidence).toBe("NOT_STARTED");
+  });
+
+  it("derives the active step from normalized statuses when fixture markers are stale", () => {
+    const work = fixtureWork.find((item) => item.id === "work-02")!;
+    const statuses = orderedProcessStatuses(work, {
+      ...initialProcessStatuses(work),
+      prepare: "DONE",
+      check: "DONE",
+      review: "DONE",
+      "client-approval": "DONE",
+      filing: "DONE",
+      payment: "DONE",
+      "payment-client-approval": "DONE",
+      "payment-confirmation": "IN_PROGRESS",
+    });
+
+    expect(currentProcessStepId(work, statuses)).toBe("payment-confirmation");
+    expect(applyWorkflowStepState(work, null, "FILE", statuses).find((step) => step.state === "current")?.id).toBe("payment-confirmation");
   });
 
   it("holds every downstream step when source data is blocked", () => {

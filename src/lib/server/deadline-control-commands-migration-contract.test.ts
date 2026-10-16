@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const migration = readFileSync(join(process.cwd(), "supabase/migrations/20261023000000_deadline_control_commands.sql"), "utf8");
+const latestRepositoryMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261117000000_link_combined_withholding_calendar_forms.sql"), "utf8");
+const directPublishMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261127000000_deadline_control_direct_publish.sql"), "utf8");
 
 describe("deadline control command migration contract", () => {
   it("adds a restricted repository boundary over the canonical calendar tables", () => {
@@ -41,8 +43,19 @@ describe("deadline control command migration contract", () => {
     expect(override).not.toContain("insert into public.bir_forms");
   });
 
-  it("keeps publication inside the earliest-deadline control rule", () => {
-    expect(migration).toContain("A deadline must be source-reconciled before it can be published.");
-    expect(migration).toContain("The operational due date cannot be later than the earliest applicable statutory deadline.");
+  it("publishes a saved statutory date without a second reconciliation gate", () => {
+    expect(directPublishMigration).toContain("The operational due date cannot be later than the earliest applicable statutory deadline.");
+    expect(directPublishMigration).toContain("comparison_status = case when p_to_status = 'published' then 'match'");
+    expect(directPublishMigration).not.toContain("source-reconciled before it can be published");
+  });
+
+  it("removes the obsolete source-reconciliation command", () => {
+    expect(directPublishMigration).toContain("drop function if exists public.reconcile_deadline_control_entry(uuid, text);");
+    expect(directPublishMigration).not.toMatch(/create or replace function public\.reconcile_deadline_control_entry/);
+  });
+
+  it("projects the append-only history into the repository read model", () => {
+    expect(latestRepositoryMigration).toContain("'history', coalesce(history.events");
+    expect(latestRepositoryMigration).toContain("from public.deadline_publication_events event");
   });
 });

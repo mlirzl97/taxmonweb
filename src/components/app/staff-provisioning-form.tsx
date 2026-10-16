@@ -2,13 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { careerServiceLevelLabels, type CareerServiceLevel } from "@/lib/domain/team";
+import { careerServiceLevelLabels, careerServiceLevelTitle, reportingManagerLevelFor, type CareerServiceLevel } from "@/lib/domain/team";
 import { staffAccessProfileDefinition, staffAccessProfiles, staffScopeKindLabel, type StaffAccessProfile, type StaffScopeKind } from "@/lib/domain/staff-access";
 
 type OrganizationUnit = { id: string; code: string; name: string; unit_kind: "team" | "tower" | "cluster" | "a_and_t" };
 type TeamMemberOption = { id: string; name: string; title: string | null; careerServiceLevel: string | null; active: boolean };
 
-const titles = ["Senior Manager · HOD", "Manager · Operations", "Assistant Manager", "Supervisor", "Team Lead", "Senior Associate", "Junior Associate", "Associate", "Intern", "Cross-portfolio Tax Control"];
 const operatingModels = [
   ["engagement_agile", "Engagement team · agile"],
   ["engagement_dedicated", "Engagement team · dedicated"],
@@ -25,7 +24,6 @@ export function StaffProvisioningForm({ canManage, onClose }: { canManage: boole
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [accessProfile, setAccessProfile] = useState<StaffAccessProfile>("STAFF");
-  const [title, setTitle] = useState("Associate");
   const [careerServiceLevel, setCareerServiceLevel] = useState<CareerServiceLevel>("2.1");
   const [operatingModel, setOperatingModel] = useState("engagement_agile");
   const [organizationUnitId, setOrganizationUnitId] = useState("");
@@ -44,6 +42,10 @@ export function StaffProvisioningForm({ canManage, onClose }: { canManage: boole
   const availableScopes = useMemo(() => scopeOptions(accessProfile), [accessProfile]);
   const profile = staffAccessProfileDefinition(accessProfile);
   const requiresScopeUnit = scopeKind === "team_tower" || scopeKind === "cluster";
+  const reportsToOptions = useMemo(() => {
+    const targetLevel = reportingManagerLevelFor(careerServiceLevel);
+    return targetLevel ? members.filter((member) => member.active && member.careerServiceLevel === targetLevel) : [];
+  }, [careerServiceLevel, members]);
 
   useEffect(() => {
     if (!canManage) return;
@@ -92,7 +94,7 @@ export function StaffProvisioningForm({ canManage, onClose }: { canManage: boole
         email,
         displayName,
         accessProfile,
-        title,
+        title: careerServiceLevelTitle(careerServiceLevel),
         organizationUnitId,
         effectiveFrom,
         careerServiceLevel,
@@ -124,7 +126,7 @@ export function StaffProvisioningForm({ canManage, onClose }: { canManage: boole
     <form className="admin-provisioning-form" onSubmit={submit}>
       <div className="admin-provisioning-section"><strong>Identity</strong><div className="admin-provisioning-grid"><label className="form-field"><span>Approved work email</span><input autoComplete="off" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} /></label><label className="form-field"><span>Display name</span><input autoComplete="off" onChange={(event) => setDisplayName(event.target.value)} required value={displayName} /></label></div></div>
       <div className="admin-provisioning-section"><strong>Access and scope</strong><div className="admin-provisioning-grid"><label className="form-field"><span>Access profile</span><select onChange={(event) => selectProfile(event.target.value as StaffAccessProfile)} value={accessProfile}>{staffAccessProfiles.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select><small className="form-field__hint">{profile.description}</small></label><label className="form-field"><span>Access scope</span><select onChange={(event) => { const next = event.target.value as StaffScopeKind; setScopeKind(next); setScopeOrganizationUnitId(next === "team_tower" || next === "cluster" ? units[0]?.id ?? "" : ""); }} value={scopeKind}>{availableScopes.map((scope) => <option key={scope} value={scope}>{staffScopeKindLabel(scope)}</option>)}</select></label>{requiresScopeUnit && <label className="form-field"><span>Scope organization unit</span><select onChange={(event) => setScopeOrganizationUnitId(event.target.value)} required value={scopeOrganizationUnitId}><option value="">Select an organization unit</option>{units.filter((unit) => unit.unit_kind === "tower" || unit.unit_kind === "cluster").map((unit) => <option key={unit.id} value={unit.id}>{unit.name} · {unit.unit_kind}</option>)}</select></label>}</div></div>
-      <div className="admin-provisioning-section"><strong>Team profile</strong><div className="admin-provisioning-grid"><label className="form-field"><span>Operating title</span><select onChange={(event) => setTitle(event.target.value)} value={title}>{titles.map((item) => <option key={item}>{item}</option>)}</select></label><label className="form-field"><span>Career service level</span><select onChange={(event) => setCareerServiceLevel(event.target.value as CareerServiceLevel)} value={careerServiceLevel}>{Object.entries(careerServiceLevelLabels).map(([level, label]) => <option key={level} value={level}>{level} · {label}</option>)}</select></label><label className="form-field"><span>Operating model</span><select onChange={(event) => setOperatingModel(event.target.value)} value={operatingModel}>{operatingModels.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="form-field"><span>Team organization unit</span><select disabled={loadingReferenceData} onChange={(event) => setOrganizationUnitId(event.target.value)} required value={organizationUnitId}><option value="">{loadingReferenceData ? "Loading units…" : "Select an organization unit"}</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name} · {unit.unit_kind}</option>)}</select></label><label className="form-field"><span>Reports to</span><select onChange={(event) => setReportsToUserId(event.target.value)} value={reportsToUserId}><option value="">Top-level / cross-functional</option>{members.filter((member) => member.active).map((member) => <option key={member.id} value={member.id}>{member.name}{member.title ? ` · ${member.title}` : ""}</option>)}</select></label><label className="form-field"><span>Effective from</span><input onChange={(event) => setEffectiveFrom(event.target.value)} required type="date" value={effectiveFrom} /></label></div></div>
+      <div className="admin-provisioning-section"><strong>Team profile</strong><div className="admin-provisioning-grid"><label className="form-field"><span>Career level</span><select onChange={(event) => { setCareerServiceLevel(event.target.value as CareerServiceLevel); setReportsToUserId(""); }} value={careerServiceLevel}>{Object.entries(careerServiceLevelLabels).map(([level, label]) => <option key={level} value={level}>{level} · {label}</option>)}</select><small className="form-field__hint">Sets the standard reporting ladder; it does not grant access or approval authority.</small></label><label className="form-field"><span>Operating model</span><select onChange={(event) => setOperatingModel(event.target.value)} value={operatingModel}>{operatingModels.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="form-field"><span>Team organization unit</span><select disabled={loadingReferenceData} onChange={(event) => setOrganizationUnitId(event.target.value)} required value={organizationUnitId}><option value="">{loadingReferenceData ? "Loading units…" : "Select an organization unit"}</option>{units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name} · {unit.unit_kind}</option>)}</select></label><label className="form-field"><span>Reports to</span><select onChange={(event) => setReportsToUserId(event.target.value)} required={reportsToOptions.length > 0} value={reportsToUserId}><option value="">{reportsToOptions.length > 0 ? "Select next-band manager" : "No eligible next-band manager"}</option>{reportsToOptions.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select><small className="form-field__hint">Eligible managers are active people in the next career band.</small></label><label className="form-field"><span>Effective from</span><input onChange={(event) => setEffectiveFrom(event.target.value)} required type="date" value={effectiveFrom} /></label></div></div>
       <div className="admin-provisioning-section"><strong>Control notes</strong><div className="admin-provisioning-grid"><label className="form-field"><span>Reporting exception reason</span><textarea onChange={(event) => setReportingLineExceptionReason(event.target.value)} placeholder="Only when the standard career-level ladder does not apply" rows={2} value={reportingLineExceptionReason} /></label><label className="form-field"><span>Reason for setup</span><textarea onChange={(event) => setReason(event.target.value)} placeholder="Required for the audit trail" required rows={2} value={reason} /></label></div></div>
       <div className="admin-provisioning-actions"><span className="admin-placeholder-note">No password is created or visible to the administrator.</span><div className="admin-provisioning-actions__buttons">{onClose && <button className="button button--quiet" onClick={onClose} type="button">Cancel</button>}<button className="button button--primary" disabled={isSubmitting || loadingReferenceData} type="submit">{isSubmitting ? "Provisioning…" : "Create pending account"}</button></div></div>
     </form>

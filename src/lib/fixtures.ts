@@ -1,6 +1,8 @@
+const emptyPrototypeMode = process.env.TAXMON_EMPTY_MODE === "true" || process.env.NEXT_PUBLIC_TAXMON_EMPTY_MODE === "true";
+
 export const fixtureEnvironment = {
-  label: "REVIEW MODE",
-  description: "Demonstration data only. No live client information or source documents are included.",
+  label: emptyPrototypeMode ? "EMPTY LOCAL MODE" : "REVIEW MODE",
+  description: emptyPrototypeMode ? "No seeded clients, work items, or sample records are loaded in this local workspace." : "Demonstration data only. No live client information or source documents are included.",
 } as const;
 
 /** Explicit clock for sanitized fixtures; screens must not infer dates from the host clock. */
@@ -508,7 +510,7 @@ function generatedPortfolioProfile(
   const paymentRoute: FixtureTaxProfile["paymentRoute"] = fixtureSource === "synthetic_portfolio_test"
     ? "Not configured"
     : clientIndex % 5 === 0 ? "TMF Pays" : clientIndex % 5 === 1 ? "Not configured" : "Client Pays";
-  const filingChannel = missingFilingSetup ? "Not configured" : eFPS ? "eFPS" : clientIndex % 3 === 1 ? "eBIRForms" : "eSubmission";
+  const filingChannel = missingFilingSetup ? "Not configured" : eFPS ? "eFPS" : "eBIRForms";
   const profileState: FixtureTaxProfile["profileState"] = fixtureSource === "synthetic_portfolio_test"
     ? "Setup incomplete"
     : certificateStructureFixture || needs2303Review || needsRdoSource ? "Ready for validation" : missingFilingSetup || missingFiscalYear ? "Setup incomplete" : "Active";
@@ -569,8 +571,8 @@ function generatedPortfolioProfile(
     taxYearBasis,
     fiscalYearEnd: taxYearBasis === "Fiscal year" ? "Fiscal year-end · source context" : undefined,
     accountingSystem,
-    booksType: clientIndex % 3 === 0 ? "Loose-leaf books" : clientIndex % 3 === 1 ? "Manual books" : "Not configured",
-    invoicing: clientIndex % 4 === 0 ? "ATP receipts / invoices" : "Not configured",
+    booksType: clientIndex % 3 === 0 ? "Loose-leaf" : clientIndex % 3 === 1 ? "Manual" : "Not configured",
+    invoicing: clientIndex % 4 === 0 ? "Manual" : "Not configured",
     paymentRoute,
     weight: sourceFinalWeight ?? 0,
     weightLabel: sourceFinalWeight === null ? "Excluded from source reconciliation" : sourceFinalWeight === 0 ? "No numeric source weight" : `${sourceFinalWeight} · ${classification}`,
@@ -640,8 +642,8 @@ for (const client of fixtureClients) {
   profile.registrationStatus = profile.registrationStatus === "Active · synthetic" ? "Active" : profile.registrationStatus;
   profile.registrationEffective = /^Synthetic|^Needs source review/i.test(profile.registrationEffective) ? "" : profile.registrationEffective;
   profile.accountingSystem = profile.accountingSystem?.includes("CAS/CBA") ? "CAS / CBA" : profile.accountingSystem?.includes("Manual accounting") ? "Manual" : profile.accountingSystem;
-  profile.booksType = profile.booksType === "Loose-leaf" ? "Loose-leaf books" : profile.booksType === "Manual" ? "Manual books" : profile.booksType?.includes("CAS/CBA") ? "Computerized books" : profile.booksType;
-  profile.invoicing = profile.invoicing?.includes("ATP") ? "ATP receipts / invoices" : profile.invoicing === "Not configured" ? profile.invoicing : "Needs review";
+  profile.booksType = profile.booksType === "Loose-leaf books" ? "Loose-leaf" : profile.booksType === "Manual books" ? "Manual" : profile.booksType?.includes("CAS/CBA") ? "CAS" : profile.booksType;
+  profile.invoicing = profile.invoicing?.includes("ATP") || profile.invoicing?.includes("BIR Printed") ? "Manual" : profile.invoicing === "Not configured" ? profile.invoicing : profile.invoicing?.includes("CAS") ? "CAS" : profile.invoicing;
   if (profile.filingChannel === "eFPS" && profile.eFPSGroup && !/^Group [A-E]$|^Needs review$/i.test(profile.eFPSGroup)) profile.eFPSGroup = "Needs review";
   if (!/^RDO[-\s]?\d{1,3}[A-Z]*$/i.test(profile.rdoOrLts) && profile.rdoOrLts !== "Needs review") profile.rdoOrLts = "Needs review";
   profile.attention = profile.attention.map((item) => item.replaceAll("RDO/LTS", "RDO"));
@@ -1402,6 +1404,28 @@ function removeDemoMarker(value: unknown): void {
   fixtureWork,
   fixtureExceptions,
 ].forEach(removeDemoMarker);
+
+function clearEmptyPrototypeArray(values: readonly unknown[]) {
+  (values as unknown[]).splice(0, values.length);
+}
+
+if (emptyPrototypeMode) {
+  [
+    fixtureOrgChartNodes,
+    fixtureOrgDirectoryMembers,
+    fixtureClients,
+    fixtureChangeRequestForms,
+    fixtureSpecialistCases,
+    fixtureCompliance,
+    fixtureFilingHistory,
+    fixtureTeamHistory,
+    fixtureHistory,
+    fixtureWork,
+    fixtureExceptions,
+    fixtureCalendar,
+    fixtureMetrics,
+  ].forEach(clearEmptyPrototypeArray);
+}
 
 const prohibitedFixturePatterns = [
   /\breal\s+TIN\b/i,

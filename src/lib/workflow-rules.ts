@@ -139,6 +139,19 @@ export function nextApplicableProcessStep(work: FixtureWorkItem, currentIndex: n
   });
 }
 
+export function currentProcessStepId(work: FixtureWorkItem, processStatuses: Readonly<Record<string, WorkflowProcessStatus>>) {
+  const activeStep = work.steps.find((step) => {
+    if (work.paymentApplicability === "NOT_APPLICABLE" && paymentProcessStepIds.has(step.id)) return false;
+    return processStatuses[step.id] === "IN_PROGRESS" || processStatuses[step.id] === "NEEDS_ATTENTION";
+  });
+  if (activeStep) return activeStep.id;
+  return work.steps.find((step) => {
+    if (work.paymentApplicability === "NOT_APPLICABLE" && paymentProcessStepIds.has(step.id)) return false;
+    const status = processStatuses[step.id];
+    return status !== "DONE" && status !== "NOT_APPLICABLE";
+  })?.id;
+}
+
 export function actionForProcessStep(stepId: string, status: WorkflowProcessStatus): string | undefined {
   const labels: Record<string, string> = { prepare: "preparation", check: "checking", review: "review", "client-approval": "client approval", filing: "filing", esubmission: "attachments", payment: "payment endorsement", "payment-client-approval": "payment client approval", "payment-confirmation": "payment confirmation", evidence: "archiving" };
   const label = labels[stepId];
@@ -171,13 +184,7 @@ export function transition(role: WorkflowRole, decision: WorkflowDecision, note:
 }
 
 export function applyWorkflowStepState(work: FixtureWorkItem, currentGate: WorkflowRole | null, stage: FixtureWorkItem["stage"], processStatuses?: Readonly<Record<string, WorkflowProcessStatus>>): FixtureWorkItem["steps"] {
-  const activeProcessStep = processStatuses && work.steps.find((step) => paymentProcessStepIds.has(step.id) && work.paymentApplicability === "NOT_APPLICABLE" ? false : processStatuses[step.id] === "IN_PROGRESS" || processStatuses[step.id] === "NEEDS_ATTENTION");
-  const firstIncomplete = processStatuses && work.steps.find((step) => {
-    if (work.paymentApplicability === "NOT_APPLICABLE" && paymentProcessStepIds.has(step.id)) return false;
-    const status = processStatuses[step.id];
-    return status !== "DONE" && status !== "NOT_APPLICABLE";
-  });
-  const currentStepId = activeProcessStep?.id ?? firstIncomplete?.id ?? (currentGate === "PREPARER" ? "prepare" : currentGate === "CHECKER" ? "check" : currentGate === "REVIEWER" ? "review" : stage === "CLIENT" ? "client-approval" : stage === "FILE" ? "filing" : stage === "POST-FILING" ? "evidence" : null);
+  const currentStepId = (processStatuses && currentProcessStepId(work, processStatuses)) ?? (currentGate === "PREPARER" ? "prepare" : currentGate === "CHECKER" ? "check" : currentGate === "REVIEWER" ? "review" : stage === "CLIENT" ? "client-approval" : stage === "FILE" ? "filing" : stage === "POST-FILING" ? "evidence" : null);
   const completeBefore = currentStepId === "check" ? new Set(["prepare"]) : currentStepId === "review" ? new Set(["prepare", "check"]) : currentStepId === "client-approval" ? new Set(["prepare", "check", "review"]) : new Set<string>();
   return work.steps.map((step) => {
     const processStatus = processStatuses?.[step.id];

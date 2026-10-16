@@ -42,6 +42,7 @@ export type ManualClientSetupInput = {
     proposedReturnCodes?: string[];
     registeredReturnCodes?: string[];
     goLiveDate?: string;
+    firstPeriodToFile?: string;
     permanentFileLink?: string;
     sourceNotes?: string;
     deadlinePolicy?: ClientDeadlinePolicy;
@@ -184,6 +185,8 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
   }
   const goLiveDate = profileText("goLiveDate", 10);
   if (goLiveDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(goLiveDate)) errors.push("profileData.goLiveDate must use YYYY-MM-DD.");
+  const firstPeriodToFile = profileText("firstPeriodToFile", 7);
+  if (firstPeriodToFile !== undefined && !/^\d{4}-\d{2}$/.test(firstPeriodToFile)) errors.push("profileData.firstPeriodToFile must use YYYY-MM.");
   const permanentFileLink = profileText("permanentFileLink", 500);
   if (permanentFileLink !== undefined && !/^https:\/\//i.test(permanentFileLink) && !/^synthetic:\/\//i.test(permanentFileLink)) errors.push("profileData.permanentFileLink must be an HTTPS or sanitized synthetic link.");
   const enateSetup = profileText("enateSetup", 32);
@@ -316,6 +319,7 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
         proposedReturnCodes: Array.isArray(proposedReturnCodes) ? [...new Set(proposedReturnCodes.map((value) => String(value).trim()).filter(Boolean))] : undefined,
         registeredReturnCodes: Array.isArray(registeredReturnCodes) ? [...new Set(registeredReturnCodes.map((value) => String(value).trim()).filter(Boolean))] : undefined,
         goLiveDate,
+        firstPeriodToFile,
         permanentFileLink,
         sourceNotes: profileText("sourceNotes", 500),
         deadlinePolicy,

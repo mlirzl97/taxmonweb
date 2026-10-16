@@ -10,7 +10,8 @@ import { defaultGroupScheduleLeadDays, normalizeClientDeadlinePolicy, workingDay
  * This module deliberately does not create a second deadline truth. The rows
  * are deterministic candidates for the Tax Team control surface. Only rows
  * with a published operational deadline are exposed to a client service
- * calendar. Unresolved or unverified tax content remains visible as a gate.
+ * calendar. The Tax Team's saved statutory date is the verification event for
+ * this control surface; rows without a usable date remain unavailable.
  */
 
 export type DeadlinePublicationStatus = "generated" | "needs_review" | "confirmed" | "published" | "unresolved" | "superseded";
@@ -26,6 +27,7 @@ export type DeadlineControlRow = {
   component: "Return / filing";
   activityMonth: string;
   activityPeriod: string;
+  periodStartDate: string;
   taxablePeriod: string;
   baseStatutoryDeadline: string | null;
   adjustedStatutoryDeadline: string | null;
@@ -48,6 +50,14 @@ export type DeadlineControlRow = {
   adjustmentReason: string;
   explanation: string;
   unresolvedReason?: string;
+  history?: readonly DeadlineControlHistoryEvent[];
+};
+
+export type DeadlineControlHistoryEvent = {
+  id: string;
+  label: string;
+  detail: string;
+  recordedAt: string;
 };
 
 export type ClientServiceCalendarRow = DeadlineControlRow & {
@@ -180,7 +190,7 @@ function rowPeriods(formNumber: string, year: number) {
   const form = forms.find((candidate) => candidate.formNumber === formNumber);
   if (!form) return [];
   if (form.usualTiming.startsWith("Annual")) {
-    return [{ activityMonth: "January", activityPeriod: `FY ${year}`, taxablePeriod: `January 1–December 31, ${year}`, periodEnd: `${year}-12-31` }];
+    return [{ activityMonth: "January", activityPeriod: `FY ${year}`, periodStartDate: `${year}-01-01`, taxablePeriod: `January 1–December 31, ${year}`, periodEnd: `${year}-12-31` }];
   }
   if (form.usualTiming.startsWith("Quarterly")) {
     return quarterlyMonths.map((activityMonth, index) => {
@@ -188,6 +198,7 @@ function rowPeriods(formNumber: string, year: number) {
       return {
         activityMonth,
         activityPeriod: `Q${quarter} ${year}`,
+        periodStartDate: `${year}-${String((index * 3) + 1).padStart(2, "0")}-01`,
         taxablePeriod: `Q${quarter} ${year}`,
         periodEnd: lastDayOfMonth(year, quarter * 3 - 1),
       };
@@ -196,6 +207,7 @@ function rowPeriods(formNumber: string, year: number) {
   return monthNames.map((activityMonth, index) => ({
     activityMonth,
     activityPeriod: `${activityMonth} ${year}`,
+    periodStartDate: `${year}-${String(index + 1).padStart(2, "0")}-01`,
     taxablePeriod: `${activityMonth} ${year}`,
     periodEnd: lastDayOfMonth(year, index),
   }));
@@ -234,6 +246,7 @@ function calculateRow(formNumber: string, year: number, period: ReturnType<typeo
     component: "Return / filing",
     activityMonth: period.activityMonth,
     activityPeriod: period.activityPeriod,
+    periodStartDate: period.periodStartDate,
     taxablePeriod: period.taxablePeriod,
     baseStatutoryDeadline: calculation?.baseStatutoryDeadline ?? null,
     adjustedStatutoryDeadline: adjusted,
@@ -248,7 +261,7 @@ function calculateRow(formNumber: string, year: number, period: ReturnType<typeo
     sourceCode: seed.sourceCode,
     sourceLabel: sourceLabels[seed.sourceCode] ?? seed.sourceCode,
     adjustmentReason: seed.adjustmentReason,
-    explanation: calculation?.explanation ?? "Deadline unresolved: no approved rule version is mapped for this requirement context.",
+    explanation: calculation?.explanation ?? "",
     unresolvedReason: status === "unresolved" ? "required_deadline_configuration_missing_or_unresolved" : status === "needs_review" ? "source_or_rule_context_requires_tax_team_review" : undefined,
   };
 }
@@ -286,8 +299,9 @@ export function getClientServiceCalendarRows(client: FixtureClient, year: number
   const candidateForms = clientCandidateFormNumbers(client);
   const clientDeadlinePolicy = normalizeClientDeadlinePolicy(client.entities[0]?.profile.deadlinePolicy);
   const goLiveDate = client.entities[0]?.profile.goLiveDate;
+  const firstPeriodToFile = client.entities[0]?.profile.firstPeriodToFile;
+  const firstPeriodStart = firstPeriodToFile && /^\d{4}-\d{2}$/.test(firstPeriodToFile) ? `${firstPeriodToFile}-01` : undefined;
   const goLiveYear = goLiveDate ? Number(goLiveDate.slice(0, 4)) : undefined;
-  const goLiveMonth = goLiveDate ? new Date(`${goLiveDate}T00:00:00Z`).getUTCMonth() : undefined;
   const candidateRows = buildDeadlineControlRows(year, candidateForms)
     .map((row) => {
       const override = overrides[row.id];
@@ -296,12 +310,15 @@ export function getClientServiceCalendarRows(client: FixtureClient, year: number
     })
     .filter((row) => {
       if (goLiveYear === undefined || !Number.isFinite(goLiveYear) || !goLiveDate) return true;
+      if (firstPeriodStart && row.periodStartDate < firstPeriodStart) return false;
       const effectiveDeadline = row.publishedOperationalDeadline ?? row.adjustedStatutoryDeadline;
       if (effectiveDeadline) return effectiveDeadline > goLiveDate;
-      // An unresolved rule has no date to compare. Keep only periods that are
-      // not definitely before go-live so the missing rule remains visible as a gate.
-      return row.calendarYear > goLiveYear || (row.calendarYear === goLiveYear && (goLiveMonth === undefined || !Number.isFinite(goLiveMonth) || monthNames.indexOf(row.activityMonth as typeof monthNames[number]) >= goLiveMonth));
-    });
+      // An unresolved rule has no due date to compare. Keep it visible as a
+      // gate; the activity month is not a safe proxy for the statutory due date
+      // (for example, an annual period may be due in the following year).
+      return row.calendarYear >= goLiveYear;
+    })
+    .filter((row) => !firstPeriodStart || row.periodStartDate >= firstPeriodStart);
   const rows = candidateRows.filter((row) => row.publicationStatus === "published" && row.publishedOperationalDeadline).map((row) => ({
     ...row,
     clientId: client.id,

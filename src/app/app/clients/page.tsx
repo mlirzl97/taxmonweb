@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import { getClientContractSummary, getClientWorkloadWeight, type FixtureClient, type FixtureSourceWeightClassification } from "@/lib/fixtures";
+import { getClientContractSummary, type FixtureClient, type FixtureSourceWeightClassification } from "@/lib/fixtures";
 import { clientDeadlineModes, clientDeadlinePolicyErrors, type ClientDeadlineMode, type ClientDeadlinePolicy } from "@/lib/domain/client-deadline-policy";
 import { clientOnboardingContractTypes, clientOnboardingDocumentStatusOptions, clientOnboardingDocumentTypes, clientOnboardingMainContractTypes, formatTin, generatedEntityReference, getClientOnboardingReadiness, normalizeTinDigits, type ClientOnboardingContract, type ClientOnboardingDocument, type ClientOnboardingIdentity } from "@/lib/domain/client-onboarding";
+import { submittedSetupToFixtureClient } from "@/lib/domain/submitted-client-projection";
 import { canManageModuleRecords } from "@/lib/domain/access";
-import { hasCredibleTaxProfileValidation } from "@/lib/domain/client-profile-persistence";
+import { applySavedCalibrationToClient, getClientDisplayWeight, getClientDisplayWeightLabel, hasCredibleTaxProfileValidation, prototypeClientProfileUpdatedEvent } from "@/lib/domain/client-profile-persistence";
 import { fixtureScopeFilterOptions } from "@/lib/domain/organization-catalog";
-import { governedReturnForms, returnMatchesSearch } from "@/lib/domain/client-return-selection";
 import type { BirOfficeOption } from "@/lib/domain/bir-office-reference";
 import { filingChannels } from "@/lib/domain/tax-foundation-catalog";
 import { birOfficeLabel, clientAccountingSystemOptions, clientBooksOptions, clientEfpsGroupOptions, clientFilingChannelOptions, clientInvoicingOptions, controlledOptionLabel, prototypeBirOfficeOptions } from "@/lib/domain/client-profile-options";
@@ -18,12 +18,44 @@ import { useWorkflow } from "@/lib/workflow-state";
 import { DetailDrawer, FixturePageFrame, isInScope, ScopeSwitcher, SectionHeading, type ScopeFilter } from "@/components/app/workspace-components";
 import { CrfRepositoryView } from "@/components/app/crf-repository";
 import { ClientCsvImportDrawer } from "@/components/app/client-csv-import";
+import { ReturnTaxSelector } from "@/components/app/return-tax-selector";
 
 type AttentionFilter = "all" | "attention" | "clear";
 type AuditFilter = "all" | "open" | "clear";
 type ContractFilter = "all" | "Main contract" | "Additional engagement" | "CRF/CRN";
 type SortKey = "taxpayer" | "weight" | "attention" | "team" | "audit";
 type ClientsView = "registry" | "crfs";
+type ClientSetupRegistrationFacts = {
+  rdoOrLts: string;
+  registeredAddress: string;
+  registrationReference: string;
+  registrationDate: string;
+  taxYearBasis: string;
+  fiscalYearEnd?: string;
+  firstPeriodToFile?: string;
+  accountingSystem: string;
+  booksType: string;
+  invoicing: string;
+  filingChannel: string;
+  eFPSGroup: string;
+  proposedReturnCodes?: string[];
+  registeredReturnCodes?: string[];
+  permanentFileLink?: string;
+  goLiveDate?: string;
+  enateSetup?: "Yes" | "No" | "Unknown";
+  paymentRoute?: "Client Pays" | "TMF Pays" | "Not configured";
+  deadlinePolicy?: ClientDeadlinePolicy;
+};
+type ClientSetupDraft = {
+  version: number;
+  client: ClientOnboardingIdentity;
+  contract: ClientOnboardingContract;
+  registrationFacts: ClientSetupRegistrationFacts;
+  documents: ClientOnboardingDocument[];
+  readiness: unknown;
+  status: string;
+  createdAt: string;
+};
 type DeadlinePolicyDraft = {
   mode: ClientDeadlineMode;
   sourceReference: string;
@@ -65,6 +97,8 @@ export default function ClientsPage() {
   const [audit, setAudit] = useState<AuditFilter>(() => readEnumParam("audit", "all", auditFilterOptions));
   const [sort, setSort] = useState<SortKey>(() => readEnumParam("sort", "taxpayer", sortOptions));
   const [setupDrawerOpen, setSetupDrawerOpen] = useState(false);
+  const [draftToEdit, setDraftToEdit] = useState<ClientSetupDraft | null>(null);
+  const [setupDrafts, setSetupDrafts] = useState<ClientSetupDraft[]>([]);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [setupMessage, setSetupMessage] = useState<string | null>(null);
   const [birRdoOptions, setBirRdoOptions] = useState<BirOfficeOption[]>([]);
@@ -135,7 +169,20 @@ export default function ClientsPage() {
     window.history.replaceState(window.history.state, "", `${window.location.pathname}${queryString ? `?${queryString}` : ""}`);
   }, [attention, audit, cluster, contractFilter, filingChannel, group, hydrated, owner, paymentRoute, query, rdo, scope, setupState, sort, view, weightClass]);
 
-  const sourceClients = useMemo(() => clientRegistryState === "connected" || clientRegistryState === "empty" ? clientRegistry : [], [clientRegistry, clientRegistryState]);
+  useEffect(() => {
+    if (!prototypeMode) return;
+    const syncDrafts = () => setSetupDrafts(readSetupDrafts());
+    syncDrafts();
+    window.addEventListener("storage", syncDrafts);
+    window.addEventListener(prototypeClientProfileUpdatedEvent, syncDrafts);
+    return () => {
+      window.removeEventListener("storage", syncDrafts);
+      window.removeEventListener(prototypeClientProfileUpdatedEvent, syncDrafts);
+    };
+  }, [prototypeMode]);
+
+  const submittedClients = useMemo(() => prototypeMode ? setupDrafts.filter((draft) => draft.status === "submitted").map((draft) => applySavedCalibrationToClient(submittedSetupToFixtureClient(draft))) : [], [prototypeMode, setupDrafts]);
+  const sourceClients = useMemo(() => { const base = clientRegistryState === "connected" || clientRegistryState === "empty" ? clientRegistry : []; if (!prototypeMode) return base; const submittedIds = new Set(submittedClients.map((client) => client.id)); return [...base.filter((client) => !submittedIds.has(client.id)), ...submittedClients]; }, [clientRegistry, clientRegistryState, prototypeMode, submittedClients]);
   const perspectiveClients = useMemo(() => prototypeMode ? sourceClients.filter(isClientVisible) : sourceClients, [isClientVisible, prototypeMode, sourceClients]);
   const visibleClients = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -146,7 +193,7 @@ export default function ClientsPage() {
         .map((value) => value!.toLowerCase());
       const hasClientAttention = hasAttention(client);
       const hasOpenAudit = Boolean(profile?.auditExposures.some((item) => item.status !== "Closed"));
-      const clientWeightClass = profile?.sourceWeightClassification ?? "Unweighted test";
+      const clientWeightClass = profile ? getClientDisplayWeightLabel(profile) : "Unweighted test";
 
       return isInScope(client.scope, scope)
         && (!normalizedQuery || searchable.some((value) => value.includes(normalizedQuery)))
@@ -173,7 +220,7 @@ export default function ClientsPage() {
   const groups = unique(perspectiveClients.map((client) => client.clientGroup));
   const filingChannels = unique(perspectiveClients.map((client) => client.entities[0]?.profile.filingChannel));
   const setupStates = unique(perspectiveClients.map((client) => client.entities[0]?.profile.profileState));
-  const visibleKnownWeight = visibleClients.reduce((total, client) => total + getClientWorkloadWeight(client), 0);
+  const visibleKnownWeight = visibleClients.reduce((total, client) => total + (getClientDisplayWeight(client.entities[0]?.profile ?? { sourceFinalWeight: null, weight: 0 }) ?? 0), 0);
   const rdoOptions = rdoReference;
   const resultCount = visibleClients.length === perspectiveClients.length ? `${perspectiveClients.length} taxpayers` : `${visibleClients.length} of ${perspectiveClients.length} taxpayers`;
 
@@ -181,7 +228,7 @@ export default function ClientsPage() {
     <FixturePageFrame>
       <header className="module-header">
         <div><h1>Clients</h1><p className="module-header__description">Taxpayers, registration, and servicing context.</p></div>
-        <div className="module-header__right"><div className="module-count"><strong>{clientRegistryState === "loading" ? "Loading client repository…" : resultCount}</strong><small>{clientRegistryState === "error" ? "Repository unavailable" : `${visibleKnownWeight} assessed weight · ${prototypeMode ? "sanitized fixtures" : "live repository"}`}</small></div><div className="module-actions"><button aria-label="Export current client list as CSV" className="button button--quiet button--small" disabled={clientRegistryState === "loading" || visibleClients.length === 0} onClick={() => downloadClientRegistryCsv(visibleClients, rdoReference)} type="button">Export CSV</button>{canManageClientRecords && <>{prototypeMode && <button className="button button--quiet button--small" onClick={() => { setSetupMessage(null); setCsvImportOpen(true); }} type="button">Import CSV</button>}<button className="button button--primary button--small" onClick={() => { setSetupMessage(null); setSetupDrawerOpen(true); }} type="button">Start client setup</button></>}<Link className="button button--quiet button--small" href="/app/team">Manage people in Team</Link></div></div>
+        <div className="module-header__right"><div className="module-count"><strong>{clientRegistryState === "loading" ? "Loading client repository…" : resultCount}</strong><small>{clientRegistryState === "error" ? "Repository unavailable" : `${visibleKnownWeight} assessed weight · ${prototypeMode ? "sanitized fixtures" : "live repository"}`}</small></div><div className="module-actions"><button aria-label="Export current client list as CSV" className="button button--quiet button--small" disabled={clientRegistryState === "loading" || visibleClients.length === 0} onClick={() => downloadClientRegistryCsv(visibleClients, rdoReference)} type="button">Export CSV</button>{canManageClientRecords && <>{prototypeMode && <button className="button button--quiet button--small" onClick={() => { setSetupMessage(null); setCsvImportOpen(true); }} type="button">Import CSV</button>}<button className="button button--primary button--small" onClick={() => { setSetupMessage(null); setDraftToEdit(null); setSetupDrawerOpen(true); }} type="button">Start client setup</button></>}<Link className="button button--quiet button--small" href="/app/team">Manage people in Team</Link></div></div>
       </header>
 
       {setupMessage && <div className="saved-notice" role="status">{setupMessage}</div>}
@@ -228,7 +275,10 @@ export default function ClientsPage() {
           {visibleClients.length === 0 && <div className="inline-empty">{clientRegistryState === "empty" ? "No taxpayers are configured yet. Start client setup to add the first record." : clientRegistryState === "error" ? "The client repository could not be loaded. Refresh or contact an administrator." : "No taxpayers match these filters. Try clearing a filter or searching a different identifier."}</div>}
         </div>
       </section>
-      {setupDrawerOpen && <ClientSetupDrawer onClose={() => setSetupDrawerOpen(false)} onSaved={(referenceCode) => { setSetupDrawerOpen(false); setSetupMessage(`Setup draft ${referenceCode} saved. Complete source review and assignment before activation.`); void refreshClientRegistry(); }} prototypeMode={prototypeMode} rdoOptions={rdoOptions} />}
+
+      {prototypeMode && setupDrafts.some((draft) => draft.status !== "submitted") && <section aria-label="Setup drafts" className="panel panel--table registry-panel setup-drafts-panel"><SectionHeading title="Setup drafts" /><div aria-label="Client setup drafts" className="setup-draft-list">{setupDrafts.filter((draft) => draft.status !== "submitted").map((draft) => <button aria-label={`Resume setup for ${draft.client.clientDisplayName}`} className="setup-draft-row" key={draft.client.clientReferenceCode} onClick={() => { setSetupMessage(null); setDraftToEdit(draft); setSetupDrawerOpen(true); }} type="button"><span><strong>{draft.client.clientDisplayName}</strong><small>Last saved · {draft.createdAt}</small></span><span className="setup-draft-row__action">Resume →</span></button>)}</div></section>}
+
+      {setupDrawerOpen && <ClientSetupDrawer initialDraft={draftToEdit} onClose={() => { setSetupDrawerOpen(false); setDraftToEdit(null); }} onSaved={(referenceCode, mode) => { setSetupDrawerOpen(false); setDraftToEdit(null); setSetupDrafts(readSetupDrafts()); setSetupMessage(mode === "submitted" ? `Setup ${referenceCode} submitted.` : `Setup draft ${referenceCode} saved.`); void refreshClientRegistry(); }} prototypeMode={prototypeMode} rdoOptions={rdoOptions} />}
       {csvImportOpen && <ClientCsvImportDrawer onClose={() => setCsvImportOpen(false)} onImported={(message) => { setCsvImportOpen(false); setSetupMessage(message); }} />}
       </></div>
       <div aria-labelledby="clients-crf-tab" className="clients-tab-panel" hidden={!showCrfs} id="clients-crf-panel" role="tabpanel" tabIndex={0}><CrfRepositoryView /></div>
@@ -236,21 +286,21 @@ export default function ClientsPage() {
   );
 }
 
-function ClientSetupDrawer({ onClose, onSaved, prototypeMode, rdoOptions }: { onClose: () => void; onSaved: (referenceCode: string) => void; prototypeMode: boolean; rdoOptions: readonly BirOfficeOption[] }) {
+function ClientSetupDrawer({ initialDraft, onClose, onSaved, prototypeMode, rdoOptions }: { initialDraft?: ClientSetupDraft | null; onClose: () => void; onSaved: (referenceCode: string, mode: "draft" | "submitted") => void; prototypeMode: boolean; rdoOptions: readonly BirOfficeOption[] }) {
   const [step, setStep] = useState(0);
-  const [identity, setIdentity] = useState<ClientOnboardingIdentity>({ clientReferenceCode: "", clientDisplayName: "", entityReferenceCode: "", entityDisplayName: "", tin: "", unitReferenceCode: "RU-NEW-HO", unitDisplayName: "Head Office", unitKind: "head_office", sourceReference: "" });
-  const [contract, setContract] = useState<ClientOnboardingContract>({ recordType: "not_confirmed", referenceCode: "", sourceReference: "" });
-  const [registrationFacts, setRegistrationFacts] = useState({ rdoOrLts: "", registeredAddress: "", registrationReference: "", registrationDate: "", taxYearBasis: "", fiscalYearEnd: "", accountingSystem: "", booksType: "", invoicing: "", filingChannel: "", eFPSGroup: "" });
-  const [fiscalYearEndMonth, setFiscalYearEndMonth] = useState("");
-  const [fiscalYearEndDay, setFiscalYearEndDay] = useState("");
-  const [proposedReturnCodes, setProposedReturnCodes] = useState<string[]>([]);
-  const [operatingSetup, setOperatingSetup] = useState({ enateSetup: "Unknown" as "Yes" | "No" | "Unknown", paymentRoute: "Not configured" as "Client Pays" | "TMF Pays" | "Not configured" });
-  const [deadlinePolicy, setDeadlinePolicy] = useState<DeadlinePolicyDraft>({ mode: "follow_group", sourceReference: "", clientProvideLeadDays: "", clientApprovalLeadDays: "", tmfPackageLeadDays: "", estimatedFilingLeadDays: "", estimatedPaymentLeadDays: "" });
-  const [documents, setDocuments] = useState<ClientOnboardingDocument[]>(() => clientOnboardingDocumentTypes.map(({ id }) => ({ type: id, status: "not_captured", sourceReference: "", notes: "" })));
+  const [identity, setIdentity] = useState<ClientOnboardingIdentity>(() => initialDraft?.client ?? { clientReferenceCode: "", clientDisplayName: "", entityReferenceCode: "", entityDisplayName: "", tin: "", unitReferenceCode: "RU-NEW-HO", unitDisplayName: "Head Office", unitKind: "head_office", sourceReference: "" });
+  const [contract, setContract] = useState<ClientOnboardingContract>(() => initialDraft?.contract ?? { recordType: "not_confirmed", referenceCode: "", sourceReference: "" });
+  const [registrationFacts, setRegistrationFacts] = useState(() => initialDraft ? { ...initialDraft.registrationFacts, accountingSystem: normalizedAccountingSystem(initialDraft.registrationFacts.accountingSystem) } : { rdoOrLts: "", registeredAddress: "", registrationReference: "", registrationDate: "", taxYearBasis: "", fiscalYearEnd: "", firstPeriodToFile: "", accountingSystem: "", booksType: "", invoicing: "", filingChannel: "", eFPSGroup: "" });
+  const [fiscalYearEndMonth, setFiscalYearEndMonth] = useState(() => initialDraft?.registrationFacts.taxYearBasis === "Calendar year" ? "December" : initialDraft?.registrationFacts.fiscalYearEnd?.split(" ")[0] ?? "");
+  const [fiscalYearEndDay, setFiscalYearEndDay] = useState(() => initialDraft?.registrationFacts.taxYearBasis === "Calendar year" ? "31" : initialDraft?.registrationFacts.fiscalYearEnd?.split(" ")[1] ?? "");
+  const [proposedReturnCodes, setProposedReturnCodes] = useState<string[]>(() => initialDraft?.registrationFacts.proposedReturnCodes ?? initialDraft?.registrationFacts.registeredReturnCodes ?? []);
+  const [operatingSetup, setOperatingSetup] = useState(() => ({ enateSetup: initialDraft?.registrationFacts.enateSetup ?? "Unknown" as "Yes" | "No" | "Unknown", paymentRoute: initialDraft?.registrationFacts.paymentRoute ?? "Not configured" as "Client Pays" | "TMF Pays" | "Not configured" }));
+  const [deadlinePolicy, setDeadlinePolicy] = useState<DeadlinePolicyDraft>(() => deadlineDraftFromPolicy(initialDraft?.registrationFacts.deadlinePolicy));
+  const [documents, setDocuments] = useState<ClientOnboardingDocument[]>(() => initialDraft?.documents ?? clientOnboardingDocumentTypes.map(({ id }) => ({ type: id, status: "not_captured", sourceReference: "", notes: "" })));
   const [error, setError] = useState<string | null>(null);
   const [organizationUnitId, setOrganizationUnitId] = useState("");
   const readiness = getClientOnboardingReadiness(identity, documents);
-  const [permanentFileLink, setPermanentFileLink] = useState("");
+  const [permanentFileLink, setPermanentFileLink] = useState(() => initialDraft?.registrationFacts.permanentFileLink ?? initialDraft?.client.sourceReference ?? "");
   const steps = ["Client & contract", "BIR registration", "Operating setup", "Sources", "Review"];
   const returnsNeedReview = proposedReturnCodes.length === 0;
 
@@ -301,12 +351,22 @@ function ClientSetupDrawer({ onClose, onSaved, prototypeMode, rdoOptions }: { on
     setStep((current) => Math.min(current + 1, steps.length - 1));
   }
 
-  async function saveDraft(event?: React.FormEvent<HTMLFormElement>) {
+  async function saveDraft(event?: React.FormEvent<HTMLFormElement>, mode: "draft" | "submitted" = "draft") {
     event?.preventDefault();
     const normalizedReference = identity.clientReferenceCode.trim().toUpperCase();
     const normalizedName = identity.clientDisplayName.trim();
     if (!normalizedReference || !normalizedName || !identity.goLiveDate || !permanentFileLink.trim() || (!prototypeMode && !organizationUnitId)) {
       setError("CRM number, client name, go-live date, permanent SharePoint file, and operating scope are required to save an intake draft.");
+      setStep(0);
+      return;
+    }
+    if (registrationFacts.firstPeriodToFile && identity.goLiveDate && registrationFacts.firstPeriodToFile < identity.goLiveDate.slice(0, 7)) {
+      setError("The first period to file cannot be before the go-live month.");
+      setStep(0);
+      return;
+    }
+    if (mode === "submitted" && !registrationFacts.firstPeriodToFile) {
+      setError("First period to file is required before submitting setup.");
       setStep(0);
       return;
     }
@@ -325,10 +385,11 @@ function ClientSetupDrawer({ onClose, onSaved, prototypeMode, rdoOptions }: { on
     const draftRegistrationFacts = {
       ...registrationFacts,
       registrationEffective: registrationFacts.registrationDate,
-      fiscalYearEnd: registrationFacts.taxYearBasis === "Fiscal year" && fiscalYearEndMonth && fiscalYearEndDay ? `${fiscalYearEndMonth} ${fiscalYearEndDay}` : undefined,
+      fiscalYearEnd: registrationFacts.taxYearBasis === "Calendar year" ? "December 31" : registrationFacts.taxYearBasis === "Fiscal year" && fiscalYearEndMonth && fiscalYearEndDay ? `${fiscalYearEndMonth} ${fiscalYearEndDay}` : undefined,
       proposedReturnCodes,
       registeredReturnCodes: proposedReturnCodes,
       goLiveDate: identity.goLiveDate,
+      firstPeriodToFile: registrationFacts.firstPeriodToFile || undefined,
       permanentFileLink: permanentFileLink.trim(),
       enateSetup: operatingSetup.enateSetup,
       paymentRoute: operatingSetup.paymentRoute,
@@ -338,13 +399,13 @@ function ClientSetupDrawer({ onClose, onSaved, prototypeMode, rdoOptions }: { on
       try {
         const parsed = JSON.parse(window.localStorage.getItem("taxmon.client.setup.drafts") ?? "[]") as unknown;
         const existing = Array.isArray(parsed) ? parsed : [];
-        const duplicate = existing.some((item) => {
+        const duplicate = !initialDraft && existing.some((item) => {
           if (!item || typeof item !== "object") return false;
           const client = (item as { client?: { clientReferenceCode?: unknown } }).client;
           return typeof client?.clientReferenceCode === "string" && client.clientReferenceCode.toUpperCase() === normalizedReference;
         });
         if (duplicate) throw new Error(`An intake draft already uses reference ${normalizedReference}.`);
-        window.localStorage.setItem("taxmon.client.setup.drafts", JSON.stringify([...existing, {
+        const nextDraft = {
           version: 3,
           importSource: "manual_setup",
           client: draftIdentity,
@@ -352,10 +413,16 @@ function ClientSetupDrawer({ onClose, onSaved, prototypeMode, rdoOptions }: { on
           registrationFacts: draftRegistrationFacts,
           documents,
           readiness,
-          status: "intake_pending",
+          status: mode === "submitted" ? "submitted" : "intake_pending",
           createdAt: fixtureClock.label,
-        }]));
-        onSaved(normalizedReference);
+        };
+        const nextDrafts = initialDraft ? existing.map((item) => {
+          if (!item || typeof item !== "object") return item;
+          const client = (item as { client?: { clientReferenceCode?: unknown } }).client;
+          return typeof client?.clientReferenceCode === "string" && client.clientReferenceCode.toUpperCase() === normalizedReference ? nextDraft : item;
+        }) : [...existing, nextDraft];
+        window.localStorage.setItem("taxmon.client.setup.drafts", JSON.stringify(nextDrafts));
+        onSaved(normalizedReference, mode);
       } catch (saveError) {
         setError(saveError instanceof Error ? saveError.message : "Unable to save the local intake draft.");
       }
@@ -388,7 +455,7 @@ function ClientSetupDrawer({ onClose, onSaved, prototypeMode, rdoOptions }: { on
       });
       const result = await response.json() as { error?: string; details?: string[] };
       if (!response.ok) throw new Error([result.error, ...(result.details ?? [])].filter(Boolean).join(" ") || "Unable to save the client setup.");
-      onSaved(normalizedReference);
+      onSaved(normalizedReference, mode);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Unable to save the client setup.");
     }
@@ -399,19 +466,17 @@ function ClientSetupDrawer({ onClose, onSaved, prototypeMode, rdoOptions }: { on
     <form className="form-stack onboarding-drawer" data-usage-form="client_setup" onSubmit={saveDraft}>
       <div className="onboarding-steps" aria-label="Client onboarding steps">{steps.map((label, index) => <button aria-current={step === index ? "step" : undefined} className={step === index ? "onboarding-step onboarding-step--active" : "onboarding-step"} key={label} onClick={() => { setError(null); setStep(index); }} type="button"><span>{index + 1}</span>{label}</button>)}</div>
       <div className="onboarding-status"><strong>{currentStep}</strong><span>{readiness.status === "intake_incomplete" || !identity.goLiveDate ? "Minimum client setup is incomplete" : readiness.status === "source_pack_incomplete" ? `${readiness.sourcePackGaps.length} source item${readiness.sourcePackGaps.length === 1 ? "" : "s"} need a recorded status` : "Ready for human source review"}</span></div>
-      <div className="onboarding-requiredness"><strong>Requiredness</strong><span><b>Red border</b> means the fact is needed before handoff or activation. You can still save an intake draft while source facts remain unresolved.</span></div>
+      {step === 0 && <div className="form-stack"><div className="drawer-section-intro"><strong>Start with the client record</strong><span>The CRM number is the unique client code and contract record. Keep the client account and registered taxpayer distinct because one client can have more than one taxpayer or registration unit.</span></div><div className="form-grid"><Field label="CRM no. / client code"><input autoFocus onChange={(event) => updateIdentity("clientReferenceCode", event.target.value)} placeholder="e.g. CRM-2026-001" required value={identity.clientReferenceCode} /></Field><Field label="Client / account name"><input onChange={(event) => updateIdentity("clientDisplayName", event.target.value)} placeholder="Approved client name" required value={identity.clientDisplayName} /></Field><Field label="Registered taxpayer name"><input onChange={(event) => updateIdentity("entityDisplayName", event.target.value)} placeholder="Name from 2303" required value={identity.entityDisplayName} /></Field><Field label="TIN"><input inputMode="numeric" maxLength={17} onChange={(event) => updateIdentity("tin", normalizeTinDigits(event.target.value))} placeholder="000-000-000-00000" value={formatTin(identity.tin)} /><small className="form-field__hint">Numbers only. Branch code is included when supplied by the registration source.</small></Field><Field label="Registration unit"><select onChange={(event) => { const unitKind = event.target.value as ClientOnboardingIdentity["unitKind"]; updateIdentity("unitKind", unitKind); updateIdentity("unitDisplayName", unitKind === "head_office" ? "Head Office" : unitKind === "branch" ? "Branch" : "Other registration unit"); updateIdentity("unitReferenceCode", `${normalizedUnitReference(identity.clientReferenceCode, unitKind)}`); }} value={identity.unitKind}><option value="head_office">Head Office</option><option value="branch">Branch</option><option value="other">Other registration unit</option></select></Field><Field label="Go-live date"><input required onChange={(event) => updateIdentity("goLiveDate", event.target.value)} type="date" value={identity.goLiveDate ?? ""} /></Field><Field label="First period to file"><input aria-describedby="first-period-to-file-hint" min={identity.goLiveDate?.slice(0, 7)} onChange={(event) => setRegistrationFacts({ ...registrationFacts, firstPeriodToFile: event.target.value })} type="month" value={registrationFacts.firstPeriodToFile ?? ""} /><small className="form-field__hint" id="first-period-to-file-hint">The first tax period included in this engagement.</small></Field></div><div className="drawer-section-intro"><strong>Main contract record</strong><span>Select MSA or LSA. Addenda and CRF/CRN records belong in the additional-engagement repository.</span></div><Field label="Main contract type"><select onChange={(event) => setContract((current) => ({ ...current, recordType: event.target.value as ClientOnboardingContract["recordType"] }))} value={contract.recordType}>{clientOnboardingMainContractTypes.map((type) => <option key={type.id} value={type.id}>{type.label}</option>)}</select></Field></div>}
 
-      {step === 0 && <div className="form-stack"><div className="drawer-section-intro"><strong>Start with the client record</strong><span>The CRM number is the unique client code and contract record. Keep the client account and registered taxpayer distinct because one client can have more than one taxpayer or registration unit.</span></div><div className="form-grid"><Field label="CRM no. / client code"><input autoFocus onChange={(event) => updateIdentity("clientReferenceCode", event.target.value)} placeholder="e.g. CRM-2026-001" required value={identity.clientReferenceCode} /></Field><Field label="Client / account name"><input onChange={(event) => updateIdentity("clientDisplayName", event.target.value)} placeholder="Approved client name" required value={identity.clientDisplayName} /></Field><Field label="Registered taxpayer name"><input onChange={(event) => updateIdentity("entityDisplayName", event.target.value)} placeholder="Name from 2303" required value={identity.entityDisplayName} /></Field><Field label="TIN"><input inputMode="numeric" maxLength={17} onChange={(event) => updateIdentity("tin", normalizeTinDigits(event.target.value))} placeholder="000-000-000-00000" value={formatTin(identity.tin)} /><small className="form-field__hint">Numbers only. Branch code is included when supplied by the registration source.</small></Field><Field label="Registration unit"><select onChange={(event) => { const unitKind = event.target.value as ClientOnboardingIdentity["unitKind"]; updateIdentity("unitKind", unitKind); updateIdentity("unitDisplayName", unitKind === "head_office" ? "Head Office" : unitKind === "branch" ? "Branch" : "Other registration unit"); updateIdentity("unitReferenceCode", `${normalizedUnitReference(identity.clientReferenceCode, unitKind)}`); }} value={identity.unitKind}><option value="head_office">Head Office</option><option value="branch">Branch</option><option value="other">Other registration unit</option></select></Field><Field label="Go-live date"><input required onChange={(event) => updateIdentity("goLiveDate", event.target.value)} type="date" value={identity.goLiveDate ?? ""} /></Field></div><div className="drawer-section-intro"><strong>Main contract record</strong><span>Select MSA or LSA. Addenda and CRF/CRN records belong in the additional-engagement repository.</span></div><Field label="Main contract type"><select onChange={(event) => setContract((current) => ({ ...current, recordType: event.target.value as ClientOnboardingContract["recordType"] }))} value={contract.recordType}>{clientOnboardingMainContractTypes.map((type) => <option key={type.id} value={type.id}>{type.label}</option>)}</select></Field></div>}
-
-      {step === 1 && <div className="form-stack"><div className="drawer-section-intro"><strong>Record the BIR registration facts</strong><span>These facts are required before Tax Profile validation. If the 2303 or related source is not available, leave the field unresolved and save the intake draft for source review.</span></div><div className="form-grid"><Field label="RDO"><select required onChange={(event) => setRegistrationFacts({ ...registrationFacts, rdoOrLts: event.target.value })} value={registrationFacts.rdoOrLts}><option value="">Select RDO</option>{rdoOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}<option value="Needs review">Needs review</option></select></Field><Field label="Registration reference / OCN"><input onChange={(event) => setRegistrationFacts({ ...registrationFacts, registrationReference: event.target.value })} placeholder="Certificate or OCN reference" required value={registrationFacts.registrationReference} /></Field><Field label="Registration date"><input onChange={(event) => setRegistrationFacts({ ...registrationFacts, registrationDate: event.target.value })} required type="date" value={registrationFacts.registrationDate} /></Field><Field label="Tax year basis"><select onChange={(event) => { const taxYearBasis = event.target.value; setRegistrationFacts({ ...registrationFacts, taxYearBasis, fiscalYearEnd: "" }); if (taxYearBasis !== "Fiscal year") { setFiscalYearEndMonth(""); setFiscalYearEndDay(""); } }} required value={registrationFacts.taxYearBasis}><option value="">Not configured</option><option>Calendar year</option><option>Fiscal year</option></select></Field><div className="form-field"><span>Fiscal year-end</span><div className="form-grid form-grid--compact"><select aria-label="Fiscal year-end month" disabled={registrationFacts.taxYearBasis !== "Fiscal year"} onChange={(event) => { const month = event.target.value; setFiscalYearEndMonth(month); setFiscalYearEndDay(""); }} required={registrationFacts.taxYearBasis === "Fiscal year"} value={fiscalYearEndMonth}><option value="">Month</option>{fiscalYearMonths.map((month) => <option key={month}>{month}</option>)}</select><select aria-label="Fiscal year-end day" disabled={registrationFacts.taxYearBasis !== "Fiscal year" || !fiscalYearEndMonth} onChange={(event) => setFiscalYearEndDay(event.target.value)} required={registrationFacts.taxYearBasis === "Fiscal year"} value={fiscalYearEndDay}><option value="">Day</option>{fiscalYearDays.slice(0, fiscalYearDayCount[fiscalYearEndMonth] ?? 31).map((day) => <option key={day}>{day}</option>)}</select></div></div><Field label="Accounting system"><select onChange={(event) => setRegistrationFacts({ ...registrationFacts, accountingSystem: event.target.value })} required value={registrationFacts.accountingSystem}><option value="">Not configured</option>{clientAccountingSystemOptions.filter((option) => option !== "Not configured").map((option) => <option key={option}>{option}</option>)}</select></Field><Field label="Books"><select onChange={(event) => setRegistrationFacts({ ...registrationFacts, booksType: event.target.value })} required value={registrationFacts.booksType}><option value="">Not configured</option>{clientBooksOptions.filter((option) => option !== "Not configured").map((option) => <option key={option}>{option}</option>)}</select></Field><Field label="Receipts / invoicing"><select onChange={(event) => setRegistrationFacts({ ...registrationFacts, invoicing: event.target.value })} required value={registrationFacts.invoicing}><option value="">Not configured</option>{clientInvoicingOptions.filter((option) => option !== "Not configured").map((option) => <option key={option}>{option}</option>)}</select></Field><Field label="Filing channel"><select onChange={(event) => { const filingChannel = event.target.value; setRegistrationFacts({ ...registrationFacts, filingChannel, eFPSGroup: filingChannel === "eFPS" ? registrationFacts.eFPSGroup : "Not applicable" }); }} required value={registrationFacts.filingChannel}><option value="">Not configured</option>{filingChannels.map((channel) => <option key={channel.code} value={channel.label}>{channel.label}</option>)}</select></Field><Field label="eFPS group"><select disabled={registrationFacts.filingChannel !== "eFPS"} onChange={(event) => setRegistrationFacts({ ...registrationFacts, eFPSGroup: event.target.value })} required={registrationFacts.filingChannel === "eFPS"} value={registrationFacts.filingChannel === "eFPS" ? registrationFacts.eFPSGroup : "Not applicable"}><option value="">Not configured</option>{clientEfpsGroupOptions.map((option) => <option key={option}>{option}</option>)}<option>Not applicable</option><option>Needs review</option></select></Field></div><Field label="Registered address"><textarea onChange={(event) => setRegistrationFacts({ ...registrationFacts, registeredAddress: event.target.value })} placeholder="Address from 2303" required value={registrationFacts.registeredAddress} /><small className="form-field__hint">{registrationFacts.registeredAddress.trim() && <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(registrationFacts.registeredAddress.trim())}`} rel="noreferrer" target="_blank">Open in Google Maps</a>}</small></Field><ReturnTaxSelector invalid={returnsNeedReview} selectedCodes={proposedReturnCodes} onChange={setProposedReturnCodes} /></div>}
+      {step === 1 && <div className="form-stack"><div className="drawer-section-intro"><strong>Record the BIR registration facts</strong><span>Use the values from the 2303 or approved source.</span></div><div className="form-grid"><Field label="RDO"><select required onChange={(event) => setRegistrationFacts({ ...registrationFacts, rdoOrLts: event.target.value })} value={registrationFacts.rdoOrLts}><option value="">Select RDO</option>{rdoOptions.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}<option value="Needs review">Needs review</option></select></Field><Field label="Registration reference / OCN"><input onChange={(event) => setRegistrationFacts({ ...registrationFacts, registrationReference: event.target.value })} placeholder="Certificate or OCN reference" required value={registrationFacts.registrationReference} /></Field><Field label="Registration date"><input onChange={(event) => setRegistrationFacts({ ...registrationFacts, registrationDate: event.target.value })} required type="date" value={registrationFacts.registrationDate} /></Field><Field label="Tax year basis"><select onChange={(event) => { const taxYearBasis = event.target.value; setRegistrationFacts({ ...registrationFacts, taxYearBasis, fiscalYearEnd: taxYearBasis === "Calendar year" ? "December 31" : "" }); if (taxYearBasis === "Calendar year") { setFiscalYearEndMonth("December"); setFiscalYearEndDay("31"); } else { setFiscalYearEndMonth(""); setFiscalYearEndDay(""); } }} required value={registrationFacts.taxYearBasis}><option value="">Not configured</option><option>Calendar year</option><option>Fiscal year</option></select></Field><div className="form-field"><span>Fiscal year-end</span><div className="form-grid form-grid--compact"><select aria-label="Fiscal year-end month" disabled={registrationFacts.taxYearBasis !== "Fiscal year"} onChange={(event) => { const month = event.target.value; setFiscalYearEndMonth(month); setFiscalYearEndDay(""); }} required={registrationFacts.taxYearBasis === "Fiscal year"} value={fiscalYearEndMonth}><option value="">Month</option>{fiscalYearMonths.map((month) => <option key={month}>{month}</option>)}</select><select aria-label="Fiscal year-end day" disabled={registrationFacts.taxYearBasis !== "Fiscal year" || !fiscalYearEndMonth} onChange={(event) => setFiscalYearEndDay(event.target.value)} required={registrationFacts.taxYearBasis === "Fiscal year"} value={fiscalYearEndDay}><option value="">Day</option>{fiscalYearDays.slice(0, fiscalYearDayCount[fiscalYearEndMonth] ?? 31).map((day) => <option key={day}>{day}</option>)}</select></div></div><Field label="Accounting system"><select onChange={(event) => setRegistrationFacts({ ...registrationFacts, accountingSystem: event.target.value })} required value={registrationFacts.accountingSystem}><option value="">Not configured</option>{clientAccountingSystemOptions.filter((option) => option !== "Not configured").map((option) => <option key={option}>{option}</option>)}</select></Field><Field label="Books"><select onChange={(event) => setRegistrationFacts({ ...registrationFacts, booksType: event.target.value })} required value={registrationFacts.booksType}><option value="">Not configured</option>{clientBooksOptions.filter((option) => option !== "Not configured").map((option) => <option key={option}>{option}</option>)}</select></Field><Field label="Receipts / invoicing"><select onChange={(event) => setRegistrationFacts({ ...registrationFacts, invoicing: event.target.value })} required value={registrationFacts.invoicing}><option value="">Not configured</option>{clientInvoicingOptions.filter((option) => option !== "Not configured").map((option) => <option key={option}>{option}</option>)}</select></Field><Field label="Filing channel"><select onChange={(event) => { const filingChannel = event.target.value; setRegistrationFacts({ ...registrationFacts, filingChannel, eFPSGroup: filingChannel === "eFPS" ? registrationFacts.eFPSGroup : "Not applicable" }); }} required value={registrationFacts.filingChannel}><option value="">Not configured</option>{filingChannels.map((channel) => <option key={channel.code} value={channel.label}>{channel.label}</option>)}</select></Field><Field label="eFPS group"><select disabled={registrationFacts.filingChannel !== "eFPS"} onChange={(event) => setRegistrationFacts({ ...registrationFacts, eFPSGroup: event.target.value })} required={registrationFacts.filingChannel === "eFPS"} value={registrationFacts.filingChannel === "eFPS" ? registrationFacts.eFPSGroup : "Not applicable"}><option value="">Not configured</option>{clientEfpsGroupOptions.map((option) => <option key={option}>{option}</option>)}<option>Not applicable</option><option>Needs review</option></select></Field></div><Field label="Registered address"><textarea onChange={(event) => setRegistrationFacts({ ...registrationFacts, registeredAddress: event.target.value })} placeholder="Address from 2303" required value={registrationFacts.registeredAddress} /></Field><ReturnTaxSelector invalid={returnsNeedReview} selectedCodes={proposedReturnCodes} onChange={setProposedReturnCodes} /></div>}
 
       {step === 2 && <DeadlinePolicyStep operatingSetup={operatingSetup} policy={deadlinePolicy} onChangeOperatingSetup={setOperatingSetup} onChange={setDeadlinePolicy} />}
       {step === 3 && <div className="form-stack"><div className="drawer-section-intro"><strong>Record the source pack</strong><span>Use one permanent SharePoint file for the client record. Each source is explicitly marked so “not applicable” is not confused with “missing”.</span></div><Field label="Permanent SharePoint file"><input required onChange={(event) => { const value = event.target.value; setPermanentFileLink(value); setDocuments((current) => current.map((document) => document.status === "received" ? { ...document, sourceReference: value } : document)); }} placeholder={prototypeMode ? "synthetic://permanent-file/CRM-2026-001" : "https://...sharepoint.com/..."} type="url" value={permanentFileLink} /></Field><div className="onboarding-document-list">{documents.map((document, index) => { const definition = clientOnboardingDocumentTypes.find((candidate) => candidate.id === document.type); if (!definition) return null; return <div className={document.status === "not_captured" ? "onboarding-document onboarding-document--invalid" : "onboarding-document"} key={document.type}><div><strong>{definition.label}</strong><small>{definition.detail}</small></div><select aria-label={`${definition.label} status`} onChange={(event) => updateDocument(index, { status: event.target.value as ClientOnboardingDocument["status"], sourceReference: event.target.value === "received" ? permanentFileLink : "" })} value={document.status}>{clientOnboardingDocumentStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>{(document.status === "not_applicable" || document.status === "unknown") && <input aria-label={`${definition.label} rationale`} required onChange={(event) => updateDocument(index, { notes: event.target.value })} placeholder="Reason or follow-up" value={document.notes} />}</div>; })}</div><div className="drawer-form-note">Source review, extraction, correction, and validation remain separate controlled steps after this intake draft. This checklist does not activate a Tax Profile or generate work.</div></div>}
 
-      {step === 4 && <div className="form-stack"><div className="drawer-section-intro"><strong>Review before handoff</strong><span>Save the intake draft, then continue with source review and assignment. No Tax Profile is activated from this screen.</span></div><div className="onboarding-review-grid"><div><span>CRM / taxpayer</span><strong>{identity.clientReferenceCode || "Not entered"}</strong><small>{identity.entityDisplayName || "Taxpayer name not entered"} · go-live {identity.goLiveDate || "not set"}</small></div><div><span>Contract record</span><strong>{clientOnboardingContractTypes.find((type) => type.id === contract.recordType)?.label}</strong><small>Uses CRM no. as the contract reference</small></div><div><span>Returns</span><strong>{proposedReturnCodes.length > 0 ? proposedReturnCodes.join(" · ") : "None selected"}</strong><small>Tax Team approval still controls work generation</small></div><div><span>Deadline policy</span><strong>{deadlinePolicy.mode === "follow_group" ? "Follow group schedule" : "Client-specific timing"}</strong><small>{deadlinePolicyOffsetSummary(deadlinePolicy)} · flows into the service calendar after publication</small></div><div><span>Source pack</span><strong>{documents.filter((document) => document.status === "received").length} checked · {readiness.sourcePackGaps.length} unresolved</strong><small>{permanentFileLink || "Permanent SharePoint file not recorded"}</small></div></div>{(readiness.identityGaps.length > 0 || !identity.goLiveDate) && <div className="form-error" role="alert">{[...readiness.identityGaps, ...(!identity.goLiveDate ? ["Go-live date is required."] : [])].join(" ")}</div>}{readiness.sourcePackGaps.length > 0 && <div className="onboarding-gap-list"><strong>Still unresolved</strong>{readiness.sourcePackGaps.map((gap) => <span key={gap}>{gap}</span>)}</div>}<div className="drawer-form-note">The service calendar begins at go-live and uses only the selected returns after their governed deadlines are published.</div></div>}
+      {step === 4 && <div className="form-stack"><div className="drawer-section-intro"><strong>Ready to submit</strong><span>Save for later, or submit this setup when the onboarding record is complete.</span></div><div className="onboarding-review-grid"><div><span>CRM / taxpayer</span><strong>{identity.clientReferenceCode || "Not entered"}</strong><small>{identity.entityDisplayName || "Taxpayer name not entered"} · go-live {identity.goLiveDate || "not set"}</small></div><div><span>First period to file</span><strong>{registrationFacts.firstPeriodToFile || "Not set"}</strong><small>Periods before this are excluded from the client calendar.</small></div><div><span>Contract record</span><strong>{clientOnboardingContractTypes.find((type) => type.id === contract.recordType)?.label}</strong><small>Uses CRM no. as the contract reference</small></div><div><span>Returns</span><strong>{proposedReturnCodes.length > 0 ? proposedReturnCodes.join(" · ") : "None selected"}</strong><small>Tax Team approval still controls work generation</small></div><div><span>Deadline policy</span><strong>{deadlinePolicy.mode === "follow_group" ? "Follow group schedule" : "Client-specific timing"}</strong><small>{deadlinePolicyOffsetSummary(deadlinePolicy)} · flows into the service calendar after publication</small></div><div><span>Source pack</span><strong>{documents.filter((document) => document.status === "received").length} checked · {readiness.sourcePackGaps.length} unresolved</strong><small>{permanentFileLink || "Permanent SharePoint file not recorded"}</small></div></div>{(readiness.identityGaps.length > 0 || !identity.goLiveDate) && <div className="form-error" role="alert">{[...readiness.identityGaps, ...(!identity.goLiveDate ? ["Go-live date is required."] : [])].join(" ")}</div>}{readiness.sourcePackGaps.length > 0 && <div className="onboarding-gap-list"><strong>Still unresolved</strong>{readiness.sourcePackGaps.map((gap) => <span key={gap}>{gap}</span>)}</div>}<div className="drawer-form-note">The service calendar begins with the first period to file and uses only the selected returns after their governed deadlines are published.</div></div>}
 
       {error && <div className="form-error" role="alert">{error}</div>}
-      <div className="onboarding-actions"><button className="button button--quiet" disabled={step === 0} onClick={() => { setError(null); setStep((current) => Math.max(current - 1, 0)); }} type="button">Back</button>{step < steps.length - 1 ? <button className="button button--quiet" onClick={nextStep} type="button">Next</button> : <button className="button button--primary" type="submit">Save intake draft</button>}</div>
+      <div className="onboarding-actions"><button className="button button--quiet" disabled={step === 0} onClick={() => { setError(null); setStep((current) => Math.max(current - 1, 0)); }} type="button">Back</button>{step < steps.length - 1 ? <button className="button button--quiet" onClick={nextStep} type="button">Next</button> : <div className="onboarding-actions__submit"><button className="button button--quiet" type="submit">Save draft</button><button className="button button--primary" onClick={() => { void saveDraft(undefined, "submitted"); }} type="button">Submit setup</button></div>}</div>
     </form>
   </DetailDrawer>;
 }
@@ -426,6 +491,18 @@ function deadlinePolicyFromDraft(draft: DeadlinePolicyDraft): ClientDeadlinePoli
     tmfPackageLeadDays: numberValue(draft.tmfPackageLeadDays),
     estimatedFilingLeadDays: numberValue(draft.estimatedFilingLeadDays),
     estimatedPaymentLeadDays: numberValue(draft.estimatedPaymentLeadDays),
+  };
+}
+
+function deadlineDraftFromPolicy(policy?: ClientDeadlinePolicy): DeadlinePolicyDraft {
+  return {
+    mode: policy?.mode ?? "follow_group",
+    sourceReference: policy?.sourceReference ?? "",
+    clientProvideLeadDays: policy?.clientProvideLeadDays === undefined ? "" : String(policy.clientProvideLeadDays),
+    clientApprovalLeadDays: policy?.clientApprovalLeadDays === undefined ? "" : String(policy.clientApprovalLeadDays),
+    tmfPackageLeadDays: policy?.tmfPackageLeadDays === undefined ? "" : String(policy.tmfPackageLeadDays),
+    estimatedFilingLeadDays: policy?.estimatedFilingLeadDays === undefined ? "" : String(policy.estimatedFilingLeadDays),
+    estimatedPaymentLeadDays: policy?.estimatedPaymentLeadDays === undefined ? "" : String(policy.estimatedPaymentLeadDays),
   };
 }
 
@@ -449,21 +526,33 @@ function OffsetField({ label, value, onChange }: { label: string; value: string;
   return <Field label={`${label} · working days before due`}><input aria-label={label} inputMode="numeric" max="365" min="0" onChange={(event) => onChange(event.target.value)} placeholder="e.g. 5" type="number" value={value} /></Field>;
 }
 
-function ReturnTaxSelector({ selectedCodes, onChange, invalid = false }: { selectedCodes: string[]; onChange: (codes: string[]) => void; invalid?: boolean }) {
-  const [query, setQuery] = useState("");
-  const selected = governedReturnForms.filter((form) => selectedCodes.includes(form.formNumber));
-  const suggestions = governedReturnForms
-    .filter((form) => !selectedCodes.includes(form.formNumber) && returnMatchesSearch(form, query))
-    .sort((left, right) => left.formNumber.localeCompare(right.formNumber));
-  const add = (formNumber: string) => onChange([...selectedCodes, formNumber]);
-  const remove = (code: string) => onChange(selectedCodes.filter((selectedCode) => selectedCode !== code));
-
-  return <section aria-labelledby="returns-to-file-title" className={invalid ? "onboarding-tax-selector onboarding-tax-selector--invalid" : "onboarding-tax-selector"}><div className="drawer-section-intro"><strong id="returns-to-file-title">Returns to be filed{invalid ? " *" : ""}</strong><span>Select the BIR returns confirmed by the 2303 or Tax Team source review.</span></div><div className="onboarding-tax-selector__selected" aria-live="polite">{selected.length > 0 ? selected.map((form) => <span className="onboarding-tax-chip" key={form.formNumber}><strong>{form.formNumber}</strong><button aria-label={`Remove ${form.formNumber}`} onClick={() => remove(form.formNumber)} type="button">×</button></span>) : <span className="onboarding-tax-selector__empty">No returns selected yet</span>}</div><Field label="Add BIR return"><select aria-label="Add BIR return" onChange={(event) => { if (event.target.value) add(event.target.value); event.target.value = ""; }} value=""><option value="">Select a governed return</option>{suggestions.map((form) => <option key={form.formNumber} value={form.formNumber}>{form.formNumber}</option>)}</select></Field><Field label="Find return number"><input aria-label="Find a BIR return" onChange={(event) => setQuery(event.target.value)} placeholder="e.g. 0619E or 1601EQ" value={query} /></Field><div className="drawer-form-note">The selected return list is a setup proposal. Tax Team approval still controls the client Compliance Universe and service-calendar generation.</div></section>;
+function normalizedAccountingSystem(value: string | undefined) {
+  if (!value) return "";
+  if (clientAccountingSystemOptions.includes(value as (typeof clientAccountingSystemOptions)[number])) return value;
+  if (/xero/i.test(value)) return "TMF · Xero";
+  if (/qne/i.test(value)) return "TMF · QNE";
+  if (/quickbooks/i.test(value)) return "Client · QuickBooks (legacy)";
+  return "Needs review";
 }
 
 function normalizedUnitReference(clientReferenceCode: string, unitKind: ClientOnboardingIdentity["unitKind"]) {
   const suffix = unitKind === "head_office" ? "HO" : unitKind === "branch" ? "BR" : "UNIT";
   return `RU-${clientReferenceCode.trim().toUpperCase() || "NEW"}-${suffix}`.slice(0, 64);
+}
+
+function readSetupDrafts(): ClientSetupDraft[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem("taxmon.client.setup.drafts") ?? "[]") as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is ClientSetupDraft => {
+      if (!item || typeof item !== "object") return false;
+      const draft = item as Partial<ClientSetupDraft>;
+      return Boolean(draft.client && typeof draft.client === "object" && typeof draft.client.clientReferenceCode === "string" && draft.registrationFacts && typeof draft.registrationFacts === "object" && Array.isArray(draft.documents));
+    });
+  } catch {
+    return [];
+  }
 }
 
 function Field({ label, children, invalid = false, required = false }: { label: string; children: React.ReactNode; invalid?: boolean; required?: boolean }) {
@@ -500,7 +589,7 @@ function hasAttention(client: FixtureClient) {
 function compareClients(left: FixtureClient, right: FixtureClient, sort: SortKey) {
   const leftProfile = left.entities[0]?.profile;
   const rightProfile = right.entities[0]?.profile;
-  if (sort === "weight") return (rightProfile?.sourceFinalWeight ?? -1) - (leftProfile?.sourceFinalWeight ?? -1) || left.name.localeCompare(right.name);
+  if (sort === "weight") return (rightProfile ? getClientDisplayWeight(rightProfile) ?? -1 : -1) - (leftProfile ? getClientDisplayWeight(leftProfile) ?? -1 : -1) || left.name.localeCompare(right.name);
   if (sort === "attention") return Number(hasAttention(right)) - Number(hasAttention(left)) || left.name.localeCompare(right.name);
   if (sort === "team") return left.assignment.cluster.localeCompare(right.assignment.cluster) || left.assignment.preparer.localeCompare(right.assignment.preparer) || left.name.localeCompare(right.name);
   if (sort === "audit") return Number(Boolean(rightProfile?.auditExposures.some((item) => item.status !== "Closed"))) - Number(Boolean(leftProfile?.auditExposures.some((item) => item.status !== "Closed"))) || left.name.localeCompare(right.name);
@@ -556,19 +645,20 @@ function TaxpayerRow({ client, rdoOptions }: { client: FixtureClient; rdoOptions
   const clientHasAttention = hasAttention(client);
   const openAuditCount = profile.auditExposures.filter((item) => item.status !== "Closed").length;
   const auditLabel = openAuditCount > 0 ? `${openAuditCount} open` : profile.auditExposures.length > 0 ? `${profile.auditExposures.length} closed` : "No open audit";
-  const weightLabel = profile.sourceWeightClassification ?? "Not assessed";
-  const numericWeight = profile.sourceFinalWeight === null ? "—" : profile.sourceFinalWeight;
+  const weightLabel = getClientDisplayWeightLabel(profile);
+  const displayWeight = getClientDisplayWeight(profile);
+  const numericWeight = displayWeight === null ? "—" : displayWeight;
   const filingLabel = controlledOptionLabel(profile.filingChannel, clientFilingChannelOptions);
   const filingDetail = filingLabel === "eFPS" ? controlledOptionLabel(profile.eFPSGroup, ["", ...clientEfpsGroupOptions, "Not applicable", "Needs review"]) : undefined;
 
   return (
     <tr>
       <td data-label="Taxpayer"><Link className="taxpayer-link" href={`/app/clients/${client.id}`}><span><strong>{profile.registeredTaxpayerName}{hasCredibleTaxProfileValidation(profile) && <span aria-label={`Tax Profile validated by ${profile.validator}`} className="profile-verification profile-verification--inline" role="img" title={`Validated by ${profile.validator} on ${profile.lastValidated}`}>✓</span>}</strong><small>{getClientContractSummary(client)} · {client.clientGroup ?? "Independent client relationship"} · {client.entities[0].units.length} unit{client.entities[0].units.length === 1 ? "" : "s"}</small></span></Link></td>
-      <td data-label="TIN"><span className="table-value"><strong>{profile.tinDisplay}</strong></span></td>
+      <td data-label="TIN"><span className="table-value"><strong>{formatTin(profile.tinDisplay) || profile.tinDisplay}</strong></span></td>
       <td data-label="RDO"><span className="table-value">{birOfficeLabel(profile.rdoOrLts, rdoOptions)}</span></td>
       <td data-label="Filing"><span className="table-value"><strong>{filingLabel}</strong>{filingDetail && <small>{filingDetail}</small>}</span></td>
       <td data-label="Team"><span className="table-value"><strong>{client.assignment.cluster}</strong><small>{client.assignment.preparer} · {client.assignment.checker} · {client.assignment.reviewer}</small></span></td>
-      <td data-label="Weight"><span className="weight-mark">{numericWeight}</span><span className="table-value"><strong>{weightLabel}</strong><small>{profile.sourceFinalWeight === null ? "No assessment recorded" : "Assessed client weight"}</small></span></td>
+      <td data-label="Weight"><span className="weight-mark">{numericWeight}</span><span className="table-value"><strong>{weightLabel}</strong><small>{displayWeight === null ? "No weight recorded" : "Assigned client weight"}</small></span></td>
       <td data-label="Payment"><span className="table-value"><strong>{profile.paymentRoute}</strong><small>{profile.enateSetup === "Yes" ? "eNATE setup" : profile.enateSetup === "No" ? "No eNATE" : "eNATE unknown"}</small></span></td>
       <td data-label="Audit"><span className={openAuditCount > 0 ? "attention-open" : "attention-clear"}>{auditLabel}</span></td>
       <td data-label="Attention"><span className={clientHasAttention ? "attention-open" : "attention-clear"}>{clientHasAttention ? `${profile.attention.length || 1} to review` : "Clear"}</span></td>

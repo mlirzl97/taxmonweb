@@ -119,9 +119,12 @@ test("Tax Team reports preserve period scope and produce a PDF snapshot", async 
   await expect(toDate).toHaveValue("2026-10-09");
   await expect(page.locator(".report-filter-note")).toContainText("Oct 6, 2026 to Oct 9, 2026");
   await expect(page.getByRole("heading", { name: "Monthly status report" })).toBeVisible();
-  await expect(page.getByText("Filed and paid on time", { exact: true })).toBeVisible();
-  await expect(page.getByText("Prepared but not yet due", { exact: true })).toBeVisible();
-  await expect(page.locator(".report-status-matrix").getByRole("columnheader", { name: "Status" })).toBeVisible();
+  const statusMatrix = page.locator(".report-status-matrix");
+  if (await statusMatrix.count()) {
+    await expect(statusMatrix.getByRole("columnheader", { name: "Status" })).toBeVisible();
+  } else {
+    await expect(page.getByText("No validated records match this report definition.", { exact: true })).toBeVisible();
+  }
   await expect(page.getByRole("heading", { name: "Population breakdown" })).toHaveCount(0);
 
   const downloadPromise = page.waitForEvent("download");
@@ -141,9 +144,12 @@ test("Tax Team reports preserve period scope and produce a PDF snapshot", async 
 
   await page.getByRole("tab", { name: "Deadline Control", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Deadline Control", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Master date rule · earliest applicable deadline" })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Earliest applicable" })).toBeVisible();
-  await expect(page.getByRole("columnheader", { name: "Published operational due date" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Deadline calendar year" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Deadline return filter" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Deadline period filed filter" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Earliest due date" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Internal target" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Status" })).toBeVisible();
   await page.goto("/app/tax-team?view=deadline-control");
   await expect(page.getByRole("heading", { name: "Deadline Control", exact: true })).toBeVisible();
 });

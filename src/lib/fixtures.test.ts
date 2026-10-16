@@ -65,6 +65,15 @@ describe("demo fixture mechanism", () => {
     expect(noMatch).toHaveLength(0);
   });
 
+  it("filters the shared work projection by accountable owner", () => {
+    const records = getFixtureOperationalRecords();
+    const owner = records[0].work.owner;
+    const filtered = filterFixtureOperationalRecords(records, { due: "all", owner, scope: "all", status: "all" });
+
+    expect(filtered.length).toBeGreaterThan(0);
+    expect(filtered.every((record) => record.work.owner === owner)).toBe(true);
+  });
+
   it("recognizes an ISO target before the review date as overdue", () => {
     const liveShapedWork = { ...fixtureWork[0], id: "work-live-overdue", deadline: "2026-10-01" };
     const records = getFixtureOperationalRecords([liveShapedWork]);

@@ -68,7 +68,8 @@ begin
       'adjustmentReason', coalesce(entry.adjustment_reason, ''),
       'explanation', coalesce(entry.deadline_explanation ->> 'text', entry.notes, 'No explanation recorded.'),
       'unresolvedReason', entry.unresolved_reason,
-      'notes', entry.notes
+      'notes', entry.notes,
+      'history', coalesce(history.events, '[]'::jsonb)
     ) as row_data,
     entry.adjusted_statutory_deadline as adjusted_date,
     coalesce(requirement.requirement_name, entry.external_requirement_label) as requirement_label,
@@ -83,6 +84,23 @@ begin
       where relation.requirement_version_id = entry.requirement_version_id
     ) form on true
     left join public.regulatory_issuances source on source.id = entry.source_issuance_id
+    left join lateral (
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', event.id,
+          'label', case
+            when event.from_status is null then 'Deadline recorded'
+            when event.from_status = event.to_status then 'Deadline saved'
+            else 'Status changed · ' || replace(event.to_status, '_', ' ')
+          end,
+          'detail', concat_ws(' · ', coalesce(actor.display_name, 'Authenticated user'), nullif(event.reason, '')),
+          'recordedAt', event.recorded_at
+        ) order by event.recorded_at desc
+      ) as events
+      from public.deadline_publication_events event
+      left join public.app_users actor on actor.id = event.actor_id
+      where event.monthly_calendar_entry_id = entry.id
+    ) history on true
     where extract(year from version.calendar_month)::integer = p_calendar_year
       and version.status <> 'superseded'
       and version.id = (

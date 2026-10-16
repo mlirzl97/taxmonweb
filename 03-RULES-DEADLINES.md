@@ -334,9 +334,9 @@ Component-level or milestone-specific TMF Internal Targets may exist where appro
 
 ### 7.4A Published Operational Deadline
 
-The system-calculated Base Statutory Deadline and Adjusted Statutory Deadline are candidates until the governed calendar process has reconciled them and Tax Team has confirmed and released the applicable operational row. The Published Operational Deadline is the released projection used by client Service Calendars and, once all other generation gates are satisfied, downstream compliance work.
+The system-calculated Base Statutory Deadline and Adjusted Statutory Deadline remain distinct date fields. For the Deadline Control surface, the authorized Tax Team onboarding manager verifies the applicable date by entering/saving the earliest applicable statutory date and using Save and Publish. The Published Operational Deadline is the released projection used by client Service Calendars and, once all other generation gates are satisfied, downstream compliance work.
 
-Publication must retain the rule/version, source/provenance, date explanation, reviewer/approver context, actor, timestamp, and any amendment or supersession history. A row with unresolved rule, provenance, applicability, or calendar mismatch remains unavailable for authoritative client use. Publishing never collapses the statutory date into the TMF Package Target; the package target remains the one-Philippine-working-day-before internal control date.
+Publication must retain the rule/version, source/provenance, date explanation, actor, timestamp, reason, and any amendment or supersession history. A row without a usable statutory date remains unavailable for authoritative client use. The separate row-level source/date reconciliation gate is not required after the onboarding manager verifies the date. Publishing never collapses the statutory date into the TMF Package Target; the package target remains the one-Philippine-working-day-before internal control date. The separate monthly calendar version lifecycle remains governed by its approved release controls.
 
 ### 7.5 One-Day-Before exceptions
 

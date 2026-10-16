@@ -83,7 +83,6 @@ const requiredIdentityFields: Array<[keyof ClientOnboardingIdentity, string]> = 
   ["entityDisplayName", "Taxpayer entity name"],
   ["unitReferenceCode", "Registration unit reference code"],
   ["unitDisplayName", "Registration unit name"],
-  ["sourceReference", "Initial source reference"],
 ];
 
 export function getClientOnboardingReadiness(

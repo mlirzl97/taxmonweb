@@ -202,6 +202,7 @@ export type OrganizationUnitOption = {
   code: string;
   name: string;
   unit_kind: "team" | "tower" | "cluster" | "a_and_t";
+  parent_id?: string | null;
 };
 
 export async function listOrganizationUnitOptions(): Promise<OrganizationUnitOption[]> {
@@ -209,7 +210,7 @@ export async function listOrganizationUnitOptions(): Promise<OrganizationUnitOpt
   if (!client) throw new Error("Supabase is not configured for this environment.");
   const { data, error } = await client
     .from("organization_units")
-    .select("id, code, name, unit_kind")
+    .select("id, code, name, unit_kind, parent_id")
     .eq("active", true)
     .order("unit_kind")
     .order("name");

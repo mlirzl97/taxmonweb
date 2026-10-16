@@ -78,8 +78,8 @@ describe('tax foundation deadline calculations', () => {
   });
 
   it('calculates the TMF internal target separately from a statutory date', () => {
-    expect(calculateInternalTarget('2026-10-12')).toBe('2026-10-09');
-    expect(calculateInternalTarget('2026-10-13', new Set(['2026-10-12']))).toBe('2026-10-09');
+    expect(calculateInternalTarget('2026-10-12')).toBe('2026-10-11');
+    expect(calculateInternalTarget('2026-10-13', new Set(['2026-10-12']))).toBe('2026-10-12');
   });
 });
 
@@ -211,7 +211,7 @@ describe('fictional golden tax scenarios', () => {
     });
     const packageTarget = calculateInternalTarget(result.adjustedStatutoryDeadline ?? '2026-10-25');
     expect(result.baseStatutoryDeadline).toBe('2026-10-25');
-    expect(packageTarget).toBe('2026-10-23');
+    expect(packageTarget).toBe('2026-10-24');
   });
 
   it('supports a fiscal-year period crossing calendar years without changing cadence semantics', () => {

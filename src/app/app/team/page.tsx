@@ -9,6 +9,7 @@ import { DetailDrawer, FixturePageFrame, SectionHeading, StatusLabel, scopeLabel
 import { accessLevelLabel, accessLevelRank, canPerformTeamAction } from "@/lib/domain/access";
 import { buildEditableOrgChartNodes, deriveTeamControlPulses, deriveTeamMemberLoad, deriveTeamSpecialistSummary, deriveTeamTowerSummary, hasCoverageGap, isEngagementOperatingModel, isTaxTeamOperatingModel, operatingModelLabels, overlayOrgChartLoad, reportingManagerLevelFor, teamMemberIdsForPerspective, type OrgChartNode } from "@/lib/domain/team";
 import { scopeOptions } from "@/lib/control-tower-state";
+import { fixtureOrganizationScopes } from "@/lib/domain/organization-catalog";
 import { fixtureClients, fixtureOrgChartNodes, fixtureOrgDirectoryMembers, fixtureSpecialistCases, fixtureWork, getClientWorkloadWeight, type FixtureClient, type FixtureTeamMember } from "@/lib/fixtures";
 import { adaptLiveTeamMember } from "@/lib/domain/live-team-adapter";
 import { portfolioClientToFixtureClient } from "@/lib/domain/live-client-adapter";
@@ -16,14 +17,18 @@ import { adaptLiveGeneratedWork } from "@/lib/domain/live-work-adapter";
 import { useWorkflow } from "@/lib/workflow-state";
 
 type AssignmentLens = "all" | "engagement" | "tax-team";
-type TeamView = "overview" | "organization" | "directory" | "coverage";
+type TeamView = "overview" | "organization" | "clusters" | "directory" | "coverage";
 type RosterEvent = { id: string; memberId: string; action: "Added" | "Updated" | "Deactivated"; summary: string; effectiveFrom: string; remarks?: string };
+type OrganizationUnit = { id: string; code: string; name: string; unit_kind: "team" | "tower" | "cluster" | "a_and_t"; parent_id?: string | null };
+type ClusterDefinition = { id: string; code: string; name: string; parent: string; active: boolean; leaderId?: string | null; supervisorIds?: string[] };
 
 const rosterStorageKey = "taxmonweb.team.roster.v2";
 const rosterEventStorageKey = "taxmonweb.team.roster-events.v2";
+const clusterStorageKey = "taxmonweb.team.clusters.v1";
 const teamViews: ReadonlyArray<{ id: TeamView; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "organization", label: "Organization" },
+  { id: "clusters", label: "Clusters" },
   { id: "directory", label: "Directory" },
   { id: "coverage", label: "Coverage" },
 ];
@@ -48,6 +53,8 @@ export default function TeamPage() {
   const [teamMembers, setTeamMembers] = useState<FixtureTeamMember[]>(() => prototypeMode ? [...fixtureOrgDirectoryMembers] : []);
   const [liveTeamLoading, setLiveTeamLoading] = useState(() => !prototypeMode);
   const [liveTeamError, setLiveTeamError] = useState<string | null>(null);
+  const [organizationUnits, setOrganizationUnits] = useState<OrganizationUnit[]>([]);
+  const [clusterDefinitions, setClusterDefinitions] = useState<ClusterDefinition[]>(() => fixtureOrganizationScopes.map((scope) => ({ id: scope.code, code: scope.code, name: scope.cluster, parent: scope.tower, active: true, leaderId: null, supervisorIds: [] })));
   const [liveClients, setLiveClients] = useState<FixtureClient[]>([]);
   const [liveWork, setLiveWork] = useState<typeof fixtureWork>([]);
   const [rosterEvents, setRosterEvents] = useState<RosterEvent[]>([]);
@@ -74,6 +81,19 @@ export default function TeamPage() {
   }, [prototypeMode]);
 
   useEffect(() => {
+    if (prototypeMode) return;
+    let cancelled = false;
+    fetch("/api/organization/units", { headers: { accept: "application/json" }, cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json() as { data?: OrganizationUnit[] };
+        if (!response.ok) throw new Error("Unable to load organization definitions.");
+        if (!cancelled) setOrganizationUnits(payload.data ?? []);
+      })
+      .catch(() => { if (!cancelled) setOrganizationUnits([]); });
+    return () => { cancelled = true; };
+  }, [prototypeMode]);
+
+  useEffect(() => {
     if (!prototypeMode) return;
     try {
       const storedRoster = window.localStorage.getItem(rosterStorageKey);
@@ -88,6 +108,9 @@ export default function TeamPage() {
       if (Array.isArray(parsedEvents)) {
         setRosterEvents(parsedEvents);
       }
+      const storedClusters = window.localStorage.getItem(clusterStorageKey);
+      const parsedClusters = storedClusters ? JSON.parse(storedClusters) as ClusterDefinition[] : null;
+      if (Array.isArray(parsedClusters) && parsedClusters.every((cluster) => typeof cluster.id === "string" && typeof cluster.name === "string" && typeof cluster.active === "boolean")) setClusterDefinitions(parsedClusters.map((cluster) => ({ ...cluster, leaderId: cluster.leaderId ?? null, supervisorIds: cluster.supervisorIds ?? [] })));
     } catch {
       // Keep the approved sanitized fixture roster if local prototype state is malformed.
     }
@@ -139,7 +162,8 @@ export default function TeamPage() {
     if (!prototypeMode || !rosterHydrated) return;
     window.localStorage.setItem(rosterStorageKey, JSON.stringify(teamMembers));
     window.localStorage.setItem(rosterEventStorageKey, JSON.stringify(rosterEvents));
-  }, [prototypeMode, rosterEvents, rosterHydrated, teamMembers]);
+    window.localStorage.setItem(clusterStorageKey, JSON.stringify(clusterDefinitions));
+  }, [clusterDefinitions, prototypeMode, rosterEvents, rosterHydrated, teamMembers]);
 
   const perspectiveClients = useMemo(() => prototypeMode ? (canViewClients ? fixtureClients.filter(isClientVisible) : []) : liveClients, [canViewClients, isClientVisible, liveClients, prototypeMode]);
   const perspectiveWork = useMemo(() => prototypeMode ? fixtureWork.filter(isWorkVisible) : liveWork, [isWorkVisible, liveWork, prototypeMode]);
@@ -211,6 +235,7 @@ export default function TeamPage() {
   }
 
   async function saveRosterChange(draft: TeamRosterDraft): Promise<string | undefined> {
+    if (prototypeMode && draft.operatingModel !== "TAX_TEAM" && !clusterDefinitions.some((cluster) => cluster.name === draft.cluster && cluster.active)) return "Select an active cluster before saving this person.";
     const existing = teamMembers.find((member) => member.id === draft.id);
     const existingLoad = existing ? load.find((member) => member.id === existing.id) : undefined;
     const hasCurrentWork = (existingLoad?.assignedClients ?? 0) > 0 || (existingLoad?.activeSpecialistCases ?? 0) > 0;
@@ -365,6 +390,8 @@ export default function TeamPage() {
         <OrgChart nodes={orgChartNodes} onSelect={(node) => setSelectedMemberId(node.id)} />
       </section>}
 
+      {activeView === "clusters" && <ClusterDefinitions definitions={prototypeMode ? clusterDefinitions : organizationUnits.filter((unit) => unit.unit_kind === "cluster").map((unit) => ({ id: unit.id, code: unit.code, name: unit.name, parent: organizationUnits.find((candidate) => candidate.id === unit.parent_id)?.name ?? "Organization root", active: true, leaderId: null, supervisorIds: [] }))} members={teamMembers} onCreate={(definition) => setClusterDefinitions((current) => [...current, definition])} onDeactivate={(id) => { if (teamMembers.some((member) => member.cluster === clusterDefinitions.find((cluster) => cluster.id === id)?.name && member.active)) return "Reassign active people before deactivating this cluster."; setClusterDefinitions((current) => current.map((cluster) => cluster.id === id ? { ...cluster, active: false } : cluster)); return undefined; }} onUpdate={(definition) => { const previous = clusterDefinitions.find((cluster) => cluster.id === definition.id); if (previous && previous.name !== definition.name && (teamMembers.some((member) => member.cluster === previous.name) || fixtureClients.some((client) => client.assignment.cluster === previous.name))) return "Reassign people and clients before renaming this cluster."; setClusterDefinitions((current) => current.map((cluster) => cluster.id === definition.id ? definition : cluster)); return undefined; }} prototypeMode={prototypeMode} canManage={prototypeMode && canEditStructure} />}
+
       {activeView === "directory" && <section aria-labelledby="team-directory-title" className="panel team-panel team-people-panel" id="team-directory">
         <SectionHeading title="Directory" />
         <div className="team-people-toolbar"><div className="team-admin-actions">{canAddPerson && <button className="button button--primary button--small" onClick={() => openEditor(null)} type="button">Add employee</button>}{canManageStaffAccounts && <Link className="button button--primary button--small" href="/app/admin?view=access">Onboard staff</Link>}{canEditStructure && selected && !editorOpen && <button className="button button--quiet button--small" onClick={() => openEditor(selected.id)} type="button">Edit selected person</button>}{canManageAssignments && <Link className="button button--quiet button--small" href="/app/clients">Manage client ownership in Clients</Link>}{canEditStructure && rosterEvents.length > 0 && <button className="button button--quiet button--small" onClick={resetPrototypeRoster} type="button">Reset prototype roster</button>}{!canEditStructure && !canManageStaffAccounts && <span className="team-note">This access view is read-only for people and structure.</span>}</div></div>
@@ -379,7 +406,7 @@ export default function TeamPage() {
       {activeView === "coverage" && <section aria-labelledby="team-workload-title" className="panel panel--table team-panel" id="team-coverage">{!canViewLeadershipRollups ? <><SectionHeading title="Coverage" /><p className="team-note">Leadership roll-ups are restricted for this access view.</p></> : <><SectionHeading title="Coverage" /><div aria-label="Organization coverage" className="team-structure" tabIndex={0}><div className="team-structure__header"><span>Cluster</span><span>Operating model</span><span>Members</span><span>Clients / cases</span><span>Weight / affected</span><span>Attention</span></div>{summaries.map((summary) => <div className="team-structure__row" key={summary.tower}><span><strong>{summary.cluster}</strong><small>Engagement teams</small></span><span>Agile / dedicated</span><span>{summary.members}</span><span>{summary.clients}</span><span>{summary.clientWeight}</span><span className={summary.coverageGaps > 0 ? "attention-open" : "attention-clear"}>{summary.coverageGaps > 0 ? `${summary.coverageGaps} gap` : "Covered"}</span></div>)}<div className="team-structure__row team-structure__row--specialist"><span><strong>Tax team</strong><small>Cross-portfolio ad hoc function</small></span><span>Tax ad hoc</span><span>{specialistSummary.memberCount} active</span><span>{specialistSummary.caseCount} cases</span><span>{specialistSummary.affectedTaxpayerCount} affected</span><span className={specialistSummary.attentionCount > 0 ? "attention-open" : "attention-clear"}>{specialistSummary.attentionCount > 0 ? `${specialistSummary.attentionCount} ad hoc attention` : "No ad hoc attention"}</span></div></div></>}</section>}
 
       {selected && !editorOpen && <TeamMemberDrawer clients={visibleClients} canDeactivate={canDeactivatePerson} canEdit={canEditStructure} canManageAssignments={canManageAssignments} canViewChangeHistory={canViewChangeHistory} canViewOperationalDetail={canViewLeadershipRollups} changeEvents={canViewChangeHistory ? rosterEvents.filter((event) => event.memberId === selected.id) : []} member={selected} node={selectedOrgNode} onClose={() => setSelectedMemberId(null)} onDeactivate={() => openEditor(selected.id, "deactivate")} onEdit={() => openEditor(selected.id)} specialistCases={prototypeMode && canViewSpecialistCases ? fixtureSpecialistCases.filter((item) => item.assigneeMemberIds.includes(selected.id)) : []} />}
-      {editorOpen && <TeamRosterDrawer deactivationIntent={deactivationIntent} editingMemberId={editingMemberId} key={`${editingMemberId ?? "new"}-${deactivationIntent ? "deactivate" : "edit"}`} load={load} members={teamMembers} onClose={() => { setEditorOpen(false); setDeactivationIntent(false); }} onSave={saveRosterChange} />}
+      {editorOpen && <TeamRosterDrawer clusterTowers={Object.fromEntries(clusterDefinitions.map((cluster) => [cluster.name, cluster.parent as FixtureTeamMember["tower"]]))} clusters={clusterDefinitions.filter((cluster) => cluster.active).map((cluster) => cluster.name)} deactivationIntent={deactivationIntent} editingMemberId={editingMemberId} key={`${editingMemberId ?? "new"}-${deactivationIntent ? "deactivate" : "edit"}`} load={load} members={teamMembers} onClose={() => { setEditorOpen(false); setDeactivationIntent(false); }} onSave={saveRosterChange} />}
     </FixturePageFrame>
   );
 }
@@ -395,6 +422,36 @@ function operatingModelForLive(model: FixtureTeamMember["operatingModel"]): "eng
   if (model === "ENGAGEMENT_DEDICATED") return "engagement_dedicated";
   if (model === "TAX_TEAM") return "tax_team";
   return "engagement_agile";
+}
+
+function ClusterDefinitions({ definitions, members, canManage, onCreate, onDeactivate, onUpdate, prototypeMode }: { definitions: readonly ClusterDefinition[]; members: readonly FixtureTeamMember[]; canManage: boolean; onCreate: (definition: ClusterDefinition) => void; onDeactivate: (id: string) => string | undefined; onUpdate: (definition: ClusterDefinition) => string | undefined; prototypeMode: boolean }) {
+  const [editing, setEditing] = useState<ClusterDefinition | null>(null);
+  const [error, setError] = useState("");
+  function save() {
+    if (!editing?.name.trim()) return setError("Enter a cluster name.");
+    const name = editing.name.trim();
+    const generatedCode = editing.code || `CL-${name.toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "")}`;
+    if (definitions.some((cluster) => cluster.id !== editing.id && (cluster.name.toLowerCase() === name.toLowerCase() || cluster.code.toLowerCase() === generatedCode.toLowerCase()))) return setError("A cluster with this name already exists.");
+    const next = { ...editing, name, code: generatedCode };
+    if (definitions.some((cluster) => cluster.id === next.id)) {
+      const result = onUpdate(next);
+      if (result) return setError(result);
+    } else onCreate(next);
+    setEditing(null);
+    setError("");
+  }
+  return <section aria-labelledby="team-clusters-title" className="panel team-panel team-people-panel" id="team-clusters">
+    <SectionHeading title="Clusters" />
+    <p className="team-note">Controlled organization units used by people, client ownership, work scope, and access. {prototypeMode ? "Changes stay in this browser until the organization command is connected." : "These definitions come from active organization-unit records."}</p>
+    {canManage && <div className="team-admin-actions"><button className="button button--primary button--small" onClick={() => setEditing({ id: `local-cluster-${Date.now()}`, code: "", name: "", parent: "All A&T", active: true, leaderId: null, supervisorIds: [] })} type="button">Add cluster</button></div>}
+    {editing && <DetailDrawer eyebrow="Organization" onClose={() => { setEditing(null); setError(""); }} subtitle="Define the cluster, leadership, and reporting coverage." title={editing.id.startsWith("local-cluster-") ? "Add cluster" : "Edit cluster"}><div className="team-editor__grid"><label className="form-field"><span>Cluster name</span><input autoFocus onChange={(event) => setEditing((current) => current ? { ...current, name: event.target.value } : current)} value={editing.name} /></label><label className="form-field"><span>Cluster leader</span><select onChange={(event) => setEditing((current) => current ? { ...current, leaderId: event.target.value || null } : current)} value={editing.leaderId ?? ""}><option value="">Not assigned</option>{members.filter((member) => member.active && member.cluster === editing.name).map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select></label><label className="form-field"><span>Supervisors</span><select multiple onChange={(event) => setEditing((current) => current ? { ...current, supervisorIds: Array.from(event.target.selectedOptions, (option) => option.value) } : current)} value={editing.supervisorIds ?? []}>{members.filter((member) => member.active && member.cluster === editing.name && member.id !== editing.leaderId).map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}</select><small className="form-field__hint">Select the supervisors who receive direct reports in this cluster.</small></label><div className="team-editor__actions"><button className="button button--quiet button--small" onClick={() => setEditing(null)} type="button">Cancel</button><button className="button button--primary button--small" onClick={save} type="button">Save cluster</button></div>{error && <p className="team-editor__error" role="alert">{error}</p>}</div></DetailDrawer>}
+    <div aria-label="Cluster definitions" className="team-directory" role="region" tabIndex={0}>
+      <table><thead><tr><th scope="col">Cluster</th><th scope="col">Leader</th><th scope="col">Supervisors</th><th scope="col">People</th><th scope="col">Status</th></tr></thead><tbody>
+        {definitions.map((cluster) => { const clusterMembers = members.filter((member) => member.active && member.cluster === cluster.name); const leader = clusterMembers.find((member) => member.id === cluster.leaderId); const supervisors = clusterMembers.filter((member) => (cluster.supervisorIds ?? []).includes(member.id)); const directReports = clusterMembers.filter((member) => member.reportsToOrgNodeId === cluster.leaderId || (cluster.supervisorIds ?? []).includes(member.reportsToOrgNodeId ?? "")).length; return <tr key={cluster.id}><td>{canManage && cluster.active ? <button className="team-person-button" onClick={() => { setEditing(cluster); setError(""); }} type="button"><strong>{cluster.name}</strong><small>{directReports} direct report{directReports === 1 ? "" : "s"}</small></button> : <><strong>{cluster.name}</strong><small>{directReports} direct report{directReports === 1 ? "" : "s"}</small></>}</td><td>{leader?.name ?? "Not assigned"}</td><td>{supervisors.length ? supervisors.map((member) => member.name).join(", ") : "Not assigned"}</td><td>{clusterMembers.length}</td><td><span className={cluster.active ? "team-member-status" : "team-member-status team-member-status--inactive"}>{cluster.active ? "Active" : "Inactive"}</span>{canManage && cluster.active && <><button className="team-row-action" onClick={() => { setEditing(cluster); setError(""); }} type="button">Edit</button><button className="team-row-action" onClick={() => { const result = onDeactivate(cluster.id); if (result) setError(result); }} type="button">Deactivate</button></>}</td></tr>; })}
+      </tbody></table>
+      {definitions.filter((cluster) => cluster.active).length === 0 && <p className="team-note">No active clusters are configured. Organization setup is required before scoped access can be assigned.</p>}
+    </div>
+  </section>;
 }
 
 function makeLocalMemberId(name: string, members: readonly FixtureTeamMember[]): string {
@@ -422,10 +479,10 @@ function TeamRowActions({ member, canEdit, canDeactivate, canManageAssignments, 
   </div>;
 }
 
-function TeamRosterDrawer({ members, load, editingMemberId, deactivationIntent, onClose, onSave }: { members: readonly FixtureTeamMember[]; load: ReturnType<typeof deriveTeamMemberLoad>; editingMemberId: string | null; deactivationIntent: boolean; onClose: () => void; onSave: (draft: TeamRosterDraft) => string | undefined | Promise<string | undefined> }) {
+function TeamRosterDrawer({ clusterTowers, clusters, members, load, editingMemberId, deactivationIntent, onClose, onSave }: { clusterTowers: Readonly<Record<string, FixtureTeamMember["tower"]>>; clusters: readonly string[]; members: readonly FixtureTeamMember[]; load: ReturnType<typeof deriveTeamMemberLoad>; editingMemberId: string | null; deactivationIntent: boolean; onClose: () => void; onSave: (draft: TeamRosterDraft) => string | undefined | Promise<string | undefined> }) {
   const member = members.find((item) => item.id === editingMemberId);
   const isNew = !editingMemberId;
-  return <DetailDrawer eyebrow="People & structure" onClose={onClose} subtitle={isNew ? "Add a person to the canonical roster." : deactivationIntent ? "Record a departure without deleting the person or their history." : "Update structure without deleting the person or their history."} title={isNew ? "Add employee" : deactivationIntent ? `Deactivate ${member?.name ?? "team member"}` : `Edit ${member?.name ?? "team member"}`}><TeamRosterEditor deactivationIntent={deactivationIntent} editingMemberId={editingMemberId} initialActive={deactivationIntent ? false : undefined} load={load} members={members} onClose={onClose} onSave={onSave} /></DetailDrawer>;
+  return <DetailDrawer eyebrow="People & structure" onClose={onClose} subtitle={isNew ? "Add a person to the canonical roster." : deactivationIntent ? "Record a departure without deleting the person or their history." : "Update structure without deleting the person or their history."} title={isNew ? "Add employee" : deactivationIntent ? `Deactivate ${member?.name ?? "team member"}` : `Edit ${member?.name ?? "team member"}`}><TeamRosterEditor clusterTowers={clusterTowers} clusters={clusters} deactivationIntent={deactivationIntent} editingMemberId={editingMemberId} initialActive={deactivationIntent ? false : undefined} load={load} members={members} onClose={onClose} onSave={onSave} /></DetailDrawer>;
 }
 
 function TeamMemberDrawer({ member, clients, node, specialistCases, changeEvents, onClose, onEdit, onDeactivate, canEdit, canDeactivate, canManageAssignments, canViewChangeHistory, canViewOperationalDetail }: { member: ReturnType<typeof deriveTeamMemberLoad>[number]; clients: readonly FixtureClient[]; node?: OrgChartNode; specialistCases: typeof fixtureSpecialistCases; changeEvents: RosterEvent[]; onClose: () => void; onEdit: () => void; onDeactivate: () => void; canEdit: boolean; canDeactivate: boolean; canManageAssignments: boolean; canViewChangeHistory: boolean; canViewOperationalDetail: boolean }) {
@@ -434,7 +491,7 @@ function TeamMemberDrawer({ member, clients, node, specialistCases, changeEvents
     <div className="drawer-status-row"><StatusLabel detail={node?.statusReason} status={rag} />{!member.active && <span className="concept-tag">Inactive / history retained</span>}{node?.sourceStatus !== "confirmed" && <span className="concept-tag">Provisional structural role</span>}</div>
     <div className={`team-drawer-model team-drawer-model--${member.operatingModel.toLowerCase()}`}><span>Operating model</span><strong>{operatingModelLabels[member.operatingModel]}</strong></div>
     <div className="team-drawer-actions">{canEdit && <button className="button button--primary button--small" onClick={onEdit} type="button">Edit structure</button>}{canDeactivate && member.active && <button className="button button--danger-quiet button--small" onClick={onDeactivate} type="button">Deactivate / retain history</button>}{canManageAssignments ? <Link className="button button--quiet button--small" href="/app/clients">Manage assignments in Clients</Link> : <Link className="button button--quiet button--small" href="/app/clients">View assignments</Link>}{!canEdit && <span className="team-note">Read-only people access</span>}</div>
-    <dl className="detail-list"><div><dt>Career service level</dt><dd>{member.careerServiceLevel ?? "Not configured"}</dd></div><div><dt>Operating role</dt><dd>{member.role}</dd></div><div><dt>Reporting line</dt><dd>{member.reportsToOrgNodeId ? "Shown in hierarchy" : "Top-level / cross-functional"}</dd></div><div><dt>Effective from</dt><dd>{member.effectiveFrom ?? "Not recorded"}</dd></div>{canViewOperationalDetail ? member.portfolioApplicable ? <div><dt>Engagement clients</dt><dd>{member.assignedClients > 0 ? `${member.assignedClients} client${member.assignedClients === 1 ? "" : "s"} · weight ${member.clientWeight}` : "No current assignment"}</dd></div> : <div><dt>Engagement clients</dt><dd>Not applicable to this operating model</dd></div> : <div><dt>Operational detail</dt><dd>Scoped to assigned work for this access view</dd></div>}{canViewOperationalDetail && member.portfolioApplicable && member.activeWork > 0 && <div><dt>Active engagement work</dt><dd>{member.activeWork}</dd></div>}{canViewOperationalDetail && member.portfolioApplicable && member.coverageGaps > 0 && <div><dt>Coverage</dt><dd>{member.coverageGaps} gap{member.coverageGaps === 1 ? "" : "s"}</dd></div>}{canViewOperationalDetail && isTaxTeamOperatingModel(member.operatingModel) && <div><dt>Tax ad hoc workload</dt><dd>{member.activeSpecialistCases} active case{member.activeSpecialistCases === 1 ? "" : "s"} · {member.affectedTaxpayers} affected taxpayer{member.affectedTaxpayers === 1 ? "" : "s"}</dd></div>}</dl>
+    <dl className="detail-list"><div><dt>Career service level</dt><dd>{member.careerServiceLevel ?? "Not configured"}</dd></div><div><dt>Reporting line</dt><dd>{member.reportsToOrgNodeId ? "Shown in hierarchy" : "Top-level / cross-functional"}</dd></div><div><dt>Effective from</dt><dd>{member.effectiveFrom ?? "Not recorded"}</dd></div>{canViewOperationalDetail ? member.portfolioApplicable ? <div><dt>Engagement clients</dt><dd>{member.assignedClients > 0 ? `${member.assignedClients} client${member.assignedClients === 1 ? "" : "s"} · weight ${member.clientWeight}` : "No current assignment"}</dd></div> : <div><dt>Engagement clients</dt><dd>Not applicable to this operating model</dd></div> : <div><dt>Operational detail</dt><dd>Scoped to assigned work for this access view</dd></div>}{canViewOperationalDetail && member.portfolioApplicable && member.activeWork > 0 && <div><dt>Active engagement work</dt><dd>{member.activeWork}</dd></div>}{canViewOperationalDetail && member.portfolioApplicable && member.coverageGaps > 0 && <div><dt>Coverage</dt><dd>{member.coverageGaps} gap{member.coverageGaps === 1 ? "" : "s"}</dd></div>}{canViewOperationalDetail && isTaxTeamOperatingModel(member.operatingModel) && <div><dt>Tax ad hoc workload</dt><dd>{member.activeSpecialistCases} active case{member.activeSpecialistCases === 1 ? "" : "s"} · {member.affectedTaxpayers} affected taxpayer{member.affectedTaxpayers === 1 ? "" : "s"}</dd></div>}</dl>
     {canViewOperationalDetail && member.assignedClientIds.length > 0 && <div className="team-client-list">{member.assignedClientIds.map((clientId) => { const client = clients.find((item) => item.id === clientId); return client ? <Link href={`/app/clients/${client.id}`} key={client.id}><strong>{client.name}</strong><span>{client.assignment.cluster} · weight {client.entities[0]?.profile.weight ?? "—"}</span></Link> : null; })}</div>}
     {specialistCases.length > 0 && <div aria-label="Tax ad hoc assignments" className="team-case-list">{specialistCases.map((specialistCase) => { const client = fixtureClients.find((item) => item.id === specialistCase.taxpayerClientId); return <div className="team-case-list__item" key={specialistCase.id}><span className="team-case-list__type">{specialistCase.caseType}</span><strong>{client?.name ?? "Taxpayer context unavailable"}</strong><small>{specialistCase.status} · {specialistCase.deadlineLabel}</small></div>; })}<p className="team-note">A tax ad hoc does not change the taxpayer’s engagement owner, Preparer, Checker or Reviewer.</p></div>}
     {canViewChangeHistory && member.remarks && <section aria-labelledby="team-member-remarks-title" className="team-change-history"><p className="eyebrow" id="team-member-remarks-title">Remarks</p><p className="team-note">{member.remarks}</p></section>}

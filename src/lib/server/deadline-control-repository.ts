@@ -1,5 +1,6 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { earliestApplicableDeadline, type DeadlineControlRow, type DeadlinePublicationStatus } from "@/lib/domain/deadline-control";
+import { earliestApplicableDeadline, type DeadlineControlHistoryEvent, type DeadlineControlRow, type DeadlinePublicationStatus } from "@/lib/domain/deadline-control";
+import { calculateInternalTarget } from "@/lib/domain/tax-foundation";
 
 export type DeadlineControlEntryInput = {
   entryId: string | null;
@@ -35,11 +36,24 @@ function cadenceLabel(value: unknown): DeadlineControlRow["cadence"] {
   return "Monthly";
 }
 
+function historyEvents(value: unknown): readonly DeadlineControlHistoryEvent[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((event) => {
+    if (!event || typeof event !== "object") return [];
+    const candidate = event as Record<string, unknown>;
+    if (typeof candidate.id !== "string" || typeof candidate.label !== "string" || typeof candidate.detail !== "string" || typeof candidate.recordedAt !== "string") return [];
+    return [{ id: candidate.id, label: candidate.label, detail: candidate.detail, recordedAt: candidate.recordedAt }];
+  });
+}
+
 function mapRepositoryRow(value: unknown): DeadlineControlRow {
   const row = value as Record<string, unknown>;
   const sourceCode = typeof row.sourceCode === "string" ? row.sourceCode : "unresolved";
   const sourceLabel = typeof row.sourceLabel === "string" ? row.sourceLabel : sourceCode;
   const publicationStatus = (typeof row.publicationStatus === "string" ? row.publicationStatus : "unresolved") as DeadlinePublicationStatus;
+  const baseStatutoryDeadline = typeof row.baseStatutoryDeadline === "string" ? row.baseStatutoryDeadline : null;
+  const adjustedStatutoryDeadline = typeof row.adjustedStatutoryDeadline === "string" ? row.adjustedStatutoryDeadline : null;
+  const earliest = earliestApplicableDeadline([adjustedStatutoryDeadline, baseStatutoryDeadline]);
 
   return {
     id: String(row.id),
@@ -52,14 +66,15 @@ function mapRepositoryRow(value: unknown): DeadlineControlRow {
     component: "Return / filing",
     activityMonth: row.calendarMonth ? new Intl.DateTimeFormat("en-PH", { month: "long", timeZone: "Asia/Manila" }).format(new Date(`${String(row.calendarMonth)}T00:00:00Z`)) : "Unresolved",
     activityPeriod: String(row.periodOrEvent ?? "Unresolved"),
+    periodStartDate: typeof row.periodStart === "string" ? row.periodStart : row.calendarMonth ? String(row.calendarMonth) : "",
     taxablePeriod: String(row.periodOrEvent ?? "Unresolved"),
-    baseStatutoryDeadline: typeof row.baseStatutoryDeadline === "string" ? row.baseStatutoryDeadline : null,
-    adjustedStatutoryDeadline: typeof row.adjustedStatutoryDeadline === "string" ? row.adjustedStatutoryDeadline : null,
+    baseStatutoryDeadline,
+    adjustedStatutoryDeadline,
     officialPublishedDeadline: typeof row.officialPublishedDeadline === "string" ? row.officialPublishedDeadline : null,
     officialCalendarReference: typeof row.officialCalendarReference === "string" ? row.officialCalendarReference : null,
-    earliestApplicableDeadline: earliestApplicableDeadline([typeof row.adjustedStatutoryDeadline === "string" ? row.adjustedStatutoryDeadline : null]),
+    earliestApplicableDeadline: earliest,
     publishedOperationalDeadline: typeof row.publishedOperationalDeadline === "string" ? row.publishedOperationalDeadline : null,
-    tmfPackageTarget: typeof row.tmfPackageTarget === "string" ? row.tmfPackageTarget : null,
+    tmfPackageTarget: earliest ? calculateInternalTarget(earliest) : typeof row.tmfPackageTarget === "string" ? row.tmfPackageTarget : null,
     publicationStatus,
     verificationStatus: row.comparisonStatus === "match" ? "verified" : "unresolved",
     ruleVersionId: String(row.ruleVersionId ?? "unresolved"),
@@ -68,6 +83,7 @@ function mapRepositoryRow(value: unknown): DeadlineControlRow {
     adjustmentReason: String(row.adjustmentReason ?? ""),
     explanation: String(row.explanation ?? "No explanation recorded."),
     unresolvedReason: typeof row.unresolvedReason === "string" ? row.unresolvedReason : undefined,
+    history: historyEvents(row.history),
   };
 }
 
@@ -100,7 +116,7 @@ export async function saveDeadlineControlEntry(input: DeadlineControlEntryInput)
     p_period_end: input.periodEnd,
     p_base_statutory_deadline: input.baseStatutoryDeadline,
     p_adjusted_statutory_deadline: input.adjustedStatutoryDeadline,
-    p_tmf_package_target: input.tmfPackageTarget,
+    p_tmf_package_target: input.adjustedStatutoryDeadline ? calculateInternalTarget(input.adjustedStatutoryDeadline) : input.tmfPackageTarget,
     p_source_code: input.sourceCode,
     p_source_locator: input.sourceLocator || null,
     p_notes: input.notes || null,

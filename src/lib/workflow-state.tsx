@@ -4,16 +4,22 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { canAccessModule, cloneAccessMatrix, isAccessMatrix, moduleAccessForPersona, rbacPersonaDescription, rbacPersonaLabel, type AccessLevel, type AccessMatrix, type ModuleKey, type RbacPersona } from "@/lib/domain/access";
 import { fixtureClients, fixtureClock, fixtureOrgDirectoryMembers, fixtureWork, type FixtureClient, type FixturePaymentApplicability, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
+import { applySavedCalibrationToClient, prototypeClientProfileUpdatedEvent } from "@/lib/domain/client-profile-persistence";
 import { clientIsAssignedForRole, clientMatchesPerspective, staffMemberIdForPerspective } from "@/lib/domain/team";
 import { towerForScopeFilter } from "@/lib/domain/organization-catalog";
 import { portfolioClientToFixtureClient } from "@/lib/domain/live-client-adapter";
 import { getFixtureOperationalRecords, getLiveOperationalRecords, type FixtureOperationalRecord } from "@/lib/fixtures-read-model";
+import { isPrototypeEmptyMode } from "@/lib/supabase/config";
 export { workflowProcessRole, workflowProcessRoleLabel } from "@/lib/workflow-rules";
-import { actionForProcessStep, applyWorkflowStepState, isValidTaxDueAmount, nextApplicableProcessStep, paymentProcessStepIds, recordForWork, roleLabels, roleQuestions, stageForProcessStep, transition, workflowProcessRole, workflowTimestamp, workMatchesPerspective } from "@/lib/workflow-rules";
+import { actionForProcessStep, applyWorkflowStepState, currentProcessStepId, isValidTaxDueAmount, nextApplicableProcessStep, paymentProcessStepIds, recordForWork, roleLabels, roleQuestions, stageForProcessStep, transition, workflowProcessRole, workflowTimestamp, workMatchesPerspective } from "@/lib/workflow-rules";
 
 export type WorkflowRole = "PREPARER" | "CHECKER" | "REVIEWER";
 export type WorkflowProcessOwner = WorkflowRole | "TAX_CONTROL";
 export type WorkflowPerspective = RbacPersona;
+
+function prototypeClientRegistry() {
+  return fixtureClients.map(applySavedCalibrationToClient);
+}
 export type WorkflowDecision = "CERTIFY" | "APPROVE" | "RETURN";
 
 export function canUseElevatedOverride(perspective: WorkflowPerspective) {
@@ -238,30 +244,32 @@ const WorkflowContext = createContext<WorkflowContextValue | null>(null);
 
 export function WorkflowProvider({ children, prototypeMode = false }: { children: React.ReactNode; prototypeMode?: boolean }) {
   type LivePortfolioRecord = Parameters<typeof portfolioClientToFixtureClient>[0];
+  const emptyPrototypeMode = prototypeMode && isPrototypeEmptyMode();
   const [currentRole, setCurrentRole] = useState<WorkflowRole>("PREPARER");
   const [workPerspective, setWorkPerspective] = useState<WorkflowPerspective>("MASTER_ADMIN");
   const [accessMatrix, setAccessMatrix] = useState<AccessMatrix>(() => cloneAccessMatrix());
   const [accessPolicyHistory, setAccessPolicyHistory] = useState<AccessPolicyEvent[]>([]);
   const [accessPerspectiveHydrated, setAccessPerspectiveHydrated] = useState(() => !prototypeMode);
   const [accessMatrixHydrated, setAccessMatrixHydrated] = useState(() => !prototypeMode);
-  const [recordsHydrated, setRecordsHydrated] = useState(() => !prototypeMode);
-  const [workItemsHydrated, setWorkItemsHydrated] = useState(() => !prototypeMode);
+  const [recordsHydrated, setRecordsHydrated] = useState(() => !prototypeMode || emptyPrototypeMode);
+  const [workItemsHydrated, setWorkItemsHydrated] = useState(() => !prototypeMode || emptyPrototypeMode);
   const [records, setRecords] = useState<Record<string, StoredWorkflowRecord>>({});
   const [periodLocks, setPeriodLocks] = useState<Record<string, WorkflowPeriodLock>>({});
-  const [clientRegistry, setClientRegistry] = useState<FixtureClient[]>(() => prototypeMode ? [...fixtureClients] : []);
-  const [clientRegistryState, setClientRegistryState] = useState<"loading" | "connected" | "empty" | "error">(() => prototypeMode ? "connected" : "loading");
+  const [clientRegistry, setClientRegistry] = useState<FixtureClient[]>(() => prototypeMode && !emptyPrototypeMode ? [...fixtureClients] : []);
+  const [clientRegistryState, setClientRegistryState] = useState<"loading" | "connected" | "empty" | "error">(() => prototypeMode && !emptyPrototypeMode ? "connected" : prototypeMode ? "empty" : "loading");
   const clientRegistryRequest = useRef<Promise<readonly FixtureClient[]> | null>(null);
   const [operationalRecords, setOperationalRecords] = useState<FixtureOperationalRecord[]>([]);
   const [operationalRecordsHydrated, setOperationalRecordsHydrated] = useState(prototypeMode);
   // Production starts with an empty server-backed projection. The fixture
   // work register exists only for the explicit sanitized prototype mode.
-  const [workItems, setWorkItems] = useState<FixtureWorkItem[]>(() => prototypeMode ? prototypeWorkSeed() : []);
+  const [workItems, setWorkItems] = useState<FixtureWorkItem[]>(() => prototypeMode && !emptyPrototypeMode ? prototypeWorkSeed() : []);
 
   const refreshClientRegistry = useCallback(async () => {
     if (prototypeMode) {
-      setClientRegistry([...fixtureClients]);
-      setClientRegistryState("connected");
-      return fixtureClients;
+      const clients = prototypeClientRegistry();
+      setClientRegistry(clients);
+      setClientRegistryState(clients.length > 0 ? "connected" : "empty");
+      return clients;
     }
     if (clientRegistryRequest.current) return clientRegistryRequest.current;
 
@@ -291,7 +299,18 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   }, [refreshClientRegistry]);
 
   useEffect(() => {
-    if (!prototypeMode) return;
+    if (!prototypeMode || emptyPrototypeMode) return;
+    const syncPrototypeClient = () => { void refreshClientRegistry(); };
+    window.addEventListener(prototypeClientProfileUpdatedEvent, syncPrototypeClient);
+    window.addEventListener("storage", syncPrototypeClient);
+    return () => {
+      window.removeEventListener(prototypeClientProfileUpdatedEvent, syncPrototypeClient);
+      window.removeEventListener("storage", syncPrototypeClient);
+    };
+  }, [emptyPrototypeMode, prototypeMode, refreshClientRegistry]);
+
+  useEffect(() => {
+    if (!prototypeMode || emptyPrototypeMode) return;
     try {
       const storedPerspective = window.localStorage.getItem(accessPerspectiveStorageKey) as WorkflowPerspective | null;
       if (storedPerspective && ["PREPARER", "CHECKER", "REVIEWER", "TOWER_LEADER", "CLUSTER_LEADER", "TAX_CONTROL", "MASTER_ADMIN", "SYSTEM_ADMIN", "SUPER_ADMIN"].includes(storedPerspective)) {
@@ -304,7 +323,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
       // Keep the default HOD lens when browser storage is unavailable.
       setAccessPerspectiveHydrated(true);
     }
-  }, [prototypeMode]);
+  }, [emptyPrototypeMode, prototypeMode]);
 
   useEffect(() => {
     if (prototypeMode) return;
@@ -326,13 +345,13 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
 
   useEffect(() => {
     if (!accessPerspectiveHydrated) return;
-    if (!prototypeMode) return;
+    if (!prototypeMode || emptyPrototypeMode) return;
     try {
       window.localStorage.setItem(accessPerspectiveStorageKey, workPerspective);
     } catch {
       // The selector remains usable for the current session when storage is unavailable.
     }
-  }, [accessPerspectiveHydrated, prototypeMode, workPerspective]);
+  }, [accessPerspectiveHydrated, emptyPrototypeMode, prototypeMode, workPerspective]);
 
   useEffect(() => {
     if (!prototypeMode) return;
@@ -352,7 +371,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
       // Keep the approved role matrix when browser storage is unavailable or malformed.
     }
     setAccessMatrixHydrated(true);
-  }, [prototypeMode]);
+  }, [emptyPrototypeMode, prototypeMode]);
 
   useEffect(() => {
     if (!accessMatrixHydrated) return;
@@ -383,7 +402,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
 
   useEffect(() => {
     try {
-      if (!prototypeMode) return;
+      if (!prototypeMode || emptyPrototypeMode) return;
       const storedRecords = readPrototypeState("taxmonweb.prototype.workflow-records");
       const parsedRecords = storedRecords ? JSON.parse(storedRecords) as Record<string, StoredWorkflowRecord> : null;
       if (parsedRecords && typeof parsedRecords === "object" && !Array.isArray(parsedRecords)) {
@@ -421,35 +440,35 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     }
     setRecordsHydrated(true);
     setWorkItemsHydrated(true);
-  }, [prototypeMode]);
+  }, [emptyPrototypeMode, prototypeMode]);
 
   useEffect(() => {
     try {
-      if (prototypeMode && recordsHydrated) window.localStorage.setItem(periodLocksStorageKey, JSON.stringify(periodLocks));
+      if (prototypeMode && !emptyPrototypeMode && recordsHydrated) window.localStorage.setItem(periodLocksStorageKey, JSON.stringify(periodLocks));
     } catch {
       // Prototype period closes remain available for the current render when storage is unavailable.
     }
-  }, [periodLocks, prototypeMode, recordsHydrated]);
+  }, [emptyPrototypeMode, periodLocks, prototypeMode, recordsHydrated]);
 
   useEffect(() => {
     try {
-      if (prototypeMode && recordsHydrated) {
+      if (prototypeMode && !emptyPrototypeMode && recordsHydrated) {
         window.localStorage.setItem("taxmonweb.prototype.workflow-records", JSON.stringify(records));
       }
     } catch {
       // Workflow edits remain available for the current render when storage is unavailable.
     }
-  }, [prototypeMode, records, recordsHydrated]);
+  }, [emptyPrototypeMode, prototypeMode, records, recordsHydrated]);
 
   useEffect(() => {
     try {
-      if (prototypeMode && workItemsHydrated) {
+      if (prototypeMode && !emptyPrototypeMode && workItemsHydrated) {
         window.localStorage.setItem(workAdminStorageKey, JSON.stringify(workItems));
       }
     } catch {
       // Prototype edits remain available for the current render when storage is unavailable.
     }
-  }, [prototypeMode, workItems, workItemsHydrated]);
+  }, [emptyPrototypeMode, prototypeMode, workItems, workItemsHydrated]);
 
   const getRecord = useCallback((work: FixtureWorkItem): WorkflowRecord => {
     const storedRecord = recordForWork(work, records[work.id]);
@@ -725,7 +744,8 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (!prototypeMode) return executeLiveCommand(work, "process_status", { stepCode: stepId, status: status.toLowerCase(), evidenceReference, overrideReason, sharepointUrl, externalDate: completedOn, acknowledgedOn, validatedOn, attachmentName, ...(archiveFacts ? { note: JSON.stringify({ archiveFacts }) } : {}), ...(paymentAmountOverride !== undefined ? { paymentAmount: paymentAmountOverride } : {}), role: workflowProcessRole(stepId).toLowerCase() });
     const record = recordForWork(work, records[work.id]);
     if (periodLocks[workReturnLockKey(work)]?.locked || record.periodLock.locked) return { ok: false, error: "This return and compliance period are locked by Tax Team and cannot be edited." };
-    const currentStep = work.steps.find((step) => step.state === "current" || step.state === "unresolved" || step.state === "blocked");
+    const normalizedCurrentStepId = currentProcessStepId(work, record.processStatuses);
+    const currentStep = normalizedCurrentStepId ? work.steps.find((step) => step.id === normalizedCurrentStepId) : undefined;
     const step = work.steps.find((candidate) => candidate.id === stepId);
     const isGateStep = stepId === "prepare" || stepId === "check" || stepId === "review";
     const currentStepIndex = currentStep ? work.steps.findIndex((candidate) => candidate.id === currentStep.id) : -1;
@@ -734,6 +754,8 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     const noLaterCompletedStep = work.steps.slice(stepIndex + 1).every((candidate) => record.processStatuses[candidate.id] !== "DONE" && record.processStatuses[candidate.id] !== "NOT_APPLICABLE");
     const isUndo = status === "NOT_STARTED" && record.processStatuses[stepId] === "DONE" && (currentStepIndex === stepIndex + 1 || (currentStepIndex === -1 && noLaterCompletedStep));
     if (!step) return { ok: false, error: "That process step is not configured for this work item." };
+    if (isUndo && !canUseElevatedOverride(workPerspective)) return { ok: false, error: "A completed step can only be corrected by an authorized override." };
+    if (isUndo && !overrideReason.trim()) return { ok: false, error: "Record an override reason before correcting a completed step." };
     if (isGateStep && (status === "DONE" || status === "NOT_APPLICABLE")) return { ok: false, error: "Complete this step through its certification gate." };
     if (status === "NOT_APPLICABLE" && paymentProcessStepIds.has(stepId) && work.paymentApplicability === "UNRESOLVED") return { ok: false, error: "Resolve payment applicability before skipping the payment branch." };
     const paymentAmount = paymentAmountOverride !== undefined ? paymentAmountOverride : work.paymentAmount;

@@ -181,6 +181,8 @@ export type FixtureTaxProfile = {
   taxYearBasis?: "Calendar year" | "Fiscal year";
   fiscalYearEnd?: string;
   goLiveDate?: string;
+  /** First compliance period included in the engagement, stored as YYYY-MM. */
+  firstPeriodToFile?: string;
   permanentFileLink?: string;
   accountingSystem?: string;
   booksType?: string;

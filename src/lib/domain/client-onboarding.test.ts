@@ -31,6 +31,12 @@ describe("client onboarding readiness", () => {
     expect(readiness.identityGaps).toEqual([]);
   });
 
+  it("collects the source reference in the source step instead of blocking identity handoff", () => {
+    const readiness = getClientOnboardingReadiness({ ...completeIdentity, sourceReference: "" }, completeDocuments());
+    expect(readiness.identityGaps).toEqual([]);
+    expect(readiness.status).toBe("ready_for_human_review");
+  });
+
   it("keeps an incomplete registration pack visibly unresolved", () => {
     const readiness = getClientOnboardingReadiness(completeIdentity, []);
     expect(readiness.status).toBe("source_pack_incomplete");

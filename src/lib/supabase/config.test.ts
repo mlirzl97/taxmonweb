@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { isCalibrationOpenEditMode, isPrototypeDemoMode } from "./config";
+import { isCalibrationOpenEditMode, isPrototypeDemoMode, isPrototypeEmptyMode } from "./config";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -18,6 +18,12 @@ describe("prototype access safety", () => {
     expect(isCalibrationOpenEditMode()).toBe(true);
   });
 
+  it("allows an empty prototype only outside Vercel", () => {
+    vi.stubEnv("TAXMON_EMPTY_MODE", "true");
+    expect(isPrototypeEmptyMode()).toBe(true);
+    expect(isPrototypeDemoMode()).toBe(true);
+  });
+
   it("cannot be enabled on a production deployment", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("VERCEL_ENV", "production");
@@ -25,8 +31,10 @@ describe("prototype access safety", () => {
     vi.stubEnv("TAXMON_PUBLIC_SANITIZED_DEMO", "true");
     vi.stubEnv("TAXMON_DATA_MODE", "sanitized");
     vi.stubEnv("TAXMON_CALIBRATION_EDIT_MODE", "true");
+    vi.stubEnv("TAXMON_EMPTY_MODE", "true");
 
     expect(isPrototypeDemoMode()).toBe(false);
+    expect(isPrototypeEmptyMode()).toBe(false);
     expect(isCalibrationOpenEditMode()).toBe(false);
   });
 

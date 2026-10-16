@@ -341,6 +341,15 @@ begin
     if not has_elevated_authority and (work.preparer_user_id is null or work.preparer_user_id <> actor_id) then
       raise exception using errcode = '42501', message = 'The Preparer is accountable for this process step.';
     end if;
+    select status into current_status
+    from public.generated_work_process_steps
+    where generated_work_id = p_work_id and step_code = step_code_value;
+    if status_value = 'not_started' and current_status in ('complete', 'not_applicable') and not is_elevated then
+      raise exception using errcode = '42501', message = 'A completed process step requires an authorized override to correct.';
+    end if;
+    if status_value = 'not_started' and current_status in ('complete', 'not_applicable') and override_reason is null then
+      raise exception using errcode = '22023', message = 'An override reason is required to correct a completed process step.';
+    end if;
     if step_code_value = 'filing' and status_value in ('complete', 'in_progress') and not exists (select 1 from public.generated_work_process_steps where generated_work_id = p_work_id and step_code = 'client-approval' and status in ('complete', 'not_applicable')) then
       raise exception using errcode = '22023', message = 'Client approval must be complete before filing.';
     end if;

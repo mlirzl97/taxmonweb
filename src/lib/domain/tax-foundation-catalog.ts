@@ -63,6 +63,23 @@ export const regulatorySources: RegulatorySourceSeed[] = [
     note: 'Official BIR catalog endpoint; individual titles/revisions require row-level reconciliation.',
   },
   {
+    code: 'BIR-RMC-62-2023-EFPS-1604',
+    type: 'revenue_memorandum_circular',
+    title: 'RMC No. 62-2023 — eFPS availability of Forms 1604-C and 1604-E',
+    sourceUrl: 'https://bir-cdn.bir.gov.ph/local/pdf/RMC%20No.%2062-2023%20%281%29.pdf',
+    publicationDate: '2023-05-24',
+    verificationStatus: 'verified',
+    note: 'Official BIR issuance confirming the annual information-return forms and their eFPS availability.',
+  },
+  {
+    code: 'BIR-RMC-131-2020-CORPORATIONS',
+    type: 'revenue_memorandum_circular',
+    title: 'RMC No. 131-2020 — corporation registration and filing checklist',
+    sourceUrl: 'https://bir-cdn.bir.gov.ph/local/pdf/RMC%20No.%20131-2020%20Corporations.pdf',
+    verificationStatus: 'verified',
+    note: 'Official BIR reference for the corporate quarterly and annual income-tax filing cadence.',
+  },
+  {
     code: 'BIR-EFPS-JOBAIDS',
     type: 'bir_web_page',
     title: 'eFPS Jobaids',
@@ -220,9 +237,6 @@ export const taxTypes: TaxTypeSeed[] = [
 export const filingChannels: FilingChannelSeed[] = [
   { code: 'EFPS', label: 'eFPS', verificationStatus: 'verified', sourceCode: 'BIR-EFPS-JOBAIDS' },
   { code: 'EBIRFORMS', label: 'eBIRForms', verificationStatus: 'partially_verified', sourceCode: 'BIR-FORMS-CATALOG' },
-  { code: 'ESUBMISSION', label: 'eSubmission', verificationStatus: 'partially_verified', sourceCode: 'BIR-RMC-110-2025' },
-  { code: 'EAFS', label: 'eAFS', verificationStatus: 'partially_verified', sourceCode: 'BIR-RMC-110-2025' },
-  { code: 'UNRESOLVED', label: 'Unresolved channel', verificationStatus: 'unresolved', sourceCode: 'BIR-RMC-110-2025' },
 ];
 
 export const forms: FormSeed[] = [
@@ -233,6 +247,9 @@ export const forms: FormSeed[] = [
   { formNumber: '1600WP', title: 'Remittance Return of Percentage Tax on Winnings and Prizes Withheld', taxTypeCodes: ['WHT'], usualTiming: 'Event/month-specific · applicable calendar date', usualTimingStatus: 'partially_verified', usualTimingSourceCode: 'BIR-TAX-REMINDER-2026', verificationStatus: 'partially_verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form listing; exact applicability and deadline remain rule-governed.' },
   { formNumber: '1601-C', title: 'Monthly Remittance Return of Income Taxes Withheld on Compensation', taxTypeCodes: ['WHT'], usualTiming: 'Monthly · date varies by eFPS group/channel', usualTimingStatus: 'partially_verified', usualTimingSourceCode: 'BIR-TAX-REMINDER-2026', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; the published reminder shows channel/group-specific monthly dates.' },
   { formNumber: '1601-EQ', title: 'Quarterly Remittance Return of Creditable Income Taxes Withheld (Expanded)', taxTypeCodes: ['WHT'], usualTiming: 'Quarterly · applicable calendar date', usualTimingStatus: 'partially_verified', usualTimingSourceCode: 'BIR-TAX-REMINDER-2026', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form title; exact deadline depends on the governed requirement and applicable context.' },
+  { formNumber: '1604-C', title: 'Annual Information Return of Income Taxes Withheld on Compensation', taxTypeCodes: ['WHT'], usualTiming: 'Annual · January 31 of the following year', usualTimingStatus: 'verified', usualTimingSourceCode: 'BIR-RMC-62-2023-EFPS-1604', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Annual information return; distinct from the monthly compensation withholding return.' },
+  { formNumber: '1604-E', title: 'Annual Information Return of Creditable Income Taxes Withheld (Expanded) / Income Payments Exempt from Withholding Tax', taxTypeCodes: ['WHT'], usualTiming: 'Annual · applicable BIR calendar date', usualTimingStatus: 'partially_verified', usualTimingSourceCode: 'BIR-RMC-62-2023-EFPS-1604', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Annual information return; exact period/date remains governed by the released calendar and applicable rule.' },
+  { formNumber: '1702Q', title: 'Quarterly Income Tax Return for Corporations, Partnerships and Other Non-Individual Taxpayers', taxTypeCodes: ['CIT'], usualTiming: 'Quarterly · within 60 days after the close of each of the first three taxable quarters', usualTimingStatus: 'verified', usualTimingSourceCode: 'BIR-RMC-131-2020-CORPORATIONS', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Quarterly corporate income-tax return. It is separate from the annual 1702-RT return.' },
   { formNumber: '1702-RT', title: 'Annual Income Tax Return for Corporation, Partnership and Other Non-Individual Taxpayer Subject Only to Regular Income Tax Rate', taxTypeCodes: ['CIT'], usualTiming: 'Annual · 15th day of the 4th month after fiscal year-end', usualTimingStatus: 'verified', usualTimingSourceCode: 'BIR-EFPS-FAQ-DEADLINES', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'The eFPS reference states the annual deadline pattern; exact dates remain period and rule derived.' },
   { formNumber: '2550Q', title: 'Quarterly Value-Added Tax (VAT) Return', taxTypeCodes: ['VAT'], usualTiming: 'Quarterly · within 25 days after quarter-end', usualTimingStatus: 'verified', usualTimingSourceCode: 'BIR-EFPS-FAQ-DEADLINES', verificationStatus: 'verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'The eFPS reference states the quarterly deadline pattern; adjusted dates remain calendar-derived.' },
   { formNumber: '2551M', title: 'Monthly Percentage Tax Return', taxTypeCodes: ['PERCENTAGE_TAX'], usualTiming: 'Monthly · coverage/deadline requires verification', usualTimingStatus: 'unresolved', usualTimingSourceCode: 'BIR-TAX-REMINDER-2026', verificationStatus: 'partially_verified', sourceCode: 'BIR-FORMS-CATALOG', note: 'Official form listing; current requirement relationship and scope remain under reconciliation.' },

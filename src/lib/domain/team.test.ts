@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixtureClients, fixtureOrgChartNodes, fixtureOrgDirectoryMembers, fixtureSpecialistCases, fixtureWork } from "@/lib/fixtures";
 import { fixtureOrganizationScopes } from "./organization-catalog";
-import { buildEditableOrgChartNodes, buildOrgChartTree, careerServiceLevelLabels, clientMatchesPerspective, derivePersonalControlPulse, deriveTeamControlPulses, deriveTeamMemberLoad, deriveTeamSpecialistSummary, deriveTeamTowerSummary, hasCoverageGap, overlayOrgChartLoad, reportingLineMemberIds, reportingManagerLevelFor, teamMemberIdsForPerspective, workMatchesStaffPerspective } from "./team";
+import { buildEditableOrgChartNodes, buildOrgChartTree, careerServiceLevelLabels, careerServiceLevelTitle, clientMatchesPerspective, derivePersonalControlPulse, deriveTeamControlPulses, deriveTeamMemberLoad, deriveTeamSpecialistSummary, deriveTeamTowerSummary, hasCoverageGap, overlayOrgChartLoad, reportingLineMemberIds, reportingManagerLevelFor, teamMemberIdsForPerspective, workMatchesStaffPerspective } from "./team";
 
 describe("team and portfolio foundation", () => {
   it("derives a member's client load once per client, not once per assigned role", () => {
@@ -50,6 +50,8 @@ describe("team and portfolio foundation", () => {
   it("keeps career service level descriptive and builds the reporting tree", () => {
     expect(careerServiceLevelLabels["5.2"]).toBe("Senior Manager");
     expect(careerServiceLevelLabels["2.1"]).toBe("Associate");
+    expect(careerServiceLevelTitle("5.2")).toBe("Senior Manager · HOD");
+    expect(careerServiceLevelTitle("3.2")).toBe("Team Leader");
 
     const [root] = buildOrgChartTree(fixtureOrgChartNodes);
     expect(root).toMatchObject({ id: "org-liezl", careerServiceLevel: "5.2" });

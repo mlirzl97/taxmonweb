@@ -1,5 +1,11 @@
-import type { FixtureAssignment, FixtureRegistrationUnit, FixtureTaxProfile } from "@/lib/fixtures";
+import type { FixtureAssignment, FixtureClient, FixtureRegistrationUnit, FixtureTaxProfile } from "@/lib/fixtures";
 import { normalizeClientDeadlinePolicy } from "@/lib/domain/client-deadline-policy";
+
+export const prototypeClientProfileUpdatedEvent = "taxmonweb:client-profile-updated";
+
+export function calibrationProfileStorageKey(clientId: string) {
+  return `taxmonweb.calibration.tax-profile.${clientId}`;
+}
 
 export type TaxProfilePersistencePayload = {
   profile: Record<string, unknown>;
@@ -39,6 +45,7 @@ export function buildTaxProfilePersistencePayload(
       accountingSystem: profile.accountingSystem ?? "",
       invoicing: profile.invoicing ?? "",
       goLiveDate: profile.goLiveDate ?? "",
+      firstPeriodToFile: profile.firstPeriodToFile ?? "",
       permanentFileLink: profile.permanentFileLink ?? "",
       paymentRoute: profile.paymentRoute,
       clientWeight: String(profile.weight),
@@ -74,6 +81,17 @@ export type PersistedTaxProfileSnapshot = {
   validatedAt?: string | null;
   validatedBy?: string | null;
 };
+
+export function readCalibrationProfileSnapshot(clientId: string): PersistedTaxProfileSnapshot | null {
+  if (typeof window === "undefined") return null;
+  const stored = window.localStorage.getItem(calibrationProfileStorageKey(clientId));
+  if (!stored) return null;
+  try {
+    return JSON.parse(stored) as PersistedTaxProfileSnapshot;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The small Clients-list check represents a governed validation event, not
@@ -128,6 +146,17 @@ function weightLabel(weight: number): string {
   } as Record<number, string>)[weight] ?? "Not assessed";
 }
 
+/** Use the assigned operating weight when a source reconciliation weight is unavailable. */
+export function getClientDisplayWeight(profile: Pick<FixtureTaxProfile, "sourceFinalWeight" | "weight">): number | null {
+  if (profile.sourceFinalWeight !== null) return profile.sourceFinalWeight;
+  return profile.weight >= 1 && profile.weight <= 5 ? profile.weight : null;
+}
+
+export function getClientDisplayWeightLabel(profile: Pick<FixtureTaxProfile, "sourceFinalWeight" | "sourceWeightClassification" | "weightLabel" | "weight">): string {
+  if (getClientDisplayWeight(profile) === null) return "Not assessed";
+  return profile.sourceFinalWeight === null ? profile.weightLabel : profile.sourceWeightClassification ?? profile.weightLabel;
+}
+
 /** Apply a server-owned version to the current read model without making the
  * Tax Profile domain depend on the database's JSON shape. */
 export function applyPersistedTaxProfileSnapshot(
@@ -159,6 +188,7 @@ export function applyPersistedTaxProfileSnapshot(
     registeredReturnCodes: Array.isArray(source.registeredReturnCodes) ? source.registeredReturnCodes.filter((value): value is string => typeof value === "string") : baseProfile.registeredReturnCodes,
     taxYearBasis: source.taxYearBasis === "Calendar year" || source.taxYearBasis === "Fiscal year" ? source.taxYearBasis : baseProfile.taxYearBasis,
     goLiveDate: text(source.goLiveDate, baseProfile.goLiveDate ?? ""),
+    firstPeriodToFile: text(source.firstPeriodToFile, baseProfile.firstPeriodToFile ?? ""),
     permanentFileLink: text(source.permanentFileLink, baseProfile.permanentFileLink ?? ""),
     booksType: text(source.booksType, baseProfile.booksType ?? ""),
     accountingSystem: text(source.accountingSystem, baseProfile.accountingSystem ?? ""),
@@ -189,6 +219,23 @@ export function applyPersistedTaxProfileSnapshot(
     effectiveFrom: text(savedAssignment.effectiveFrom, snapshot.effectiveFrom),
   };
   return { profile, assignment };
+}
+
+/** Project a saved prototype profile into the shared client read model. */
+export function applyPersistedClientSnapshot(client: FixtureClient, snapshot: PersistedTaxProfileSnapshot): FixtureClient {
+  const entity = client.entities[0];
+  if (!entity) return client;
+  const restored = applyPersistedTaxProfileSnapshot(entity.profile, client.assignment, snapshot);
+  return {
+    ...client,
+    assignment: restored.assignment,
+    entities: client.entities.map((candidate, index) => index === 0 ? { ...candidate, profile: restored.profile } : candidate),
+  };
+}
+
+export function applySavedCalibrationToClient(client: FixtureClient): FixtureClient {
+  const snapshot = readCalibrationProfileSnapshot(client.id);
+  return snapshot ? applyPersistedClientSnapshot(client, snapshot) : client;
 }
 
 export function profileActivationGaps(profile: FixtureTaxProfile, assignment: FixtureAssignment, unit: FixtureRegistrationUnit): string[] {

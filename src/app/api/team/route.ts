@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { careerServiceLevelLabels, careerServiceLevelTitle, type CareerServiceLevel } from "@/lib/domain/team";
 import { listLiveTeamMembers, saveLiveTeamMemberProfile, type SaveLiveTeamMemberProfileInput } from "@/lib/server/team-repository";
 import { apiErrorResponse, inferredApiErrorStatus } from "@/lib/server/api-error";
 import { requireApiCapability } from "@/lib/server/api-authorization";
@@ -43,24 +44,26 @@ export async function POST(request: Request) {
 
   const payload = asRecord(input.payload);
   if (!payload) return NextResponse.json({ error: "Unsupported Team action." }, { status: 400 });
-  const requiredStrings = ["userId", "title", "organizationUnitId", "effectiveFrom", "careerServiceLevel", "operatingModel"];
+  const requiredStrings = ["userId", "organizationUnitId", "effectiveFrom", "careerServiceLevel", "operatingModel"];
   if (requiredStrings.some((key) => !isNonEmptyString(payload[key]))) {
-    return NextResponse.json({ error: "User, title, organizational unit, effective date, career level, and operating model are required." }, { status: 400 });
+    return NextResponse.json({ error: "User, organizational unit, effective date, career level, and operating model are required." }, { status: 400 });
   }
 
   const roleKey = payload.roleKey;
   const operatingModel = payload.operatingModel;
   if (!["system_admin", "leader", "team_member", "reviewer"].includes(String(roleKey))) return NextResponse.json({ error: "The selected operating role is not supported." }, { status: 400 });
   if (!["engagement_agile", "engagement_dedicated", "tax_team"].includes(String(operatingModel))) return NextResponse.json({ error: "The selected operating model is not supported." }, { status: 400 });
+  const careerServiceLevel = String(payload.careerServiceLevel) as CareerServiceLevel;
+  if (!(careerServiceLevel in careerServiceLevelLabels)) return NextResponse.json({ error: "The selected career level is not supported." }, { status: 400 });
 
   const command: SaveLiveTeamMemberProfileInput = {
     userId: String(payload.userId),
     roleKey: String(roleKey) as SaveLiveTeamMemberProfileInput["roleKey"],
-    title: String(payload.title).trim(),
+    title: careerServiceLevelTitle(careerServiceLevel),
     organizationUnitId: String(payload.organizationUnitId),
     effectiveFrom: String(payload.effectiveFrom),
     active: payload.active === true,
-    careerServiceLevel: String(payload.careerServiceLevel),
+    careerServiceLevel,
     reportsToUserId: typeof payload.reportsToUserId === "string" && payload.reportsToUserId ? payload.reportsToUserId : null,
     operatingModel: String(operatingModel) as SaveLiveTeamMemberProfileInput["operatingModel"],
     reportingLineExceptionReason: typeof payload.reportingLineExceptionReason === "string" && payload.reportingLineExceptionReason.trim() ? payload.reportingLineExceptionReason.trim() : null,

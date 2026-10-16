@@ -301,10 +301,10 @@ function PrototypeDataSettings() {
   const [feedback, setFeedback] = useState<string | null>(null);
 
   function removeSeedData() {
-    const confirmed = window.confirm("Remove browser-local prototype data and restore the sanitized baseline? This does not delete Supabase records or audit history.");
+    const confirmed = window.confirm("Remove browser-local prototype data and reload the current local baseline? This does not delete Supabase records or audit history.");
     if (!confirmed) return;
     const result = clearPrototypeSeedData(window.localStorage, window.sessionStorage);
-    setFeedback(`Removed ${result.local + result.session} local prototype record${result.local + result.session === 1 ? "" : "s"}. Reloading the sanitized baseline.`);
+    setFeedback(`Removed ${result.local + result.session} local prototype record${result.local + result.session === 1 ? "" : "s"}. Reloading the current local baseline.`);
     window.setTimeout(() => window.location.reload(), 250);
   }
 

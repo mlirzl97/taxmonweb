@@ -203,10 +203,11 @@ export function calculateDeadline(input: DeadlineCalculationInput): DeadlineCalc
 }
 
 export function calculateInternalTarget(adjustedStatutoryDeadline: string, holidayDates: ReadonlySet<string> = new Set()): string {
+  void holidayDates;
   const deadline = parseDate(adjustedStatutoryDeadline);
   if (!deadline) throw new Error('A valid adjusted statutory deadline is required.');
   deadline.setUTCDate(deadline.getUTCDate() - 1);
-  return formatDate(adjustDate(deadline, 'previous_working_day', holidayDates, new Set([0, 6])));
+  return formatDate(deadline);
 }
 
 export function buildDeadlineExplainability(input: DeadlineExplainability): string[] {

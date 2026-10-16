@@ -146,7 +146,7 @@ export function getFixtureOperationalRecord(workId: string, workItems: readonly 
 
 export function filterFixtureOperationalRecords(
   records: FixtureOperationalRecord[],
-  filters: { scope: OrganizationScopeFilter; due: DuePreset; status: "all" | FixtureStatus; search?: string; dateFilter?: string | null; today?: string },
+  filters: { scope: OrganizationScopeFilter; due: DuePreset; status: "all" | FixtureStatus; search?: string; dateFilter?: string | null; today?: string; owner?: string },
 ) {
   const query = filters.search?.trim().toLowerCase() ?? "";
   const today = filters.today ?? fixtureClock.today;
@@ -164,6 +164,7 @@ export function filterFixtureOperationalRecords(
     if (filters.due === "blocked" && !work.blocker) return false;
     if (filters.due === "statutory" && (item.statutoryDeadline === "Rule unresolved" || work.status !== "RED")) return false;
     if (filters.status !== "all" && work.status !== filters.status) return false;
+    if (filters.owner && filters.owner !== "all" && work.owner !== filters.owner) return false;
     if (query && ![item.client, item.returnLabel, item.period, work.title, work.owner, work.stage, work.registrationUnit].some((value) => value.toLowerCase().includes(query))) return false;
     return true;
   });

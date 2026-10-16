@@ -35,28 +35,27 @@ export const clientRegistrationStatusOptions = [
 
 export const clientAccountingSystemOptions = [
   "Not configured",
-  "Manual",
-  "CAS / CBA",
-  "ERP",
-  "Other approved system",
+  "TMF · Xero",
+  "TMF · QNE",
+  "Client · SAP",
+  "Client · NetSuite",
+  "Client · QuickBooks (legacy)",
   "Needs review",
 ] as const;
 
 export const clientBooksOptions = [
   "Not configured",
-  "Manual books",
-  "Loose-leaf books",
-  "Computerized books",
-  "Not applicable",
+  "Manual",
+  "Loose-leaf",
+  "CAS",
   "Needs review",
 ] as const;
 
 export const clientInvoicingOptions = [
   "Not configured",
-  "ATP receipts / invoices",
-  "BIR Printed Receipts / Invoices",
-  "CAS / POS / CRM",
-  "Not applicable",
+  "Manual",
+  "Loose-leaf",
+  "CAS",
   "Needs review",
 ] as const;
 
