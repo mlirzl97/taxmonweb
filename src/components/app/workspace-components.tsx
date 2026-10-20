@@ -606,7 +606,7 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
 
   async function confirmPendingProcessStatus() {
     if (!pendingProcessStatus) return;
-    if (pendingProcessStatus.stepId === "payment-confirmation" && pendingProcessStatus.status === "DONE" && effectiveWork.paymentApplicability === "REQUIRED" && !paymentAmountRecorded) {
+    if (pendingProcessStatus.stepId === "payment-confirmation" && pendingProcessStatus.status === "DONE" && effectiveWork.paymentApplicability !== "NOT_APPLICABLE" && !paymentAmountRecorded) {
       setPendingProcessStatus(null);
       setPaymentAmountDraft("");
       setProcessFeedback("");
