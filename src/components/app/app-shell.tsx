@@ -5,12 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { accessLevelLabel, canAccessModule, firstAllowedRoute, highestAccessLevel, moduleForRoute, personaNavigation, rbacPersonaLabel, rbacPersonaOptions, visibleModuleKeys } from "@/lib/domain/access";
+import { moduleForRoute } from "@/lib/domain/access";
 import type { FixtureWorkItem } from "@/lib/fixtures";
 import { primaryNavigation, restrictedNavigation } from "@/lib/navigation";
 import { trackModuleView, trackUsageInteractions } from "@/lib/usage-analytics";
 import { applyThemePreference, loadAccountPreferences, readUserPreferences, userPreferencesChangedEvent } from "@/lib/user-preferences";
-import { useWorkflow, workflowPerspectiveDescription, workflowPerspectiveLabel, workflowProcessRole, workflowProcessRoleLabel, WorkflowProvider, type WorkflowPerspective } from "@/lib/workflow-state";
+import { useWorkflow, workflowProcessRole, workflowProcessRoleLabel, WorkflowProvider } from "@/lib/workflow-state";
 import { AntMark } from "../brand/ant-mark";
 import { BrandLockup } from "../brand/brand-lockup";
 import { Icon } from "../ui/icon";
@@ -163,7 +163,6 @@ export function AppShell({ children, email, demoMode = false, persona }: AppShel
         <header className="app-main-header">
           <button aria-controls="application-sidebar" aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} aria-label={isMobile ? (mobileOpen ? "Close modules" : "Open modules") : (sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar")} className="sidebar-toggle" data-usage-action="toggle_navigation" onClick={toggleNavigation} ref={toggleRef} type="button"><Icon name="menu" size={19} /></button>
           <GlobalSearch />
-          {!demoMode && <WorkflowPerspectiveControl pathname={pathname} />}
           {demoMode ? <span className="prototype-mark">Prototype · Sanitized data</span> : <span className="app-main-header__user">{email}</span>}
           <ActionNotifications />
         </header>
@@ -219,49 +218,14 @@ function ActionNotifications() {
   </div>;
 }
 
-function WorkflowPerspectiveControl({ pathname }: { pathname: string }) {
-  const { accessMatrix, applyAccessPerspective, prototypeMode, workPerspective } = useWorkflow();
-  const router = useRouter();
-  const pendingTouched = useRef(false);
-  const [pendingPerspective, setPendingPerspective] = useState<WorkflowPerspective>(workPerspective);
-  const highest = highestAccessLevel(workPerspective, accessMatrix);
-  const visibleModules = visibleModuleKeys(workPerspective, accessMatrix).length;
-
-  useEffect(() => {
-    // Sync the pending control with persisted access state after hydration.
-    if (pendingTouched.current) return;
-    setPendingPerspective(workPerspective);
-  }, [workPerspective]);
-
-  if (prototypeMode) return <div aria-label="Access mode" className="app-main-header__lens"><span className="app-main-header__access-summary">Access</span><strong>Super Admin</strong><span className="app-main-header__access-summary">All modules</span></div>;
-
-  function applySelectedPerspective() {
-    pendingTouched.current = false;
-    applyAccessPerspective(pendingPerspective);
-    if (!personaNavigation(pendingPerspective, pathname, accessMatrix)) {
-      router.replace(firstAllowedRoute(pendingPerspective, accessMatrix));
-    }
-  }
-
-  return <div className="app-main-header__lens">
-    <label htmlFor="access-view-persona"><span>Access view</span></label>
-    <select aria-describedby="rbac-persona-description" aria-label="Access view persona" onChange={(event) => {
-      pendingTouched.current = true;
-      setPendingPerspective(event.target.value as WorkflowPerspective);
-    }} id="access-view-persona" title={workflowPerspectiveDescription(pendingPerspective)} value={pendingPerspective}>
-      {rbacPersonaOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
-    </select>
-    <button aria-label={`Apply ${rbacPersonaLabel(pendingPerspective)} access view`} className="button button--quiet button--small app-main-header__lens-action" disabled={pendingPerspective === workPerspective} onClick={applySelectedPerspective} type="button">Apply view</button>
-    <span aria-live="polite" className="app-main-header__access-summary">{accessLevelLabel(highest)} · {visibleModules} modules</span>
-    <span className="sr-only" id="rbac-persona-description">{workflowPerspectiveDescription(workPerspective)}</span>
-  </div>;
-}
-
 function PersonaNavigation({ pathname, firstNavLinkRef, onNavigate }: { pathname: string; firstNavLinkRef: React.RefObject<HTMLAnchorElement | null>; onNavigate: () => void }) {
-  const { accessMatrix, workPerspective } = useWorkflow();
+  const { canAccessModule: canOpenModule } = useWorkflow();
   const router = useRouter();
-  const navigation = canAccessModule(workPerspective, "tax_team", undefined, accessMatrix) ? [...primaryNavigation, ...restrictedNavigation] : primaryNavigation;
-  const visibleNavigation = navigation.filter((item) => personaNavigation(workPerspective, item.href, accessMatrix));
+  const navigation = canOpenModule("tax_team") ? [...primaryNavigation, ...restrictedNavigation] : primaryNavigation;
+  const visibleNavigation = navigation.filter((item) => {
+    const itemModule = moduleForRoute(item.href);
+    return !itemModule || canOpenModule(itemModule);
+  });
 
   return <>{visibleNavigation.map((item, index) => {
     const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -271,15 +235,24 @@ function PersonaNavigation({ pathname, firstNavLinkRef, onNavigate }: { pathname
 }
 
 function PersonaContent({ pathname, children }: { pathname: string; children: React.ReactNode }) {
-  const { accessMatrix, workPerspective } = useWorkflow();
+  const { canAccessModule: canOpenModule, prototypeMode, viewerStatus } = useWorkflow();
   const routeModule = moduleForRoute(pathname);
-  const canViewRoute = !routeModule || canAccessModule(workPerspective, routeModule, undefined, accessMatrix);
+  // The server already guarded this route; wait for the viewer before judging it client-side.
+  const canViewRoute = !routeModule || (!prototypeMode && viewerStatus !== "ready") || canOpenModule(routeModule);
+
+  if (!prototypeMode && viewerStatus === "error") {
+    return <section aria-labelledby="persona-access-title" className="persona-access-state" role="alert">
+      <p className="eyebrow">Access</p>
+      <h1 id="persona-access-title">Your access could not be loaded</h1>
+      <p>Refresh the page. If this keeps happening, ask an administrator to check your account setup.</p>
+    </section>;
+  }
 
   if (!canViewRoute) {
     return <section aria-labelledby="persona-access-title" className="persona-access-state">
-      <p className="eyebrow">Access view</p>
-      <h1 id="persona-access-title">This workspace is outside the {workflowPerspectiveLabel(workPerspective)} view</h1>
-      <p>{workflowPerspectiveDescription(workPerspective)} Choose an available workspace from the navigation, or switch the access view when acting under an authorized persona.</p>
+      <p className="eyebrow">Access</p>
+      <h1 id="persona-access-title">You don&apos;t have access to this workspace</h1>
+      <p>Choose an available workspace from the navigation, or ask an administrator if your role should include it.</p>
     </section>;
   }
 

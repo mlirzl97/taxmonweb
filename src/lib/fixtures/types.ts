@@ -102,6 +102,8 @@ export type FixtureWorkflowSnapshot = {
 
 export type FixtureWorkItem = {
   id: string;
+  /** Live only: the person accountable for each control role, by user id and display name. */
+  assignedUsers?: Partial<Record<"PREPARER" | "CHECKER" | "REVIEWER", { id: string; name: string }>>;
   /** Governed requirement context used to join live work to released calendar entries. */
   requirementId?: string;
   requirementVersionId?: string;

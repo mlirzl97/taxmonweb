@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { TeamRosterEditor, type TeamRosterDraft } from "@/components/app/team-roster-editor";
 import { OrgChart } from "@/components/app/org-chart";
 import { DetailDrawer, FixturePageFrame, SectionHeading, StatusLabel } from "@/components/app/workspace-components";
-import { accessLevelLabel, accessLevelRank, canPerformTeamAction } from "@/lib/domain/access";
+import { accessLevelLabel, accessLevelRank } from "@/lib/domain/access";
 import { buildEditableOrgChartNodes, deriveTeamMemberLoad, deriveTeamSpecialistSummary, deriveTeamTowerSummary, deriveTeamWorkloadGuide, hasCoverageGap, isEngagementOperatingModel, isTaxTeamOperatingModel, operatingModelLabels, overlayOrgChartLoad, reportingManagerLevelFor, summarizeTeamWorkloadGuide, teamMemberIdsForPerspective, type OrgChartNode } from "@/lib/domain/team";
 import { fixtureOrganizationScopes } from "@/lib/domain/organization-catalog";
 import { fixtureClients, fixtureOrgChartNodes, fixtureOrgDirectoryMembers, fixtureSpecialistCases, fixtureWork, type FixtureClient, type FixtureTeamMember } from "@/lib/fixtures";
@@ -37,13 +37,13 @@ function isTeamView(value: string | null): value is TeamView {
 }
 
 export default function TeamPage() {
-  const { accessMatrix, canAccessModule, getModuleAccess, isClientVisible, isWorkVisible, prototypeMode, workPerspective } = useWorkflow();
+  const { canAccessModule, canPerformTeam, getModuleAccess, isClientVisible, isWorkVisible, prototypeMode, workPerspective } = useWorkflow();
   const canViewClients = canAccessModule("clients");
   const teamAccessLevel = getModuleAccess("team");
-  const canAddPerson = prototypeMode && canPerformTeamAction(workPerspective, "ADD_PERSON", accessMatrix);
-  const canEditStructure = canPerformTeamAction(workPerspective, "EDIT_STRUCTURE", accessMatrix);
-  const canDeactivatePerson = canPerformTeamAction(workPerspective, "DEACTIVATE_PERSON", accessMatrix);
-  const canManageAssignments = canPerformTeamAction(workPerspective, "MANAGE_ASSIGNMENTS", accessMatrix) && canViewClients;
+  const canAddPerson = prototypeMode && canPerformTeam("ADD_PERSON");
+  const canEditStructure = canPerformTeam("EDIT_STRUCTURE");
+  const canDeactivatePerson = canPerformTeam("DEACTIVATE_PERSON");
+  const canManageAssignments = canPerformTeam("MANAGE_ASSIGNMENTS") && canViewClients;
   const [liveCapabilities, setLiveCapabilities] = useState<readonly string[]>([]);
   const [assignmentLens, setAssignmentLens] = useState<AssignmentLens>("all");
   const [activeView, setActiveView] = useState<TeamView>("overview");
@@ -64,7 +64,7 @@ export default function TeamPage() {
   const roleScopedPerspective = workPerspective === "PREPARER" || workPerspective === "CHECKER" || workPerspective === "REVIEWER";
   const canViewLeadershipRollups = ["TOWER_LEADER", "CLUSTER_LEADER", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective) && accessLevelRank(teamAccessLevel) >= accessLevelRank("ACT");
   const canViewSpecialistCases = ["TAX_CONTROL", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective) && canAccessModule("tax_team");
-  const canViewChangeHistory = canPerformTeamAction(workPerspective, "EDIT_STRUCTURE", accessMatrix);
+  const canViewChangeHistory = canPerformTeam("EDIT_STRUCTURE");
   const canManageStaffAccounts = !prototypeMode && liveCapabilities.includes("AdministerUsers");
 
   useEffect(() => {

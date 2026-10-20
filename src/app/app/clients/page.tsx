@@ -7,7 +7,6 @@ import { getClientContractSummary, type FixtureClient, type FixtureSourceWeightC
 import { clientDeadlineModes, clientDeadlinePolicyErrors, type ClientDeadlineMode, type ClientDeadlinePolicy } from "@/lib/domain/client-deadline-policy";
 import { clientOnboardingContractTypes, clientOnboardingDocumentStatusOptions, clientOnboardingDocumentTypes, clientOnboardingMainContractTypes, formatTin, generatedEntityReference, getClientOnboardingReadiness, normalizeTinDigits, type ClientOnboardingContract, type ClientOnboardingDocument, type ClientOnboardingIdentity } from "@/lib/domain/client-onboarding";
 import { prototypeClientSetupUpdatedEvent, submittedSetupToFixtureClient } from "@/lib/domain/submitted-client-projection";
-import { canManageModuleRecords } from "@/lib/domain/access";
 import { applySavedCalibrationToClient, getClientDisplayWeight, getClientDisplayWeightLabel, hasCredibleTaxProfileValidation, prototypeClientProfileUpdatedEvent } from "@/lib/domain/client-profile-persistence";
 import { fixtureScopeFilterOptions } from "@/lib/domain/organization-catalog";
 import type { BirOfficeOption } from "@/lib/domain/bir-office-reference";
@@ -77,9 +76,9 @@ const fiscalYearDays = Array.from({ length: 31 }, (_, index) => String(index + 1
 const fiscalYearDayCount: Record<string, number> = { April: 30, June: 30, September: 30, November: 30, February: 29 };
 
 export default function ClientsPage() {
-  const { accessMatrix, clientRegistry, clientRegistryState, isClientVisible, prototypeMode, refreshClientRegistry, workPerspective } = useWorkflow();
+  const { canManageModule, clientRegistry, clientRegistryState, isClientVisible, prototypeMode, refreshClientRegistry } = useWorkflow();
   // System Admin is technical administration only; client records stay with Tax Control/HOD or the explicit Super Admin authority.
-  const canManageClientRecords = canManageModuleRecords(workPerspective, "clients", accessMatrix);
+  const canManageClientRecords = canManageModule("clients");
   const [view, setView] = useState<ClientsView>("registry");
   const [hydrated, setHydrated] = useState(false);
   const [scope, setScope] = useState<ScopeFilter>(() => readEnumParam("scope", "all", scopeFilterOptions));

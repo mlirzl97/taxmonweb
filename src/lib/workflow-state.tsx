@@ -2,7 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
-import { canAccessModule, cloneAccessMatrix, isAccessMatrix, moduleAccessForPersona, rbacPersonaDescription, rbacPersonaLabel, type AccessLevel, type AccessMatrix, type ModuleKey, type RbacPersona } from "@/lib/domain/access";
+import { canAccessModule, canManageModuleRecords, canPerformTeamAction, cloneAccessMatrix, isAccessMatrix, moduleAccessForPersona, rbacPersonaDescription, rbacPersonaLabel, type AccessLevel, type AccessMatrix, type ModuleKey, type RbacPersona, type TeamAction } from "@/lib/domain/access";
+import { canViewerActOnWorkRole, canViewerManageModule, canViewerOverride, canViewerPerformTeamAction, viewerModuleLevel, type ViewerAccess } from "@/lib/domain/viewer-access";
 import { fixtureClients, fixtureClock, fixtureOrgDirectoryMembers, fixtureWork, type FixtureClient, type FixtureDataReadiness, type FixturePaymentApplicability, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
 import { applySavedCalibrationToClient, prototypeClientProfileUpdatedEvent } from "@/lib/domain/client-profile-persistence";
 import { clientIsAssignedForRole, clientMatchesPerspective, staffMemberIdForPerspective } from "@/lib/domain/team";
@@ -211,6 +212,13 @@ type WorkflowContextValue = {
   accessPolicyHistory: readonly AccessPolicyEvent[];
   commitAccessMatrix: (matrix: AccessMatrix, reason: string) => { ok: boolean; error?: string };
   canManageAccess: boolean;
+  /** Live only: the signed-in person's effective access; null while loading or in the prototype. */
+  viewer: ViewerAccess | null;
+  viewerStatus: "loading" | "ready" | "error";
+  canManageModule: (module: ModuleKey) => boolean;
+  canPerformTeam: (action: TeamAction) => boolean;
+  /** Whether the actor may act outside an assigned role (always reason-required and audited). */
+  canOverride: boolean;
   getModuleAccess: (module: ModuleKey) => AccessLevel;
   canAccessModule: (module: ModuleKey, allowed?: readonly AccessLevel[]) => boolean;
   getRecord: (work: FixtureWorkItem) => WorkflowRecord;
@@ -248,6 +256,8 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   const emptyPrototypeMode = prototypeMode && isPrototypeEmptyMode();
   const [currentRole, setCurrentRole] = useState<WorkflowRole>("PREPARER");
   const [workPerspective, setWorkPerspective] = useState<WorkflowPerspective>(prototypeMode ? "SUPER_ADMIN" : "MASTER_ADMIN");
+  const [viewer, setViewer] = useState<ViewerAccess | null>(null);
+  const [viewerStatus, setViewerStatus] = useState<"loading" | "ready" | "error">(() => prototypeMode ? "ready" : "loading");
   const [accessMatrix, setAccessMatrix] = useState<AccessMatrix>(() => cloneAccessMatrix());
   const [accessPolicyHistory, setAccessPolicyHistory] = useState<AccessPolicyEvent[]>([]);
   const [accessPerspectiveHydrated, setAccessPerspectiveHydrated] = useState(() => !prototypeMode);
@@ -325,6 +335,26 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
       setAccessPerspectiveHydrated(true);
     }
   }, [emptyPrototypeMode, prototypeMode]);
+
+  useEffect(() => {
+    if (prototypeMode) return;
+    let cancelled = false;
+    type EffectiveAssignment = { capability_key: string; effective_from: string | null; effective_to: string | null };
+    fetch("/api/me/access", { headers: { accept: "application/json" }, cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Unable to load your access.");
+        const payload = await response.json() as { userId: string; capabilities?: EffectiveAssignment[] };
+        const today = new Date().toISOString().slice(0, 10);
+        const effective = (payload.capabilities ?? []).filter((assignment) => (!assignment.effective_from || assignment.effective_from <= today) && (!assignment.effective_to || assignment.effective_to >= today));
+        if (!cancelled) {
+          setViewer({ userId: payload.userId, capabilities: new Set(effective.map((assignment) => assignment.capability_key)) });
+          setViewerStatus("ready");
+        }
+      })
+      // Without a resolved identity the UI offers no actions; the server still decides every request.
+      .catch(() => { if (!cancelled) { setViewer(null); setViewerStatus("error"); } });
+    return () => { cancelled = true; };
+  }, [prototypeMode]);
 
   useEffect(() => {
     if (prototypeMode) return;
@@ -652,6 +682,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     return clientMatchesPerspective(client, workPerspective, fixtureOrgDirectoryMembers);
   }, [workPerspective]);
   const canOperateWorkForRole = useCallback((work: FixtureWorkItem, role: WorkflowRole | "TAX_CONTROL") => {
+    if (!prototypeMode) return viewer ? canViewerActOnWorkRole(viewer, Object.fromEntries(Object.entries(work.assignedUsers ?? {}).map(([assignedRole, user]) => [assignedRole, user?.id])), role) : false;
     if (!workMatchesPerspective(work, workPerspective)) return false;
     if (workPerspective === "MASTER_ADMIN" || workPerspective === "SUPER_ADMIN") return true;
     if (role === "TAX_CONTROL") return workPerspective === "TAX_CONTROL";
@@ -660,16 +691,18 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     const memberId = staffMemberIdForPerspective(workPerspective);
     const member = fixtureOrgDirectoryMembers.find((candidate) => candidate.id === memberId);
     return Boolean(client && member && (role === "PREPARER" || role === "CHECKER" || role === "REVIEWER") && clientIsAssignedForRole(client, member, role));
-  }, [workPerspective]);
+  }, [prototypeMode, viewer, workPerspective]);
   const canActOnWorkflow = useCallback((role: WorkflowRole, work?: FixtureWorkItem) => {
+    if (!work && !prototypeMode) return Boolean(viewer && (canViewerOverride(viewer) || viewer.capabilities.has("ExecuteGeneratedComplianceWork")));
     if (!work) return workPerspective === "MASTER_ADMIN" || workPerspective === "SUPER_ADMIN" || workPerspective === role;
     return canOperateWorkForRole(work, role);
-  }, [canOperateWorkForRole, workPerspective]);
+  }, [canOperateWorkForRole, prototypeMode, viewer, workPerspective]);
   const canActOnProcessStep = useCallback((stepId: string, work?: FixtureWorkItem) => {
     const owner = workflowProcessRole(stepId);
+    if (!work && !prototypeMode) return Boolean(viewer && (canViewerOverride(viewer) || viewer.capabilities.has("ExecuteGeneratedComplianceWork")));
     if (!work) return workPerspective === "MASTER_ADMIN" || workPerspective === "SUPER_ADMIN" || (owner === "TAX_CONTROL" ? workPerspective === "TAX_CONTROL" : workPerspective === owner);
     return canOperateWorkForRole(work, owner);
-  }, [canOperateWorkForRole, workPerspective]);
+  }, [canOperateWorkForRole, prototypeMode, viewer, workPerspective]);
   const getProcessStatus = useCallback((work: FixtureWorkItem, stepId: string): WorkflowProcessStatus => getRecord(work).processStatuses[stepId] ?? "NOT_STARTED", [getRecord]);
   const getLatestProcessUpdate = useCallback((work: FixtureWorkItem, stepId: string) => [...getRecord(work).processHistory].reverse().find((update) => update.stepId === stepId), [getRecord]);
 
@@ -885,9 +918,24 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     return { ok: true, nextGate: result.currentGate };
   }, [canActOnWorkflow, executeLiveCommand, periodLocks, prototypeMode, records, workPerspective]);
 
-  const getModuleAccess = useCallback((module: ModuleKey) => moduleAccessForPersona(workPerspective, module, accessMatrix), [accessMatrix, workPerspective]);
-  const canAccess = useCallback((module: ModuleKey, allowed: readonly AccessLevel[] = ["VIEW", "ACT", "APPROVE", "GOVERN", "OVERRIDE"]) => canAccessModule(workPerspective, module, allowed, accessMatrix), [accessMatrix, workPerspective]);
-  const value = useMemo<WorkflowContextValue>(() => ({ prototypeMode, clientRegistry, clientRegistryState, refreshClientRegistry, currentRole, setCurrentRole, workPerspective, setWorkPerspective, applyAccessPerspective, accessMatrix, accessPolicyHistory, commitAccessMatrix, canManageAccess, getModuleAccess, canAccessModule: canAccess, getRecord, getEffectiveWork, getWorkItems, getOperationalRecords, operationalToday: prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10), createWorkItem, createLiveWorkItem, updateWorkItem, deleteWorkItem, isWorkVisible, isClientVisible, canActOnWorkflow, canActOnProcessStep, getProcessStatus, getLatestProcessUpdate, setDataReadiness, setPaymentApplicability, setPaymentAmount, getPeriodLock, setPeriodLock, setProcessStatus, getChecklistAnswers, setChecklistAnswer, getQuestions: (role: WorkflowRole) => roleQuestions[role], submitDecision, recordFinalCertification }), [accessMatrix, accessPolicyHistory, applyAccessPerspective, canAccess, canActOnProcessStep, canActOnWorkflow, canManageAccess, clientRegistry, clientRegistryState, commitAccessMatrix, createLiveWorkItem, createWorkItem, currentRole, deleteWorkItem, getChecklistAnswers, getEffectiveWork, getLatestProcessUpdate, getModuleAccess, getOperationalRecords, getPeriodLock, getProcessStatus, getRecord, getWorkItems, isClientVisible, isWorkVisible, prototypeMode, recordFinalCertification, refreshClientRegistry, setDataReadiness, setChecklistAnswer, setPaymentApplicability, setPaymentAmount, setPeriodLock, setProcessStatus, submitDecision, updateWorkItem, workPerspective]);
+  const getModuleAccess = useCallback((module: ModuleKey): AccessLevel => {
+    if (!prototypeMode) return viewer ? viewerModuleLevel(viewer, module) : "NONE";
+    return moduleAccessForPersona(workPerspective, module, accessMatrix);
+  }, [accessMatrix, prototypeMode, viewer, workPerspective]);
+  const canAccess = useCallback((module: ModuleKey, allowed: readonly AccessLevel[] = ["VIEW", "ACT", "APPROVE", "GOVERN", "OVERRIDE"]) => {
+    if (!prototypeMode) return allowed.includes(getModuleAccess(module));
+    return canAccessModule(workPerspective, module, allowed, accessMatrix);
+  }, [accessMatrix, getModuleAccess, prototypeMode, workPerspective]);
+  const canManageModule = useCallback((module: ModuleKey) => {
+    if (!prototypeMode) return viewer ? canViewerManageModule(viewer, module) : false;
+    return canManageModuleRecords(workPerspective, module, accessMatrix);
+  }, [accessMatrix, prototypeMode, viewer, workPerspective]);
+  const canPerformTeam = useCallback((action: TeamAction) => {
+    if (!prototypeMode) return viewer ? canViewerPerformTeamAction(viewer, action) : false;
+    return canPerformTeamAction(workPerspective, action, accessMatrix);
+  }, [accessMatrix, prototypeMode, viewer, workPerspective]);
+  const canOverride = prototypeMode ? canUseElevatedOverride(workPerspective) : Boolean(viewer && canViewerOverride(viewer));
+  const value = useMemo<WorkflowContextValue>(() => ({ prototypeMode, clientRegistry, clientRegistryState, refreshClientRegistry, currentRole, setCurrentRole, workPerspective, setWorkPerspective, applyAccessPerspective, accessMatrix, accessPolicyHistory, commitAccessMatrix, canManageAccess, viewer, viewerStatus, canManageModule, canPerformTeam, canOverride, getModuleAccess, canAccessModule: canAccess, getRecord, getEffectiveWork, getWorkItems, getOperationalRecords, operationalToday: prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10), createWorkItem, createLiveWorkItem, updateWorkItem, deleteWorkItem, isWorkVisible, isClientVisible, canActOnWorkflow, canActOnProcessStep, getProcessStatus, getLatestProcessUpdate, setDataReadiness, setPaymentApplicability, setPaymentAmount, getPeriodLock, setPeriodLock, setProcessStatus, getChecklistAnswers, setChecklistAnswer, getQuestions: (role: WorkflowRole) => roleQuestions[role], submitDecision, recordFinalCertification }), [accessMatrix, accessPolicyHistory, applyAccessPerspective, canAccess, canManageModule, canOverride, canPerformTeam, viewer, viewerStatus, canActOnProcessStep, canActOnWorkflow, canManageAccess, clientRegistry, clientRegistryState, commitAccessMatrix, createLiveWorkItem, createWorkItem, currentRole, deleteWorkItem, getChecklistAnswers, getEffectiveWork, getLatestProcessUpdate, getModuleAccess, getOperationalRecords, getPeriodLock, getProcessStatus, getRecord, getWorkItems, isClientVisible, isWorkVisible, prototypeMode, recordFinalCertification, refreshClientRegistry, setDataReadiness, setChecklistAnswer, setPaymentApplicability, setPaymentAmount, setPeriodLock, setProcessStatus, submitDecision, updateWorkItem, workPerspective]);
   return <WorkflowContext.Provider value={value}>{children}</WorkflowContext.Provider>;
 }
 

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 
 import { fixtureChangeRequestForms, fixtureClients, fixtureClock, type FixtureAuditExposure, type FixtureChangeRequestForm, type FixtureChangeRequestFormStatus, type FixtureChangeRequestFormType, type FixtureClient } from "@/lib/fixtures";
 import { additionalEngagementToFixtureChangeRequestForm, portfolioClientToFixtureClient } from "@/lib/domain/live-client-adapter";
-import { canManageModuleRecords } from "@/lib/domain/access";
 import { useWorkflow } from "@/lib/workflow-state";
 import { DetailDrawer, SectionHeading, isInScope, scopeOptions, type ScopeFilter } from "./workspace-components";
 
@@ -25,7 +24,7 @@ function emptyDraft(clientId = fixtureClients[0]?.id ?? ""): CrfDraft {
 }
 
 export function CrfRepositoryView() {
-  const { accessMatrix, isClientVisible, prototypeMode, workPerspective } = useWorkflow();
+  const { canManageModule, isClientVisible, prototypeMode } = useWorkflow();
   const [records, setRecords] = useState<FixtureChangeRequestForm[]>(() => prototypeMode ? initialCrfRecords() : []);
   const [liveClients, setLiveClients] = useState<FixtureClient[]>([]);
   const [query, setQuery] = useState("");
@@ -38,7 +37,7 @@ export function CrfRepositoryView() {
   const [editing, setEditing] = useState<FixtureChangeRequestForm | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const canManage = prototypeMode && canManageModuleRecords(workPerspective, "clients", accessMatrix);
+  const canManage = prototypeMode && canManageModule("clients");
 
   useEffect(() => {
     if (prototypeMode) return;

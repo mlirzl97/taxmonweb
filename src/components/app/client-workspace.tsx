@@ -23,7 +23,7 @@ import { fixtureClock } from "@/lib/fixtures";
 import { formatTin, normalizeTinDigits } from "@/lib/domain/client-onboarding";
 import type { BirOfficeOption } from "@/lib/domain/bir-office-reference";
 import { applyPersistedTaxProfileSnapshot, buildTaxProfilePersistencePayload, calibrationProfileStorageKey, getClientDisplayWeight, getClientDisplayWeightLabel, hasCredibleTaxProfileValidation, profileActivationGaps, prototypeClientProfileUpdatedEvent, reconcileClientAttention, type PersistedTaxProfileSnapshot } from "@/lib/domain/client-profile-persistence";
-import { canManageModuleRecords, hasCalibrationEditAccess } from "@/lib/domain/access";
+import { hasCalibrationEditAccess } from "@/lib/domain/access";
 import { governedReturnForms } from "@/lib/domain/client-return-selection";
 import { useWorkflow } from "@/lib/workflow-state";
 import { birOfficeCode, birOfficeLabel, clientAccountingSystemOptions, clientAuthorityOptions, clientBooksOptions, clientEfpsGroupOptions, clientEntityTypeOptions, clientFilingChannelOptions, clientInvoicingOptions, clientRegistrationStatusOptions, controlledOptionLabel, controlledOptionValue, isIsoDate, prototypeBirOfficeOptions } from "@/lib/domain/client-profile-options";
@@ -52,7 +52,7 @@ function clientTabFromHash(hash: string): ClientWorkspaceTab {
 }
 
 export function ClientWorkspace({ client, demoMode = false, calibrationEditMode: calibrationEditModeEnabled = false, serverAuthorized = false }: { client: FixtureClient; demoMode?: boolean; calibrationEditMode?: boolean; serverAuthorized?: boolean }) {
-  const { accessMatrix, isClientVisible, prototypeMode, workPerspective } = useWorkflow();
+  const { canManageModule, isClientVisible, prototypeMode } = useWorkflow();
   const [drawer, setDrawer] = useState<DrawerMode>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [profile, setProfile] = useState<FixtureTaxProfile>(() => cloneProfile(client.entities[0].profile));
@@ -113,7 +113,7 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
   }, [client.id, demoMode]);
 
   const calibrationEditMode = hasCalibrationEditAccess(demoMode, calibrationEditModeEnabled);
-  const canEditProfile = canManageModuleRecords(workPerspective, "clients", accessMatrix);
+  const canEditProfile = canManageModule("clients");
   const editDisabled = !canEditProfile || (!calibrationEditMode && persistenceState !== "available");
   const editTitle = !canEditProfile ? "This access view is read-only for taxpayer setup" : persistenceState === "checking" ? "Checking the saved profile" : persistenceState === "unavailable" ? "This profile is read-only until it is linked to the client repository" : undefined;
 
