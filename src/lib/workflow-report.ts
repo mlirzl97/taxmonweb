@@ -32,6 +32,13 @@ export type WorkflowReportInput = {
   paymentAmountLabel: string | null;
 };
 
+export function workflowClientApprovalDates(record: Pick<WorkflowRecord, "processHistory">) {
+  const updates = record.processHistory.filter((update) => update.stepId === "client-approval");
+  const sent = [...updates].reverse().find((update) => update.status === "IN_PROGRESS");
+  const approved = [...updates].reverse().find((update) => update.status === "DONE");
+  return { sentToClientOn: sent?.recordedAt, clientApprovedOn: approved?.completedOn };
+}
+
 function wrapText(value: string, font: PDFFont, size: number, maxWidth: number) {
   const words = value.split(/\s+/);
   const lines: string[] = [];
@@ -56,6 +63,12 @@ function dateLabel(value: string | undefined) {
   if (!value) return "Not recorded";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   return new Intl.DateTimeFormat("en-PH", { day: "numeric", month: "long", timeZone: "Asia/Manila", year: "numeric" }).format(new Date(`${value}T00:00:00+08:00`));
+}
+
+function eventDateLabel(value: string | undefined) {
+  if (!value) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return dateLabel(value.slice(0, 10));
+  return value.split(" at ")[0];
 }
 
 function archiveAttachmentName(value: string | undefined) {
@@ -125,6 +138,7 @@ export async function generateWorkflowReportPdf(input: WorkflowReportInput) {
   const paymentConfirmation = stage("payment-confirmation");
   const esubmission = stage("esubmission");
   const archive = stage("evidence");
+  const clientApprovalDates = workflowClientApprovalDates(input.record);
   const paymentNotApplicable = input.work.paymentApplicability === "NOT_APPLICABLE";
   const roleCertifications = input.record.attempts.map((attempt) => `${input.roles.find((role) => role.label.toUpperCase() === attempt.role)?.label ?? attempt.role} · ${attempt.actor} · ${attempt.recordedAt}`);
   if (input.record.finalCertification) roleCertifications.push(`Final closure · ${input.record.finalCertification.actor} · ${input.record.finalCertification.recordedAt}`);
@@ -139,7 +153,9 @@ export async function generateWorkflowReportPdf(input: WorkflowReportInput) {
   drawWrapped(`TIN ${valueOr(input.tinLabel, "TIN not recorded")} · RDO / LTS ${valueOr(input.rdoLabel, "RDO / LTS not recorded")}`, contentX, 7, regular, muted, contentWidth, 9);
   cursorY -= 5;
 
-  section("Filing, payment, and eSubmission");
+  section("Client approval, filing, payment, and eSubmission");
+  keyValue("Date sent to client", valueOr(eventDateLabel(clientApprovalDates.sentToClientOn)));
+  keyValue("Date client approved", valueOr(eventDateLabel(clientApprovalDates.clientApprovedOn)));
   keyValue("Filing date", valueOr(filing?.completedOn ? dateLabel(filing.completedOn) : undefined));
   keyValue("Filing reference number", valueOr(filing?.evidenceReference));
   keyValue("Amount to pay", paymentNotApplicable ? "Not applicable" : valueOr(input.paymentAmountLabel));
@@ -150,15 +166,15 @@ export async function generateWorkflowReportPdf(input: WorkflowReportInput) {
   keyValue("eSubmission submission date", valueOr(esubmission?.completedOn ? dateLabel(esubmission.completedOn) : undefined));
   keyValue("Date acknowledged by BIR", valueOr(esubmission?.acknowledgedOn ? dateLabel(esubmission.acknowledgedOn) : undefined));
   keyValue("Date validated by BIR", valueOr(esubmission?.validatedOn ? dateLabel(esubmission.validatedOn) : undefined));
-  keyValue("Attachment / evidence name", valueOr(archive?.attachmentName ?? archiveAttachmentName(archive?.evidenceReference)));
+  keyValue("Attachment / evidence name", valueOr(esubmission?.attachmentName ?? archive?.attachmentName ?? archiveAttachmentName(archive?.evidenceReference)));
 
   section("End-to-end journey");
   page.drawText("STEP", { x: contentX + 4, y: cursorY - 7, size: 6.4, font: bold, color: muted });
   page.drawText("STATUS", { x: contentX + 250, y: cursorY - 7, size: 6.4, font: bold, color: muted });
-  page.drawText("RECORDED BY · DATE", { x: contentX + 345, y: cursorY - 7, size: 6.4, font: bold, color: muted });
+  page.drawText("ACTOR · EVIDENCE DATE", { x: contentX + 345, y: cursorY - 7, size: 6.4, font: bold, color: muted });
   cursorY -= 13;
   for (const item of input.stages) {
-    const whoWhen = item.recordedBy || item.recordedAt ? `${valueOr(item.recordedBy)} · ${dateLabel(item.recordedAt)}` : "Not separately recorded";
+    const whoWhen = item.recordedBy || item.completedOn || item.recordedAt ? `${valueOr(item.recordedBy)} · ${dateLabel(item.completedOn ?? item.recordedAt)}` : "Not separately recorded";
     journeyRow(`${item.bundle} · ${item.label}`, item.status, whoWhen);
   }
 

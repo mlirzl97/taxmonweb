@@ -42,6 +42,19 @@ test("action bell surfaces pending work from the current Work register", async (
   await expect(page.getByRole("link", { name: "View Work", exact: true })).toHaveAttribute("href", "/app/work?queue=all");
 });
 
+test("action bell can clear the current tray without changing work", async ({ page }) => {
+  await page.goto("/app/work?queue=all");
+  const bell = page.locator(".app-main-header__notifications-trigger");
+  await bell.click({ force: true });
+  const tray = page.getByRole("region", { name: "My actions" });
+  await expect(tray).toBeVisible();
+  await expect(tray.getByRole("button", { name: "Clear pending actions" })).toBeEnabled();
+  await tray.getByRole("button", { name: "Clear pending actions" }).click();
+  await expect(tray.getByText("No pending actions.", { exact: true })).toBeVisible();
+  await expect(bell).toHaveAttribute("aria-label", "No pending actions");
+  await expect(page.getByRole("link", { name: "View Work", exact: true })).toHaveAttribute("href", "/app/work?queue=all");
+});
+
 test("modules menu exposes settings and notification tray dismisses outside", async ({ page }) => {
   await page.goto("/app/control-tower");
   await expect(page.locator(".app-main-header").getByRole("link", { name: "TaxMonWeb Control Tower", exact: true })).toHaveCount(0);

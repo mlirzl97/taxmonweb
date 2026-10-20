@@ -185,6 +185,7 @@ function SidebarProfile({ avatarUrl, email, persona }: { avatarUrl: string | nul
 function ActionNotifications() {
   const { canActOnProcessStep, getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode } = useWorkflow();
   const [open, setOpen] = useState(false);
+  const [dismissedActionKeys, setDismissedActionKeys] = useState<Set<string>>(new Set());
   const notificationsRef = useRef<HTMLDivElement>(null);
   const actions = useMemo(() => {
     const pending: ActionNotification[] = [];
@@ -195,8 +196,9 @@ function ActionNotifications() {
     }
     return pending;
   }, [canActOnProcessStep, getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode]);
-  const notificationLabel = actions.length === 0 ? "No pending actions" : `${actions.length} pending actions`;
-  const attentionLabel = actions.length === 1 ? "1 item requires action" : `${actions.length} items require action`;
+  const visibleActions = useMemo(() => actions.filter(({ work, step }) => !dismissedActionKeys.has(`${work.id}:${step.id}`)), [actions, dismissedActionKeys]);
+  const notificationLabel = visibleActions.length === 0 ? "No pending actions" : `${visibleActions.length} pending actions`;
+  const attentionLabel = visibleActions.length === 1 ? "1 item requires action" : `${visibleActions.length} items require action`;
 
   useEffect(() => {
     if (!open) return;
@@ -208,10 +210,10 @@ function ActionNotifications() {
   }, [open]);
 
   return <div className={`app-main-header__notifications${open ? " app-main-header__notifications--open" : ""}`} ref={notificationsRef}>
-    <button aria-expanded={open} aria-haspopup="dialog" aria-label={notificationLabel} className="app-main-header__notifications-trigger" onClick={() => setOpen((current) => !current)} title="Notifications" type="button"><Icon name="bell" size={17} />{actions.length > 0 && <span aria-hidden="true" className="app-main-header__notifications-count">{actions.length > 9 ? "9+" : actions.length}</span>}</button>
+    <button aria-expanded={open} aria-haspopup="dialog" aria-label={notificationLabel} className="app-main-header__notifications-trigger" onClick={() => setOpen((current) => !current)} title="Notifications" type="button"><Icon name="bell" size={17} />{visibleActions.length > 0 && <span aria-hidden="true" className="app-main-header__notifications-count">{visibleActions.length > 9 ? "9+" : visibleActions.length}</span>}</button>
     {open && <div aria-label="My actions" className="app-main-header__notifications-panel" id="my-actions-panel" role="region">
-      <div className="app-main-header__notifications-heading"><strong>My actions</strong><small>{actions.length > 0 ? attentionLabel : "No pending actions"}</small></div>
-      {actions.length > 0 ? <div className="app-main-header__notifications-list">{actions.slice(0, 5).map(({ work, step, owner }) => <Link href={`/app/work/${work.id}`} key={work.id}><strong>{step.label}</strong><span>{work.client} · {work.title}</span><small>{work.period} · {owner}</small></Link>)}</div> : <p className="app-main-header__notifications-empty">No pending actions.</p>}
+      <div className="app-main-header__notifications-heading"><div><strong>My actions</strong><small>{visibleActions.length > 0 ? attentionLabel : "No pending actions"}</small></div><button aria-label="Clear pending actions" className="app-main-header__notifications-clear" disabled={visibleActions.length === 0} onClick={() => setDismissedActionKeys((current) => new Set([...current, ...actions.map(({ work, step }) => `${work.id}:${step.id}`)]))} type="button">Clear</button></div>
+      {visibleActions.length > 0 ? <div className="app-main-header__notifications-list">{visibleActions.slice(0, 5).map(({ work, step, owner }) => <Link href={`/app/work/${work.id}`} key={work.id}><strong>{step.label}</strong><span>{work.client} · {work.title}</span><small>{work.period} · {owner}</small></Link>)}</div> : <p className="app-main-header__notifications-empty">No pending actions.</p>}
       <Link className="app-main-header__notifications-footer" href="/app/work?queue=all">View Work</Link>
     </div>}
   </div>;

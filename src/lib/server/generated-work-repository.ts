@@ -248,6 +248,7 @@ export async function listLiveGeneratedWork(): Promise<LiveGeneratedWork[]> {
         step_code,
         evidence_kind,
         reference,
+        amount,
         external_date,
         acknowledged_on,
         validated_on,

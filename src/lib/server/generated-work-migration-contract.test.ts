@@ -11,6 +11,7 @@ const periodCloseMigration = readFileSync(join(process.cwd(), "supabase/migratio
 const periodCloseHardeningMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261118010000_harden_period_close_triggers.sql"), "utf8");
 const returnPeriodLockMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261119000000_return_period_locks.sql"), "utf8");
 const checkerPaymentAmountMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261205000000_checker_payment_amount_control.sql"), "utf8");
+const clientApprovalDateMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261206000000_require_client_approval_date.sql"), "utf8");
 const manualWorkMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261123000000_enable_authorized_manual_work.sql"), "utf8");
 const manualWorkAssignmentMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261124000000_manual_work_uses_effective_unit_assignments.sql"), "utf8");
 const triggerHardeningMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261203000000_harden_internal_trigger_functions.sql"), "utf8");
@@ -76,6 +77,12 @@ describe("generated work persistence contract", () => {
     expect(checkerPaymentAmountMigration).toContain("record_payment_amount_evidence");
     expect(checkerPaymentAmountMigration).toContain("Amount to pay captured at Checker certification");
     expect(checkerPaymentAmountMigration).toContain("Record the amount to pay before certifying the Checker gate.");
+  });
+
+  it("requires a recorded client approval date before completion", () => {
+    expect(clientApprovalDateMigration).toContain("step_code_value = ''client-approval''");
+    expect(clientApprovalDateMigration).toContain("externalDate");
+    expect(clientApprovalDateMigration).toContain("Record the client approval date before completing client approval.");
   });
 
   it("keeps manual Work creation behind approved masters and an audited command", () => {
