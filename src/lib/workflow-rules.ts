@@ -63,6 +63,10 @@ export function workflowProcessRoleLabel(role: WorkflowProcessOwner): string {
 
 export const paymentProcessStepIds = new Set(["payment", "payment-client-approval", "payment-confirmation"]);
 
+export function autoStartProcessStep(stepId: string) {
+  return stepId !== "evidence";
+}
+
 export function orderedProcessStatuses(work: FixtureWorkItem, statuses: Readonly<Record<string, WorkflowProcessStatus>>): Record<string, WorkflowProcessStatus> {
   const projected: Record<string, WorkflowProcessStatus> = {};
   if (work.blocker?.category === "CLIENT DATA") {
@@ -91,7 +95,7 @@ export function initialProcessStatuses(work: FixtureWorkItem): Readonly<Record<s
 
   const orderedStatuses = orderedProcessStatuses(work, statuses);
   const firstIncomplete = work.steps.find((step) => orderedStatuses[step.id] === "NOT_STARTED");
-  if (firstIncomplete) orderedStatuses[firstIncomplete.id] = "IN_PROGRESS";
+  if (firstIncomplete && autoStartProcessStep(firstIncomplete.id)) orderedStatuses[firstIncomplete.id] = "IN_PROGRESS";
   return orderedStatuses;
 }
 
@@ -118,8 +122,13 @@ export function recordForWork(work: FixtureWorkItem, stored?: StoredWorkflowReco
     if (!recordedStepIds.has(step.id)) processStatuses[step.id] = seed.processStatuses[step.id];
   }
   const orderedStatuses = orderedProcessStatuses(work, processStatuses);
+  const latestEvidenceIndex = processHistory.map((update) => update.stepId).lastIndexOf("evidence");
+  const latestEvidenceUpdate = latestEvidenceIndex >= 0 ? processHistory[latestEvidenceIndex] : undefined;
+  const previousUpdate = latestEvidenceIndex > 0 ? processHistory[latestEvidenceIndex - 1] : undefined;
+  // Repair the prototype's former automatic Archiving transition without deleting its history.
+  if (processStatuses.evidence === "IN_PROGRESS" && (!latestEvidenceUpdate || (latestEvidenceUpdate.status === "IN_PROGRESS" && !latestEvidenceUpdate.evidenceReference && previousUpdate && previousUpdate.recordedAt === latestEvidenceUpdate.recordedAt && previousUpdate.actor === latestEvidenceUpdate.actor && (previousUpdate.status === "DONE" || previousUpdate.status === "NOT_APPLICABLE")))) orderedStatuses.evidence = "NOT_STARTED";
   const firstIncomplete = work.steps.find((step) => orderedStatuses[step.id] === "NOT_STARTED");
-  if (firstIncomplete && !Object.values(orderedStatuses).some((status) => status === "IN_PROGRESS" || status === "NEEDS_ATTENTION")) orderedStatuses[firstIncomplete.id] = "IN_PROGRESS";
+  if (firstIncomplete && autoStartProcessStep(firstIncomplete.id) && !Object.values(orderedStatuses).some((status) => status === "IN_PROGRESS" || status === "NEEDS_ATTENTION")) orderedStatuses[firstIncomplete.id] = "IN_PROGRESS";
   return { ...persisted, processStatuses: orderedStatuses, processHistory, checklistAnswers: persisted.checklistAnswers ?? seed.checklistAnswers, checklistHistory: persisted.checklistHistory ?? seed.checklistHistory, changeHistory: persisted.changeHistory ?? seed.changeHistory, periodLock: persisted.periodLock ?? seed.periodLock, periodLockHistory: persisted.periodLockHistory ?? seed.periodLockHistory };
 }
 

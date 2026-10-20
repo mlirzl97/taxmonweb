@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixtureWork } from "./fixtures";
-import { applyWorkflowStepState, currentProcessStepId, initialProcessStatuses, isValidTaxDueAmount, orderedProcessStatuses, roleQuestions, transition, workflowProcessRole } from "./workflow-rules";
+import { applyWorkflowStepState, autoStartProcessStep, currentProcessStepId, initialProcessStatuses, isValidTaxDueAmount, orderedProcessStatuses, recordForWork, roleQuestions, transition, workflowProcessRole } from "./workflow-rules";
 
 describe("workflow rules", () => {
   it("keeps the ordered process state deterministic", () => {
@@ -52,6 +52,32 @@ describe("workflow rules", () => {
     expect(statuses["payment"]).toBe("IN_PROGRESS");
     expect(statuses.esubmission).toBe("NOT_STARTED");
     expect(statuses.evidence).toBe("NOT_STARTED");
+  });
+
+  it("keeps archiving not started until it is explicitly started", () => {
+    expect(autoStartProcessStep("evidence")).toBe(false);
+    expect(autoStartProcessStep("esubmission")).toBe(true);
+  });
+
+  it("repairs a legacy automatic Archiving transition without removing history", () => {
+    const work = fixtureWork.find((item) => item.id === "work-02")!;
+    const base = initialProcessStatuses(work);
+    const stored = {
+      ...recordForWork(work),
+      processStatuses: { ...base, evidence: "IN_PROGRESS" as const },
+      processHistory: [
+        { id: "previous", stepId: "esubmission", status: "DONE" as const, actor: "Super Admin", recordedAt: "5 October 2026 at 9:00 AM (Asia/Manila)", evidenceReference: "eSubmission complete" },
+        { id: "legacy-auto-start", stepId: "evidence", status: "IN_PROGRESS" as const, actor: "Super Admin", recordedAt: "5 October 2026 at 9:00 AM (Asia/Manila)" },
+      ],
+    };
+
+    const repaired = recordForWork(work, stored);
+
+    expect(repaired.processStatuses.evidence).toBe("NOT_STARTED");
+    expect(repaired.processHistory).toHaveLength(2);
+
+    const olderStored = { ...stored, processHistory: [] };
+    expect(recordForWork(work, olderStored).processStatuses.evidence).toBe("NOT_STARTED");
   });
 
   it("derives the active step from normalized statuses when fixture markers are stale", () => {

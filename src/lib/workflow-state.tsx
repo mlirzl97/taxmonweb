@@ -11,7 +11,7 @@ import { portfolioClientToFixtureClient } from "@/lib/domain/live-client-adapter
 import { getFixtureOperationalRecords, getLiveOperationalRecords, type FixtureOperationalRecord } from "@/lib/fixtures-read-model";
 import { isPrototypeEmptyMode } from "@/lib/supabase/config";
 export { workflowProcessRole, workflowProcessRoleLabel } from "@/lib/workflow-rules";
-import { actionForProcessStep, applyWorkflowStepState, currentProcessStepId, isValidTaxDueAmount, nextApplicableProcessStep, paymentProcessStepIds, recordForWork, roleLabels, roleQuestions, stageForProcessStep, transition, workflowProcessRole, workflowTimestamp, workMatchesPerspective } from "@/lib/workflow-rules";
+import { actionForProcessStep, applyWorkflowStepState, autoStartProcessStep, currentProcessStepId, isValidTaxDueAmount, nextApplicableProcessStep, paymentProcessStepIds, recordForWork, roleLabels, roleQuestions, stageForProcessStep, transition, workflowProcessRole, workflowTimestamp, workMatchesPerspective } from "@/lib/workflow-rules";
 
 export type WorkflowRole = "PREPARER" | "CHECKER" | "REVIEWER";
 export type WorkflowProcessOwner = WorkflowRole | "TAX_CONTROL";
@@ -766,7 +766,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (!isCurrentStep && !isUndo) return { ok: false, error: "Only the current process step can be edited." };
     if (!canActOnProcessStep(stepId, work)) return { ok: false, error: `The ${rbacPersonaLabel(workPerspective)} access view cannot update this process step for this taxpayer.` };
     const nextStep = status === "DONE" || status === "NOT_APPLICABLE" ? nextApplicableProcessStep(work, stepIndex, record.processStatuses) : undefined;
-    const nextStatus = nextStep && record.processStatuses[nextStep.id] !== "DONE" && record.processStatuses[nextStep.id] !== "NOT_APPLICABLE" ? "IN_PROGRESS" : undefined;
+    const nextStatus = nextStep && autoStartProcessStep(nextStep.id) && record.processStatuses[nextStep.id] !== "DONE" && record.processStatuses[nextStep.id] !== "NOT_APPLICABLE" ? "IN_PROGRESS" : undefined;
     const actor = rbacPersonaLabel(workPerspective);
     const recordedAt = workflowTimestamp(record.processHistory.length);
     const elevatedOverride = canUseElevatedOverride(workPerspective) && Boolean(overrideReason.trim());
@@ -780,7 +780,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
       processStatuses[currentStep.id] = "NOT_STARTED";
       updates.push({ id: `${work.id}-process-${record.processHistory.length + updates.length + 1}`, stepId: currentStep.id, status: "NOT_STARTED", actor, recordedAt, elevatedOverride, overrideReason: elevatedOverride ? overrideReason.trim() : undefined });
     }
-    const activeStepId = nextStep && nextStatus ? nextStep.id : status === "NOT_STARTED" ? stepId : stepId;
+    const activeStepId = nextStep?.id ?? stepId;
     const patch: WorkflowPatch = {
       ...record.patch,
       ...(status === "DONE" || status === "NOT_APPLICABLE" ? { blocker: null } : {}),
