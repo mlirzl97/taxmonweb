@@ -10,7 +10,7 @@ begin
     join pg_namespace n on n.oid = p.pronamespace
    where n.nspname = 'public'
      and p.proname = 'record_generated_work_command'
-     and pg_get_function_identity_arguments(p.oid) = 'uuid, text, jsonb, text';
+     and p.oid = 'public.record_generated_work_command(uuid, text, jsonb, text)'::regprocedure;
 
   if definition is null then
     raise exception 'record_generated_work_command is not available to refresh';

@@ -295,7 +295,8 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   }, [prototypeMode]);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { void refreshClientRegistry(); }, 0);
+    // Failures already surface as clientRegistryState "error"; don't leave the rejection unhandled.
+    const timer = window.setTimeout(() => { refreshClientRegistry().catch(() => undefined); }, 0);
     return () => window.clearTimeout(timer);
   }, [refreshClientRegistry]);
 

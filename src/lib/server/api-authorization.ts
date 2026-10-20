@@ -28,8 +28,10 @@ export async function requireApiCapability(capabilities: readonly string[]) {
   const { client, user } = await getAuthenticatedRequestContext();
   if (!user || !client) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const allowed = await Promise.any(capabilities.map((capability) => hasCapability(client, capability))).catch(() => false);
-  if (!allowed) return NextResponse.json({ error: "You are not authorized for this operation." }, { status: 403 });
+  // hasCapability resolves (never rejects), so every lookup must finish before
+  // deciding; taking the first settled result would deny on a fast `false`.
+  const results = await Promise.all(capabilities.map((capability) => hasCapability(client, capability)));
+  if (!results.some(Boolean)) return NextResponse.json({ error: "You are not authorized for this operation." }, { status: 403 });
 
   return null;
 }
