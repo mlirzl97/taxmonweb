@@ -3,9 +3,9 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-const migration = readFileSync(resolve(process.cwd(), "supabase/migrations/20261109000000_private_staff_account_lifecycle.sql"), "utf8");
+const migration = readFileSync(resolve(process.cwd(), "supabase/migrations/20261109010000_private_staff_account_lifecycle.sql"), "utf8");
 const provisioning = readFileSync(resolve(process.cwd(), "supabase/migrations/20261110000000_provision_pending_staff.sql"), "utf8");
-const backfill = readFileSync(resolve(process.cwd(), "supabase/migrations/20261111000000_reclassify_existing_app_users.sql"), "utf8");
+const backfill = readFileSync(resolve(process.cwd(), "supabase/migrations/20261111010000_reclassify_existing_app_users.sql"), "utf8");
 const hardening = readFileSync(resolve(process.cwd(), "supabase/migrations/20261112000000_harden_staff_provisioning.sql"), "utf8");
 
 describe("private account lifecycle migration contract", () => {

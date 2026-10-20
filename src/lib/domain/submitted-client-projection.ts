@@ -3,6 +3,8 @@ import { formatTin, type ClientOnboardingContract, type ClientOnboardingIdentity
 import type { FixtureClient } from "@/lib/fixtures";
 import { fixtureClock } from "@/lib/fixtures";
 
+export const prototypeClientSetupUpdatedEvent = "taxmonweb:client-setup-updated";
+
 export type SubmittedClientSetup = {
   client: Pick<ClientOnboardingIdentity, "clientReferenceCode" | "clientDisplayName" | "entityDisplayName" | "tin" | "unitDisplayName" | "unitKind" | "goLiveDate">;
   contract: Pick<ClientOnboardingContract, "recordType" | "referenceCode">;
@@ -94,4 +96,17 @@ export function submittedSetupToFixtureClient(setup: SubmittedClientSetup): Fixt
     assignment: { preparer: "Unassigned", checker: "Unassigned", reviewer: "Unassigned", tower: "Unassigned", cluster: "Unassigned", effectiveFrom: client.goLiveDate || fixtureClock.today },
     entities: [{ name: taxpayerName, profile, units: [{ name: unitName, type: client.unitKind === "branch" ? "Branch" : "Head Office", profile }] }],
   };
+}
+
+export function readSubmittedClientSetups(): FixtureClient[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem("taxmon.client.setup.drafts") ?? "[]") as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((item): item is SubmittedClientSetup & { status: "submitted" } => Boolean(item && typeof item === "object" && (item as { status?: unknown }).status === "submitted"))
+      .map(submittedSetupToFixtureClient);
+  } catch {
+    return [];
+  }
 }

@@ -1,0 +1,27 @@
+{
+  "contract": "DESIGN.md: quiet compliance control desk; one focused task per drawer/dialog; readable dense registers; keyboard-safe responsive layouts across Control Tower, Team, Clients, Work, BIR Center, Admin, and Tax Team.",
+  "targetViewports": ["1440x900", "768x1024", "390x844"],
+  "accessibility": {
+    "status": "pass",
+    "evidence": "Axe scanned 30 route/viewport renders plus the dynamic Work detail drawer at desktop, tablet, and mobile widths with zero violations; shared drawers and Work evidence dialogs were exercised with focus containment and Escape handling."
+  },
+  "responsive": {
+    "status": "pass",
+    "evidence": "Desktop, tablet, and mobile screenshots cover all core workspace routes plus dynamic Work detail drawers; mobile navigation, tables, drawers, and action groups were inspected for reflow and horizontal overflow."
+  },
+  "contentStates": {
+    "loading": { "status": "pass", "evidence": "Route loading boundaries and repository loading/status copy are present in the audited app shell and data surfaces." },
+    "empty": { "status": "pass", "evidence": "Control Tower, registers, and repository surfaces expose explanatory empty states with a safe next action or clear context." },
+    "error": { "status": "pass", "evidence": "API-backed surfaces expose specific inline recovery/status messages; the sanitized fallback is explicitly labelled." },
+    "partial": { "status": "pass", "evidence": "Control and calendar surfaces distinguish missing/unmatched data and preserve unknown tax facts as unresolved rather than inventing values." },
+    "success": { "status": "pass", "evidence": "Mutation surfaces provide local status feedback and retain history/actor/timestamp context where the workflow requires it." },
+    "permission": { "status": "pass", "evidence": "Persona-aware navigation and access-state surfaces were traversed; restricted surfaces explain the boundary without exposing unauthorized actions." }
+  },
+  "renderedEvidence": [
+    { "viewport": "1440x900", "artifact": "screenshots/control-tower-desktop.png", "observation": "Control Tower desktop hierarchy, primary navigation, signal card, intervention ledger, and upcoming queue." },
+    { "viewport": "768x1024", "artifact": "screenshots/work-detail-drawer-tablet.png", "observation": "Dynamic Work detail drawer at tablet width with timeline, next action, and evidence controls." },
+    { "viewport": "390x844", "artifact": "screenshots/work-detail-drawer-mobile.png", "observation": "Dynamic Work detail drawer at mobile width with full-width sheet treatment and reachable actions." },
+    { "viewport": "1440x900", "artifact": "screenshots/deadline-control-desktop.png", "observation": "Tax Team deadline register with filters, dates, status, and publication actions." },
+    { "viewport": "390x844", "artifact": "screenshots/clients-mobile.png", "observation": "Clients mobile register with responsive controls and no keyboard-inaccessible scroll surface." }
+  ]
+}

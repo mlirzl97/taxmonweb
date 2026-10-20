@@ -280,6 +280,7 @@ export type TeamMemberLoad = FixtureTeamMember & {
   portfolioApplicable: boolean;
   assignedClients: number;
   clientWeight: number;
+  unresolvedWeightClients: number;
   activeWork: number;
   coverageGaps: number;
   assignedClientIds: string[];
@@ -295,6 +296,7 @@ export type TeamTowerSummary = {
   members: number;
   clients: number;
   clientWeight: number;
+  unresolvedWeightClients: number;
   activeWork: number;
   coverageGaps: number;
 };
@@ -304,6 +306,24 @@ export type TeamSpecialistSummary = {
   caseCount: number;
   affectedTaxpayerCount: number;
   attentionCount: number;
+};
+
+export type TeamWorkloadGuide = TeamMemberLoad & {
+  capacityApplicable: boolean;
+  capacityTier: number | null;
+  capacityLabel: string;
+  knownPortfolioWeight: number;
+  unresolvedWeightClients: number;
+  adjustedLoad: number | null;
+  cohortAverageAdjustedLoad: number | null;
+  relativeToCohortAveragePercent: number | null;
+};
+
+export type TeamWorkloadSummary = {
+  knownPortfolioWeight: number;
+  capacityUnits: number;
+  averageWeightPerCapacityUnit: number | null;
+  unresolvedWeightClients: number;
 };
 
 export type TeamControlPulse = {
@@ -401,6 +421,7 @@ export function deriveTeamMemberLoad(
       ? clients.filter((client) => assignmentNames.some((name) => isAssignedToMember(client, name)))
       : [];
     const assignedClientIds = assignedClients.map((client) => client.id);
+    const unresolvedWeightClients = assignedClients.filter((client) => typeof client.entities[0]?.profile.sourceFinalWeight !== "number").length;
     const assignedSpecialistCases = specialistCases.filter((specialistCase) => specialistCase.assigneeMemberIds.includes(member.id));
     const affectedTaxpayerIds = new Set(assignedSpecialistCases.map((specialistCase) => specialistCase.taxpayerClientId));
 
@@ -409,6 +430,7 @@ export function deriveTeamMemberLoad(
       portfolioApplicable,
       assignedClients: assignedClients.length,
       clientWeight: assignedClients.reduce((total, client) => total + getClientWorkloadWeight(client), 0),
+      unresolvedWeightClients,
       activeWork: portfolioApplicable ? work.filter((item) => assignmentNames.includes(item.owner)).length : 0,
       coverageGaps: assignedClients.filter((client) => hasCoverageGap(client)).length,
       assignedClientIds,
@@ -420,9 +442,92 @@ export function deriveTeamMemberLoad(
   });
 }
 
-export function overlayOrgChartLoad(nodes: readonly OrgChartNode[], load: readonly TeamMemberLoad[]): OrgChartNode[] {
+/**
+ * A deliberately ordinal planning guide, not a performance score. `.2` levels
+ * sit one tier below the next `.1` level while they are in training.
+ */
+const capacityTierByCareerLevel: Partial<Record<CareerServiceLevel, number>> = {
+  "1.1": 1,
+  "2.1": 2,
+  "2.2": 3,
+  "3.1": 4,
+  "3.2": 5,
+  "4.1": 6,
+  "4.2": 7,
+  "5.1": 8,
+};
+
+function capacityLabelFor(level: string | undefined): string {
+  if (!level) return "Capacity not configured";
+  if (level.endsWith(".2")) {
+    const nextLevel = `${Number(level[0]) + 1}.1`;
+    return `Training toward ${nextLevel}`;
+  }
+  return "Relative capacity guide";
+}
+
+function isHodOversight(member: TeamMemberLoad): boolean {
+  return member.tower === "All A&T" && member.careerServiceLevel === "5.2";
+}
+
+export function deriveTeamWorkloadGuide(load: readonly TeamMemberLoad[], clients: readonly FixtureClient[]): TeamWorkloadGuide[] {
+  const clientsById = new Map(clients.map((client) => [client.id, client]));
+  const preliminary = load.map((member) => {
+    const assignedClients = member.assignedClientIds.map((id) => clientsById.get(id)).filter((client): client is FixtureClient => Boolean(client));
+    const knownPortfolioWeight = assignedClients.reduce((total, client) => {
+      const weight = client.entities[0]?.profile.sourceFinalWeight;
+      return typeof weight === "number" ? total + weight : total;
+    }, 0);
+    const unresolvedWeightClients = assignedClients.filter((client) => typeof client.entities[0]?.profile.sourceFinalWeight !== "number").length;
+    const capacityApplicable = member.active && member.portfolioApplicable && !isHodOversight(member) && Boolean(member.careerServiceLevel && capacityTierByCareerLevel[member.careerServiceLevel as CareerServiceLevel]);
+    const capacityTier = capacityApplicable ? capacityTierByCareerLevel[member.careerServiceLevel as CareerServiceLevel] ?? null : null;
+
+    return {
+      ...member,
+      capacityApplicable,
+      capacityTier,
+      capacityLabel: isHodOversight(member) ? "HOD oversight; explicit assignments only" : member.portfolioApplicable ? capacityLabelFor(member.careerServiceLevel) : "Specialist cases; portfolio weight not applicable",
+      knownPortfolioWeight,
+      unresolvedWeightClients,
+      adjustedLoad: capacityApplicable && capacityTier && unresolvedWeightClients === 0 ? knownPortfolioWeight / capacityTier : null,
+      cohortAverageAdjustedLoad: null,
+      relativeToCohortAveragePercent: null,
+    };
+  });
+  const capacityRows = preliminary.filter((row) => row.capacityApplicable && row.adjustedLoad !== null);
+  const cohortAverageAdjustedLoad = capacityRows.length ? capacityRows.reduce((total, row) => total + (row.adjustedLoad ?? 0), 0) / capacityRows.length : null;
+
+  return preliminary.map((row) => ({
+    ...row,
+    cohortAverageAdjustedLoad,
+    relativeToCohortAveragePercent: row.adjustedLoad !== null && cohortAverageAdjustedLoad && cohortAverageAdjustedLoad > 0
+      ? Math.round((row.adjustedLoad / cohortAverageAdjustedLoad) * 100)
+      : null,
+  }));
+}
+
+export function summarizeTeamWorkloadGuide(guide: readonly TeamWorkloadGuide[], clients: readonly FixtureClient[]): TeamWorkloadSummary {
+  const capacityRows = guide.filter((row) => row.capacityApplicable && row.capacityTier !== null);
+  const assignedClientIds = new Set(guide.filter((row) => row.portfolioApplicable).flatMap((row) => row.assignedClientIds));
+  const uniquePortfolioClients = clients.filter((client) => assignedClientIds.has(client.id));
+  const knownPortfolioWeight = uniquePortfolioClients.reduce((total, client) => {
+    const weight = client.entities[0]?.profile.sourceFinalWeight;
+    return typeof weight === "number" ? total + weight : total;
+  }, 0);
+  const unresolvedWeightClients = uniquePortfolioClients.filter((client) => typeof client.entities[0]?.profile.sourceFinalWeight !== "number").length;
+  const capacityUnits = capacityRows.reduce((total, row) => total + (row.capacityTier ?? 0), 0);
+  return {
+    knownPortfolioWeight,
+    capacityUnits,
+    averageWeightPerCapacityUnit: capacityRows.length && unresolvedWeightClients === 0 ? knownPortfolioWeight / Math.max(1, capacityUnits) : null,
+    unresolvedWeightClients,
+  };
+}
+
+export function overlayOrgChartLoad(nodes: readonly OrgChartNode[], load: readonly TeamMemberLoad[], guide: readonly TeamWorkloadGuide[] = []): OrgChartNode[] {
   const maxClientWeight = Math.max(...load.filter((member) => member.portfolioApplicable).map((member) => member.clientWeight), 0);
   const byName = new Map(load.map((member) => [member.name, member]));
+  const guideById = new Map(guide.map((member) => [member.id, member]));
 
   return nodes.map((node) => {
     const member = byName.get(node.name);
@@ -431,7 +536,7 @@ export function overlayOrgChartLoad(nodes: readonly OrgChartNode[], load: readon
     return {
       ...node,
       operatingModel: member.operatingModel,
-      workloadPercent: member.portfolioApplicable && maxClientWeight > 0 ? Math.round((member.clientWeight / maxClientWeight) * 100) : 0,
+      workloadPercent: guideById.has(member.id) ? guideById.get(member.id)?.relativeToCohortAveragePercent ?? 0 : (member.portfolioApplicable && maxClientWeight > 0 ? Math.round((member.clientWeight / maxClientWeight) * 100) : 0),
       assignedClients: member.assignedClients,
       clientWeight: member.clientWeight,
       activeWork: member.activeWork,
@@ -455,7 +560,11 @@ export function deriveTeamTowerSummary(load: readonly TeamMemberLoad[], clients:
       cluster: towerClients[0]?.assignment.cluster ?? "—",
       members: towerMembers.length,
       clients: towerClients.length,
-      clientWeight: towerClients.reduce((total, client) => total + getClientWorkloadWeight(client), 0),
+      clientWeight: towerClients.reduce((total, client) => {
+        const weight = client.entities[0]?.profile.sourceFinalWeight;
+        return typeof weight === "number" ? total + weight : total;
+      }, 0),
+      unresolvedWeightClients: towerClients.filter((client) => typeof client.entities[0]?.profile.sourceFinalWeight !== "number").length,
       activeWork: work.filter((item) => item.scope === tower).length,
       coverageGaps: towerClients.filter(hasCoverageGap).length,
     };

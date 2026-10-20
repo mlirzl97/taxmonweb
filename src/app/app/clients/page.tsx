@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { getClientContractSummary, type FixtureClient, type FixtureSourceWeightClassification } from "@/lib/fixtures";
 import { clientDeadlineModes, clientDeadlinePolicyErrors, type ClientDeadlineMode, type ClientDeadlinePolicy } from "@/lib/domain/client-deadline-policy";
 import { clientOnboardingContractTypes, clientOnboardingDocumentStatusOptions, clientOnboardingDocumentTypes, clientOnboardingMainContractTypes, formatTin, generatedEntityReference, getClientOnboardingReadiness, normalizeTinDigits, type ClientOnboardingContract, type ClientOnboardingDocument, type ClientOnboardingIdentity } from "@/lib/domain/client-onboarding";
-import { submittedSetupToFixtureClient } from "@/lib/domain/submitted-client-projection";
+import { prototypeClientSetupUpdatedEvent, submittedSetupToFixtureClient } from "@/lib/domain/submitted-client-projection";
 import { canManageModuleRecords } from "@/lib/domain/access";
 import { applySavedCalibrationToClient, getClientDisplayWeight, getClientDisplayWeightLabel, hasCredibleTaxProfileValidation, prototypeClientProfileUpdatedEvent } from "@/lib/domain/client-profile-persistence";
 import { fixtureScopeFilterOptions } from "@/lib/domain/organization-catalog";
@@ -422,6 +422,7 @@ function ClientSetupDrawer({ initialDraft, onClose, onSaved, prototypeMode, rdoO
           return typeof client?.clientReferenceCode === "string" && client.clientReferenceCode.toUpperCase() === normalizedReference ? nextDraft : item;
         }) : [...existing, nextDraft];
         window.localStorage.setItem("taxmon.client.setup.drafts", JSON.stringify(nextDrafts));
+        window.dispatchEvent(new Event(prototypeClientSetupUpdatedEvent));
         onSaved(normalizedReference, mode);
       } catch (saveError) {
         setError(saveError instanceof Error ? saveError.message : "Unable to save the local intake draft.");
@@ -658,7 +659,7 @@ function TaxpayerRow({ client, rdoOptions }: { client: FixtureClient; rdoOptions
       <td data-label="RDO"><span className="table-value">{birOfficeLabel(profile.rdoOrLts, rdoOptions)}</span></td>
       <td data-label="Filing"><span className="table-value"><strong>{filingLabel}</strong>{filingDetail && <small>{filingDetail}</small>}</span></td>
       <td data-label="Team"><span className="table-value"><strong>{client.assignment.cluster}</strong><small>{client.assignment.preparer} · {client.assignment.checker} · {client.assignment.reviewer}</small></span></td>
-      <td data-label="Weight"><span className="weight-mark">{numericWeight}</span><span className="table-value"><strong>{weightLabel}</strong><small>{displayWeight === null ? "No weight recorded" : "Assigned client weight"}</small></span></td>
+      <td data-label="Weight"><span className="weight-summary"><span className="weight-mark">{numericWeight}</span><span className="table-value"><strong>{weightLabel}</strong><small>{displayWeight === null ? "No weight recorded" : "Assigned client weight"}</small></span></span></td>
       <td data-label="Payment"><span className="table-value"><strong>{profile.paymentRoute}</strong><small>{profile.enateSetup === "Yes" ? "eNATE setup" : profile.enateSetup === "No" ? "No eNATE" : "eNATE unknown"}</small></span></td>
       <td data-label="Audit"><span className={openAuditCount > 0 ? "attention-open" : "attention-clear"}>{auditLabel}</span></td>
       <td data-label="Attention"><span className={clientHasAttention ? "attention-open" : "attention-clear"}>{clientHasAttention ? `${profile.attention.length || 1} to review` : "Clear"}</span></td>

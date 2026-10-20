@@ -1,0 +1,338 @@
+{
+  "generatedAt": "2026-10-17T15:22:41.743Z",
+  "evidence": [
+    {
+      "viewport": "1440x900",
+      "artifact": "screenshots/control-tower-desktop.png",
+      "observation": "/app/control-tower rendered at desktop; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "screenshots/team-desktop.png",
+      "observation": "/app/team rendered at desktop; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "screenshots/clients-desktop.png",
+      "observation": "/app/clients rendered at desktop; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "screenshots/clients-crf-desktop.png",
+      "observation": "/app/clients?view=crfs rendered at desktop; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "screenshots/work-desktop.png",
+      "observation": "/app/work rendered at desktop; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "screenshots/work-detail-desktop.png",
+      "observation": "/app/work/work-02 rendered at desktop; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "screenshots/bir-center-desktop.png",
+      "observation": "/app/bir-center rendered at desktop; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "screenshots/admin-desktop.png",
+      "observation": "/app/admin rendered at desktop; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "screenshots/tax-team-desktop.png",
+      "observation": "/app/tax-team rendered at desktop; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "screenshots/deadline-control-desktop.png",
+      "observation": "/app/tax-team?view=deadline-control rendered at desktop; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "1440x900",
+      "artifact": "screenshots/work-detail-drawer-desktop.png",
+      "observation": "Dynamic Work detail drawer opened from the register and inspected for fit and action reachability."
+    },
+    {
+      "viewport": "768x1024",
+      "artifact": "screenshots/control-tower-tablet.png",
+      "observation": "/app/control-tower rendered at tablet; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "768x1024",
+      "artifact": "screenshots/team-tablet.png",
+      "observation": "/app/team rendered at tablet; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "768x1024",
+      "artifact": "screenshots/clients-tablet.png",
+      "observation": "/app/clients rendered at tablet; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "768x1024",
+      "artifact": "screenshots/clients-crf-tablet.png",
+      "observation": "/app/clients?view=crfs rendered at tablet; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "768x1024",
+      "artifact": "screenshots/work-tablet.png",
+      "observation": "/app/work rendered at tablet; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "768x1024",
+      "artifact": "screenshots/work-detail-tablet.png",
+      "observation": "/app/work/work-02 rendered at tablet; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "768x1024",
+      "artifact": "screenshots/bir-center-tablet.png",
+      "observation": "/app/bir-center rendered at tablet; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "768x1024",
+      "artifact": "screenshots/admin-tablet.png",
+      "observation": "/app/admin rendered at tablet; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "768x1024",
+      "artifact": "screenshots/tax-team-tablet.png",
+      "observation": "/app/tax-team rendered at tablet; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "768x1024",
+      "artifact": "screenshots/deadline-control-tablet.png",
+      "observation": "/app/tax-team?view=deadline-control rendered at tablet; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "768x1024",
+      "artifact": "screenshots/work-detail-drawer-tablet.png",
+      "observation": "Dynamic Work detail drawer opened from the register and inspected for fit and action reachability."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "screenshots/control-tower-mobile.png",
+      "observation": "/app/control-tower rendered at mobile; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "screenshots/team-mobile.png",
+      "observation": "/app/team rendered at mobile; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "screenshots/clients-mobile.png",
+      "observation": "/app/clients rendered at mobile; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "screenshots/clients-crf-mobile.png",
+      "observation": "/app/clients?view=crfs rendered at mobile; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "screenshots/work-mobile.png",
+      "observation": "/app/work rendered at mobile; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "screenshots/work-detail-mobile.png",
+      "observation": "/app/work/work-02 rendered at mobile; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "screenshots/bir-center-mobile.png",
+      "observation": "/app/bir-center rendered at mobile; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "screenshots/admin-mobile.png",
+      "observation": "/app/admin rendered at mobile; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "screenshots/tax-team-mobile.png",
+      "observation": "/app/tax-team rendered at mobile; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "screenshots/deadline-control-mobile.png",
+      "observation": "/app/tax-team?view=deadline-control rendered at mobile; hierarchy, controls, and overflow inspected."
+    },
+    {
+      "viewport": "390x844",
+      "artifact": "screenshots/work-detail-drawer-mobile.png",
+      "observation": "Dynamic Work detail drawer opened from the register and inspected for fit and action reachability."
+    }
+  ],
+  "axeResults": [
+    {
+      "route": "/app/control-tower",
+      "viewport": "desktop",
+      "violations": []
+    },
+    {
+      "route": "/app/team",
+      "viewport": "desktop",
+      "violations": []
+    },
+    {
+      "route": "/app/clients",
+      "viewport": "desktop",
+      "violations": []
+    },
+    {
+      "route": "/app/clients?view=crfs",
+      "viewport": "desktop",
+      "violations": []
+    },
+    {
+      "route": "/app/work",
+      "viewport": "desktop",
+      "violations": []
+    },
+    {
+      "route": "/app/work/work-02",
+      "viewport": "desktop",
+      "violations": []
+    },
+    {
+      "route": "/app/bir-center",
+      "viewport": "desktop",
+      "violations": []
+    },
+    {
+      "route": "/app/admin",
+      "viewport": "desktop",
+      "violations": []
+    },
+    {
+      "route": "/app/tax-team",
+      "viewport": "desktop",
+      "violations": []
+    },
+    {
+      "route": "/app/tax-team?view=deadline-control",
+      "viewport": "desktop",
+      "violations": []
+    },
+    {
+      "route": "/app/work (drawer)",
+      "viewport": "desktop",
+      "violations": []
+    },
+    {
+      "route": "/app/control-tower",
+      "viewport": "tablet",
+      "violations": []
+    },
+    {
+      "route": "/app/team",
+      "viewport": "tablet",
+      "violations": []
+    },
+    {
+      "route": "/app/clients",
+      "viewport": "tablet",
+      "violations": []
+    },
+    {
+      "route": "/app/clients?view=crfs",
+      "viewport": "tablet",
+      "violations": []
+    },
+    {
+      "route": "/app/work",
+      "viewport": "tablet",
+      "violations": []
+    },
+    {
+      "route": "/app/work/work-02",
+      "viewport": "tablet",
+      "violations": []
+    },
+    {
+      "route": "/app/bir-center",
+      "viewport": "tablet",
+      "violations": []
+    },
+    {
+      "route": "/app/admin",
+      "viewport": "tablet",
+      "violations": []
+    },
+    {
+      "route": "/app/tax-team",
+      "viewport": "tablet",
+      "violations": []
+    },
+    {
+      "route": "/app/tax-team?view=deadline-control",
+      "viewport": "tablet",
+      "violations": []
+    },
+    {
+      "route": "/app/work (drawer)",
+      "viewport": "tablet",
+      "violations": []
+    },
+    {
+      "route": "/app/control-tower",
+      "viewport": "mobile",
+      "violations": []
+    },
+    {
+      "route": "/app/team",
+      "viewport": "mobile",
+      "violations": []
+    },
+    {
+      "route": "/app/clients",
+      "viewport": "mobile",
+      "violations": []
+    },
+    {
+      "route": "/app/clients?view=crfs",
+      "viewport": "mobile",
+      "violations": []
+    },
+    {
+      "route": "/app/work",
+      "viewport": "mobile",
+      "violations": []
+    },
+    {
+      "route": "/app/work/work-02",
+      "viewport": "mobile",
+      "violations": []
+    },
+    {
+      "route": "/app/bir-center",
+      "viewport": "mobile",
+      "violations": []
+    },
+    {
+      "route": "/app/admin",
+      "viewport": "mobile",
+      "violations": []
+    },
+    {
+      "route": "/app/tax-team",
+      "viewport": "mobile",
+      "violations": []
+    },
+    {
+      "route": "/app/tax-team?view=deadline-control",
+      "viewport": "mobile",
+      "violations": []
+    },
+    {
+      "route": "/app/work (drawer)",
+      "viewport": "mobile",
+      "violations": []
+    }
+  ],
+  "consoleErrors": []
+}

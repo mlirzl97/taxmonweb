@@ -13,6 +13,7 @@ const returnPeriodLockMigration = readFileSync(join(process.cwd(), "supabase/mig
 const preparerPaymentAmountMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261121000000_preparer_payment_amount_control.sql"), "utf8");
 const manualWorkMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261123000000_enable_authorized_manual_work.sql"), "utf8");
 const manualWorkAssignmentMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261124000000_manual_work_uses_effective_unit_assignments.sql"), "utf8");
+const triggerHardeningMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261203000000_harden_internal_trigger_functions.sql"), "utf8");
 
 describe("generated work persistence contract", () => {
   it("uses one generated-work source with idempotent identity", () => {
@@ -93,5 +94,10 @@ describe("generated work persistence contract", () => {
     expect(manualWorkAssignmentMigration).toContain("client_team_assignments");
     expect(manualWorkAssignmentMigration).toContain("source_priority");
     expect(manualWorkAssignmentMigration).toContain("current_owner_user_id");
+  });
+
+  it("keeps trigger-only functions out of the RPC surface", () => {
+    expect(triggerHardeningMigration).toContain("alter function public.capture_checker_tax_due_amount() set search_path = public;");
+    expect(triggerHardeningMigration).toContain("revoke execute on function public.materialize_generated_work_components() from public, anon, authenticated;");
   });
 });

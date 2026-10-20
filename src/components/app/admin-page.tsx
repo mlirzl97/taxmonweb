@@ -10,6 +10,7 @@ import { adaptLiveTeamMember } from "@/lib/domain/live-team-adapter";
 import { accessLevelLabel, moduleAccessMapForPersona, rbacPersonaOptions, type AccessLevel, type AccessMatrix, type ModuleKey, type RbacPersona } from "@/lib/domain/access";
 import { fixtureCalendar, fixtureClients, fixtureOrgDirectoryMembers, fixtureSpecialistCases, fixtureWork, type FixtureClient, type FixtureTeamMember } from "@/lib/fixtures";
 import { clearPrototypeSeedData } from "@/lib/prototype-storage";
+import { loadAccountPreferences, readUserPreferences, removeAccountAvatar, saveAccountPreferences, saveUserPreferences, uploadAccountAvatar, type ThemePreference } from "@/lib/user-preferences";
 import { useWorkflow, workflowPerspectiveLabel } from "@/lib/workflow-state";
 import { StaffProvisioningForm } from "@/components/app/staff-provisioning-form";
 
@@ -28,28 +29,30 @@ const accessLevelOptions: readonly AccessLevel[] = ["NONE", "VIEW", "ACT", "APPR
 
 export default function AdminPage() {
   const searchParams = useSearchParams();
+  const { prototypeMode } = useWorkflow();
   const requestedView = searchParams.get("view");
   const initialView: AdminView = requestedView === "access" || requestedView === "organization" || requestedView === "audit" || requestedView === "settings" ? requestedView : "overview";
-  const [view, setView] = useState<AdminView>(initialView);
+  const [view, setView] = useState<AdminView>(prototypeMode && initialView === "access" ? "overview" : initialView);
+  const visibleAdminViews = prototypeMode ? adminViews.filter((item) => item.id !== "access") : adminViews;
 
   return (
     <FixturePageFrame>
       <PageHeader description="Govern access, structure and history." title="Admin" />
       <nav aria-label="Admin views" className="tower-tabs module-tabs" role="tablist">
-        {adminViews.map((item) => <button aria-selected={view === item.id} className={view === item.id ? "tower-tab tower-tab--active" : "tower-tab"} key={item.id} onClick={() => setView(item.id)} role="tab" tabIndex={view === item.id ? 0 : -1} type="button">{item.label}</button>)}
+        {visibleAdminViews.map((item) => <button aria-selected={view === item.id} className={view === item.id ? "tower-tab tower-tab--active" : "tower-tab"} key={item.id} onClick={() => setView(item.id)} role="tab" tabIndex={view === item.id ? 0 : -1} type="button">{item.label}</button>)}
       </nav>
 
       {view === "overview" && <AdminOverview />}
       {view === "access" && <AccessMatrixEditor />}
       {view === "organization" && <AdminPlaceholder title="Organization" description="Organization units and effective-dated structure are managed here. Team remains the operational projection." />}
       {view === "audit" && <AuditTrailOverview />}
-      {view === "settings" && <PrototypeDataSettings />}
+      {view === "settings" && <AccountSettings />}
     </FixturePageFrame>
   );
 }
 
 function AdminOverview() {
-  const { accessMatrix, workPerspective } = useWorkflow();
+  const { accessMatrix, prototypeMode, workPerspective } = useWorkflow();
   const accessMap = moduleAccessMapForPersona(workPerspective, accessMatrix);
 
   return <>
@@ -66,11 +69,7 @@ function AdminOverview() {
         <li><strong>Operational ownership</strong><span>Engagement accountability remains with the assigned team.</span></li>
       </ul>
     </section>
-    <section className="panel admin-access-panel" aria-labelledby="admin-access-title">
-      <SectionHeading detail="The lens changes visibility and action boundaries in this prototype." title={`Current access · ${workflowPerspectiveLabel(workPerspective)}`} />
-      <div className="admin-access-grid" id="admin-access-title">{moduleLabels.map(([module, label]) => <div className="admin-access-row" key={module}><strong>{label}</strong><span className={`admin-access-level admin-access-level--${accessMap[module].toLowerCase()}`}>{accessLevelLabel(accessMap[module])}</span></div>)}</div>
-      <p className="admin-placeholder-note">RACI describes accountability; this access view only simulates capability and scope. Server-side authorization remains authoritative.</p>
-    </section>
+    {prototypeMode ? <section className="panel admin-access-panel" aria-labelledby="admin-access-title"><SectionHeading detail="Role and scope setup is paused while the sanitized prototype runs under one audited operator." title="Super Admin mode" /><p id="admin-access-title">Super Admin has access to every module for this calibration period. Role-based access will be restored before live operation.</p></section> : <section className="panel admin-access-panel" aria-labelledby="admin-access-title"><SectionHeading detail="The lens changes visibility and action boundaries in this prototype." title={`Current access · ${workflowPerspectiveLabel(workPerspective)}`} /><div className="admin-access-grid" id="admin-access-title">{moduleLabels.map(([module, label]) => <div className="admin-access-row" key={module}><strong>{label}</strong><span className={`admin-access-level admin-access-level--${accessMap[module].toLowerCase()}`}>{accessLevelLabel(accessMap[module])}</span></div>)}</div><p className="admin-placeholder-note">RACI describes accountability; this access view only simulates capability and scope. Server-side authorization remains authoritative.</p></section>}
     <AdminDataOverview />
   </>;
 }
@@ -296,9 +295,52 @@ function AdminPlaceholder({ title, description }: { title: string; description: 
   </section>;
 }
 
-function PrototypeDataSettings() {
+function AccountSettings() {
   const { prototypeMode } = useWorkflow();
+  const [preferences, setPreferences] = useState(() => prototypeMode ? readUserPreferences() : { theme: "system" as ThemePreference, avatarUrl: null });
   const [feedback, setFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (prototypeMode) {
+      const timer = window.setTimeout(() => setPreferences(readUserPreferences(window.localStorage)), 0);
+      return () => window.clearTimeout(timer);
+    }
+    void loadAccountPreferences().then(setPreferences).catch(() => setFeedback("Account preferences are temporarily unavailable."));
+  }, [prototypeMode]);
+
+  async function updatePreferences(patch: Partial<{ theme: ThemePreference; avatarUrl: string | null }>) {
+    try {
+      const next = prototypeMode
+        ? saveUserPreferences(patch, window.localStorage)
+        : patch.theme !== undefined
+          ? await saveAccountPreferences({ theme: patch.theme })
+          : await removeAccountAvatar();
+      setPreferences(next);
+      setFeedback(null);
+    } catch {
+      setFeedback(prototypeMode ? "This preference could not be saved in this browser." : "This account preference could not be saved.");
+    }
+  }
+
+  function choosePhoto(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 2_000_000) {
+      setFeedback("Choose an image smaller than 2 MB.");
+      return;
+    }
+    if (!prototypeMode) {
+      void uploadAccountAvatar(file).then(setPreferences).then(() => setFeedback(null)).catch(() => setFeedback("This photo could not be saved to the account."));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") void updatePreferences({ avatarUrl: reader.result });
+    };
+    reader.onerror = () => setFeedback("This photo could not be read.");
+    reader.readAsDataURL(file);
+  }
 
   function removeSeedData() {
     const confirmed = window.confirm("Remove browser-local prototype data and reload the current local baseline? This does not delete Supabase records or audit history.");
@@ -308,16 +350,50 @@ function PrototypeDataSettings() {
     window.setTimeout(() => window.location.reload(), 250);
   }
 
-  return <section className="panel admin-settings-panel" aria-labelledby="prototype-settings-title">
-    <SectionHeading detail="Calibration controls for this browser only." title="Settings" />
-    <div className="admin-settings-row" id="prototype-settings-title">
+  return <>
+    <section className="panel admin-settings-panel" aria-labelledby="account-settings-title">
+      <SectionHeading detail={prototypeMode ? "Personal choices for this sanitized browser prototype." : "Personal choices for your authenticated account."} title="Account & preferences" />
+      <div className="admin-settings-row" id="account-settings-title">
+        <div>
+          <strong>Appearance</strong>
+          <p>Choose how TaxMonWeb looks when you work.</p>
+        </div>
+        <label className="admin-settings-control">
+          <span className="sr-only">Appearance</span>
+          <select aria-label="Appearance" onChange={(event) => updatePreferences({ theme: event.target.value as ThemePreference })} value={preferences.theme}>
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </label>
+      </div>
+      <div className="admin-settings-row">
+        <div>
+          <strong>Profile photo</strong>
+          <p>Use a photo in the modules menu, or keep the initials avatar.</p>
+        </div>
+        <div className="admin-profile-photo-control">
+          <span aria-hidden="true" className={`admin-profile-photo${preferences.avatarUrl ? " admin-profile-photo--photo" : ""}`} style={preferences.avatarUrl ? { backgroundImage: `url(${preferences.avatarUrl})` } : undefined}>{preferences.avatarUrl ? null : "SA"}</span>
+          <label className="button button--quiet">
+            {preferences.avatarUrl ? "Change photo" : "Choose photo"}
+            <input accept="image/*" aria-label="Profile photo" className="sr-only" onChange={choosePhoto} type="file" />
+          </label>
+          {preferences.avatarUrl && <button className="text-button" onClick={() => updatePreferences({ avatarUrl: null })} type="button">Remove</button>}
+        </div>
+      </div>
+      <p className="admin-placeholder-note">{prototypeMode ? "Saved in this browser for the prototype. Your account and work data are unchanged." : "Saved to your account and reflected in the modules menu."}</p>
+      {feedback && <p aria-live="polite" className="inline-feedback">{feedback}</p>}
+    </section>
+    <section className="panel admin-settings-panel" aria-labelledby="prototype-settings-title">
+      <SectionHeading detail="Calibration controls for this browser only." title="Prototype data" />
+      <div className="admin-settings-row" id="prototype-settings-title">
       <div>
         <strong>Remove seed data</strong>
         <p>Clears local prototype edits, drafts, access-view changes, roster changes, and reference proposals. The built-in sanitized baseline remains available.</p>
       </div>
       {prototypeMode ? <button className="button button--quiet" onClick={removeSeedData} type="button">Remove seed data</button> : <span className="admin-placeholder-note">Unavailable outside sanitized calibration mode.</span>}
-    </div>
-    <p className="admin-placeholder-note">This does not delete Supabase records, migrations, source-backed history, or audit events. Production data removal is not available from the browser.</p>
-    {feedback && <p aria-live="polite" className="inline-feedback">{feedback}</p>}
-  </section>;
+      </div>
+      <p className="admin-placeholder-note">This does not delete Supabase records, migrations, source-backed history, or audit events. Production data removal is not available from the browser.</p>
+    </section>
+  </>;
 }

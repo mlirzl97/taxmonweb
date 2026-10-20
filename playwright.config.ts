@@ -15,7 +15,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: "TAXMON_E2E_MODE=true TAXMON_DEMO_MODE=true TAXMON_CALIBRATION_EDIT_MODE=true TAXMON_DATA_MODE=sanitized npm run start -- --hostname 127.0.0.1 --port 3110",
+    command: "TAXMON_E2E_MODE=true TAXMON_DEMO_MODE=true TAXMON_CALIBRATION_EDIT_MODE=true TAXMON_DATA_MODE=sanitized TAXMON_EMPTY_MODE=false NEXT_PUBLIC_TAXMON_EMPTY_MODE=false npm run start -- --hostname 127.0.0.1 --port 3110",
     url: "http://127.0.0.1:3110/app/control-tower",
     reuseExistingServer: false,
     timeout: 120_000,

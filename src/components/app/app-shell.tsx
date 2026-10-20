@@ -2,45 +2,52 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { accessLevelLabel, canAccessModule, firstAllowedRoute, highestAccessLevel, moduleForRoute, personaNavigation, rbacPersonaLabel, rbacPersonaOptions, visibleModuleKeys } from "@/lib/domain/access";
 import type { FixtureWorkItem } from "@/lib/fixtures";
 import { primaryNavigation, restrictedNavigation } from "@/lib/navigation";
 import { trackModuleView, trackUsageInteractions } from "@/lib/usage-analytics";
+import { applyThemePreference, loadAccountPreferences, readUserPreferences, userPreferencesChangedEvent } from "@/lib/user-preferences";
 import { useWorkflow, workflowPerspectiveDescription, workflowPerspectiveLabel, workflowProcessRole, workflowProcessRoleLabel, WorkflowProvider, type WorkflowPerspective } from "@/lib/workflow-state";
 import { AntMark } from "../brand/ant-mark";
 import { BrandLockup } from "../brand/brand-lockup";
 import { Icon } from "../ui/icon";
+import { GlobalSearch } from "./global-search";
 
-type AppShellProps = { children: React.ReactNode; email: string; demoMode?: boolean; calibrationEditMode?: boolean; persona?: string };
+type AppShellProps = { children: React.ReactNode; email: string; demoMode?: boolean; persona?: string };
 const sidebarStorageKey = "taxmonweb.sidebar.collapsed";
 
-export function AppShell({ children, email, demoMode = false, calibrationEditMode = false, persona }: AppShellProps) {
+export function AppShell({ children, email, demoMode = false, persona }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [collapsed, setCollapsed] = useState(false);
-  const [sidebarPreferenceHydrated, setSidebarPreferenceHydrated] = useState(false);
+  const [collapsed, setCollapsed] = useState<boolean | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const sidebarPreferenceChangedRef = useRef(false);
   const firstNavLinkRef = useRef<HTMLAnchorElement>(null);
   const mobileSidebarRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    if (!sidebarPreferenceHydrated) return;
-    window.localStorage.setItem(sidebarStorageKey, String(collapsed));
-  }, [collapsed, sidebarPreferenceHydrated]);
-
-  useEffect(() => {
-    if (window.localStorage.getItem(sidebarStorageKey) === "true") {
-      // Hydrate persisted shell preference after the server/client markup is stable.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCollapsed(true);
+  const toggleNavigation = useCallback(() => {
+    if (isMobile) setMobileOpen((open) => !open);
+    else {
+      sidebarPreferenceChangedRef.current = true;
+      setCollapsed((value) => !value);
     }
-    setSidebarPreferenceHydrated(true);
+  }, [isMobile]);
+
+  useEffect(() => {
+    if (collapsed === null || !sidebarPreferenceChangedRef.current) return;
+    window.localStorage.setItem(sidebarStorageKey, String(collapsed));
+  }, [collapsed]);
+
+  useEffect(() => {
+    // Hydrate persisted shell preference after the server/client markup is stable.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCollapsed(window.localStorage.getItem(sidebarStorageKey) === "true");
   }, []);
 
   useEffect(() => {
@@ -56,17 +63,42 @@ export function AppShell({ children, email, demoMode = false, calibrationEditMod
       const target = event.target as HTMLElement | null;
       if ((target?.tagName === "INPUT" || target?.tagName === "SELECT" || target?.tagName === "TEXTAREA") || (!event.metaKey && !event.ctrlKey) || event.key.toLowerCase() !== "b") return;
       event.preventDefault();
-      if (isMobile) setMobileOpen((open) => !open);
-      else setCollapsed((value) => !value);
+      toggleNavigation();
     }
     window.addEventListener("keydown", handleSidebarShortcut);
     return () => window.removeEventListener("keydown", handleSidebarShortcut);
-  }, [isMobile]);
+  }, [isMobile, toggleNavigation]);
 
   useEffect(() => {
     trackModuleView(pathname);
     return trackUsageInteractions(pathname);
   }, [pathname]);
+
+  useEffect(() => {
+    function syncPreferences() {
+      const preferences = readUserPreferences(window.localStorage);
+      setAvatarUrl(preferences.avatarUrl);
+      applyThemePreference(preferences.theme);
+      if (!demoMode) {
+        void loadAccountPreferences().then((accountPreferences) => {
+          setAvatarUrl(accountPreferences.avatarUrl);
+          applyThemePreference(accountPreferences.theme);
+        }).catch(() => {
+          // Keep the last local appearance while the account boundary is unavailable.
+        });
+      }
+    }
+    syncPreferences();
+    window.addEventListener(userPreferencesChangedEvent, syncPreferences);
+    window.addEventListener("storage", syncPreferences);
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+    systemTheme.addEventListener("change", syncPreferences);
+    return () => {
+      window.removeEventListener(userPreferencesChangedEvent, syncPreferences);
+      window.removeEventListener("storage", syncPreferences);
+      systemTheme.removeEventListener("change", syncPreferences);
+    };
+  }, [demoMode]);
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -99,6 +131,8 @@ export function AppShell({ children, email, demoMode = false, calibrationEditMod
     };
   }, [mobileOpen]);
 
+  const sidebarCollapsed = collapsed === true && !isMobile;
+
   async function signOut() {
     setIsSigningOut(true);
     const client = createSupabaseBrowserClient();
@@ -107,31 +141,31 @@ export function AppShell({ children, email, demoMode = false, calibrationEditMod
     router.refresh();
   }
 
-  const context = pathname.startsWith("/app/clients") ? "Clients" : pathname.startsWith("/app/work") || pathname.startsWith("/app/my-work") ? "Work" : pathname.startsWith("/app/tax-team") ? "Tax Team" : pathname.startsWith("/app/team") ? "Team" : pathname.startsWith("/app/bir-center") ? "BIR Center" : pathname.startsWith("/app/admin") ? "Admin" : "Control Tower";
-
   return (
     <WorkflowProvider prototypeMode={demoMode}>
     <div className="app-frame">
       <a className="skip-link" href="#main-content">Skip to content</a>
-      <aside aria-label="Application navigation" className={`app-sidebar${collapsed ? " app-sidebar--collapsed" : ""}${mobileOpen ? " app-sidebar--mobile-open" : ""}`} id="application-sidebar" ref={mobileSidebarRef}>
+      <aside aria-label="Application navigation" className={`app-sidebar${sidebarCollapsed ? " app-sidebar--collapsed" : ""}${mobileOpen ? " app-sidebar--mobile-open" : ""}`} id="application-sidebar" ref={mobileSidebarRef}>
         <div className="app-sidebar__brand">
-          {collapsed ? <Link aria-label="TaxMonWeb" className="collapsed-brand" href="/app/control-tower"><AntMark size={30} /></Link> : <BrandLockup />}
+          {sidebarCollapsed ? <Link aria-label="TaxMonWeb" className="collapsed-brand" href="/app/control-tower"><AntMark size={30} /></Link> : <BrandLockup />}
         </div>
         <nav aria-label="Primary navigation" className="primary-nav" id="primary-navigation">
           <PersonaNavigation pathname={pathname} firstNavLinkRef={firstNavLinkRef} onNavigate={() => setMobileOpen(false)} />
         </nav>
-        {!demoMode && <div className="app-sidebar__footer"><p className="user-email" title={email}>{email}</p><button className="button button--quiet button--full" disabled={isSigningOut} onClick={signOut} type="button">{isSigningOut ? "Signing out…" : "Sign out"}</button></div>}
+        <div className="app-sidebar__footer">
+          <SidebarProfile avatarUrl={avatarUrl} email={email} persona={persona} />
+          <Link aria-label="Settings &amp; preferences" className="sidebar-settings-link" href="/app/admin?view=settings" onClick={() => setMobileOpen(false)} title="Settings &amp; preferences"><Icon name="settings" /><span>Settings &amp; preferences</span></Link>
+          {!demoMode && <button className="button button--quiet button--full" disabled={isSigningOut} onClick={signOut} type="button">{isSigningOut ? "Signing out…" : "Sign out"}</button>}
+        </div>
       </aside>
       {mobileOpen && <button aria-label="Close navigation" className="sidebar-backdrop" onClick={() => setMobileOpen(false)} type="button" />}
       <div className="app-main">
         <header className="app-main-header">
-          <button aria-controls="application-sidebar" aria-expanded={isMobile ? mobileOpen : !collapsed} aria-label={isMobile ? (mobileOpen ? "Close modules" : "Open modules") : (collapsed ? "Expand sidebar" : "Collapse sidebar")} className="sidebar-toggle" data-usage-action="toggle_navigation" onClick={() => { if (isMobile) setMobileOpen((open) => !open); else setCollapsed((value) => !value); }} ref={toggleRef} type="button"><Icon name="menu" size={19} /><span className="sidebar-toggle__label">Modules</span></button>
-          <div className="app-main-header__brand"><BrandLockup compact /></div>
-          <span className="app-main-header__context">{context}</span>
-          <WorkflowPerspectiveControl pathname={pathname} />
+          <button aria-controls="application-sidebar" aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} aria-label={isMobile ? (mobileOpen ? "Close modules" : "Open modules") : (sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar")} className="sidebar-toggle" data-usage-action="toggle_navigation" onClick={toggleNavigation} ref={toggleRef} type="button"><Icon name="menu" size={19} /></button>
+          <GlobalSearch />
+          {!demoMode && <WorkflowPerspectiveControl pathname={pathname} />}
           {demoMode ? <span className="prototype-mark">Prototype · Sanitized data</span> : <span className="app-main-header__user">{email}</span>}
           <ActionNotifications />
-          <CurrentPersonaLabel calibrationEditMode={calibrationEditMode} fallback={persona} />
         </header>
         <main className="app-content" id="main-content" tabIndex={-1}><PersonaContent pathname={pathname}>{children}</PersonaContent></main>
       </div>
@@ -142,9 +176,16 @@ export function AppShell({ children, email, demoMode = false, calibrationEditMod
 
 type ActionNotification = { work: FixtureWorkItem; step: FixtureWorkItem["steps"][number]; owner: string };
 
+function SidebarProfile({ avatarUrl, email, persona }: { avatarUrl: string | null; email: string; persona?: string }) {
+  const label = persona ?? email;
+  const initials = label.split(/[@.\s_-]+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U";
+  return <div aria-label="Current user" className="sidebar-profile" role="img" title={label}><span aria-hidden="true" className={`sidebar-profile__avatar${avatarUrl ? " sidebar-profile__avatar--photo" : ""}`} style={avatarUrl ? { backgroundImage: `url(${avatarUrl})` } : undefined}>{avatarUrl ? null : initials}</span><span className="sidebar-profile__identity"><strong>{label}</strong>{persona && <small>All modules</small>}</span></div>;
+}
+
 function ActionNotifications() {
   const { canActOnProcessStep, getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode } = useWorkflow();
   const [open, setOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
   const actions = useMemo(() => {
     const pending: ActionNotification[] = [];
     for (const work of getWorkItems().map(getEffectiveWork)) {
@@ -154,27 +195,30 @@ function ActionNotifications() {
     }
     return pending;
   }, [canActOnProcessStep, getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode]);
-  const notificationLabel = actions.length === 0 ? "Notifications" : `${actions.length} notifications`;
+  const notificationLabel = actions.length === 0 ? "No pending actions" : `${actions.length} pending actions`;
   const attentionLabel = actions.length === 1 ? "1 item requires action" : `${actions.length} items require action`;
 
-  return <div className={`app-main-header__notifications${open ? " app-main-header__notifications--open" : ""}`}>
+  useEffect(() => {
+    if (!open) return;
+    function closeOnOutsidePointer(event: PointerEvent) {
+      if (!notificationsRef.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+  }, [open]);
+
+  return <div className={`app-main-header__notifications${open ? " app-main-header__notifications--open" : ""}`} ref={notificationsRef}>
     <button aria-expanded={open} aria-haspopup="dialog" aria-label={notificationLabel} className="app-main-header__notifications-trigger" onClick={() => setOpen((current) => !current)} title="Notifications" type="button"><Icon name="bell" size={17} />{actions.length > 0 && <span aria-hidden="true" className="app-main-header__notifications-count">{actions.length > 9 ? "9+" : actions.length}</span>}</button>
-    {open && <div aria-label="Notifications" className="app-main-header__notifications-panel" id="my-actions-panel" role="region">
-      <div className="app-main-header__notifications-heading"><strong>Notifications</strong><small>{actions.length > 0 ? attentionLabel : "No new notifications"}</small></div>
-      {actions.length > 0 ? <div className="app-main-header__notifications-list">{actions.slice(0, 5).map(({ work, step, owner }) => <Link href={`/app/work/${work.id}`} key={work.id}><strong>{step.label}</strong><span>{work.client} · {work.title}</span><small>{work.period} · {owner}</small></Link>)}</div> : <p className="app-main-header__notifications-empty">No new notifications.</p>}
+    {open && <div aria-label="My actions" className="app-main-header__notifications-panel" id="my-actions-panel" role="region">
+      <div className="app-main-header__notifications-heading"><strong>My actions</strong><small>{actions.length > 0 ? attentionLabel : "No pending actions"}</small></div>
+      {actions.length > 0 ? <div className="app-main-header__notifications-list">{actions.slice(0, 5).map(({ work, step, owner }) => <Link href={`/app/work/${work.id}`} key={work.id}><strong>{step.label}</strong><span>{work.client} · {work.title}</span><small>{work.period} · {owner}</small></Link>)}</div> : <p className="app-main-header__notifications-empty">No pending actions.</p>}
       <Link className="app-main-header__notifications-footer" href="/app/work?queue=all">View Work</Link>
     </div>}
   </div>;
 }
 
-function CurrentPersonaLabel({ calibrationEditMode, fallback }: { calibrationEditMode: boolean; fallback?: string }) {
-  const { workPerspective } = useWorkflow();
-  const label = workPerspective === "MASTER_ADMIN" ? "Master Admin" : rbacPersonaLabel(workPerspective) || fallback;
-  return <span aria-label="Current access persona" className="app-main-header__persona">{label}{calibrationEditMode ? " · Calibration edit" : ""}</span>;
-}
-
 function WorkflowPerspectiveControl({ pathname }: { pathname: string }) {
-  const { accessMatrix, applyAccessPerspective, workPerspective } = useWorkflow();
+  const { accessMatrix, applyAccessPerspective, prototypeMode, workPerspective } = useWorkflow();
   const router = useRouter();
   const pendingTouched = useRef(false);
   const [pendingPerspective, setPendingPerspective] = useState<WorkflowPerspective>(workPerspective);
@@ -186,6 +230,8 @@ function WorkflowPerspectiveControl({ pathname }: { pathname: string }) {
     if (pendingTouched.current) return;
     setPendingPerspective(workPerspective);
   }, [workPerspective]);
+
+  if (prototypeMode) return <div aria-label="Access mode" className="app-main-header__lens"><span className="app-main-header__access-summary">Access</span><strong>Super Admin</strong><span className="app-main-header__access-summary">All modules</span></div>;
 
   function applySelectedPerspective() {
     pendingTouched.current = false;

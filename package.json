@@ -9,11 +9,12 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test": "vitest run",
-    "test:e2e": "TAXMON_E2E_MODE=true TAXMON_DEMO_MODE=true TAXMON_CALIBRATION_EDIT_MODE=true TAXMON_DATA_MODE=sanitized npm run build && playwright test",
+    "test:e2e": "TAXMON_E2E_MODE=true TAXMON_DEMO_MODE=true TAXMON_CALIBRATION_EDIT_MODE=true TAXMON_DATA_MODE=sanitized TAXMON_EMPTY_MODE=false NEXT_PUBLIC_TAXMON_EMPTY_MODE=false npm run build && playwright test",
     "fixtures:import": "tsx scripts/import-sanitized-fixtures.ts",
     "fixtures:audit": "tsx scripts/import-sanitized-fixtures.ts --audit --include-tax-profiles",
+    "migration:check": "node scripts/check-migration-versions.mjs",
     "test:watch": "vitest",
-    "verify": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "verify": "npm run migration:check && npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "@sentry/nextjs": "^11.6.0",

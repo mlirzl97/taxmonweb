@@ -91,7 +91,7 @@ function ScopedControlTowerPage({ initialScope }: { initialScope: ScopeFilter })
 
   return (
     <FixturePageFrame>
-      <PageHeader title="Control Tower" />
+      <h1 className="sr-only">Control Tower</h1>
       <section aria-labelledby="all-clear-title" className={`run-card run-card--${pulseState.toLowerCase()}`}>
         <div className="run-card__main">
           <div aria-label={`${clearPercent}% of visible work is clear`} aria-valuemax={100} aria-valuemin={0} aria-valuenow={clearPercent} className="run-card__ring" role="progressbar">
@@ -115,7 +115,7 @@ function ScopedControlTowerPage({ initialScope }: { initialScope: ScopeFilter })
 
       {canViewTeamProgress && <section aria-labelledby="team-progress-title" className="panel control-team-progress">
         <div className="section-heading"><div><h2 id="team-progress-title">Team progress</h2><p className="section-heading__support">Where to deploy help across the current scope.</p></div><Link className="text-link-button" href="/app/team?view=coverage">Open Team coverage</Link></div>
-        <div aria-label="Team progress" className="control-team-progress__table">
+        <div aria-label="Team progress" className="control-team-progress__table" tabIndex={0}>
           <div className="control-team-progress__header"><span>Team</span><span>Progress</span><span>Workload</span><span>Attention</span><span>Coverage</span></div>
           {teamProgress.length === 0 ? <div className="inline-empty">No team progress is available in this scope.</div> : teamProgress.map(({ pulse, scopeFilter, ...summary }) => {
             const clearWork = pulse?.clearWork ?? 0;
@@ -135,7 +135,7 @@ function ScopedControlTowerPage({ initialScope }: { initialScope: ScopeFilter })
 
       <section aria-labelledby="attention-title" className="panel needs-attention-panel">
         <div className="section-heading"><div><h2 id="attention-title">{pulseQueueLabel}</h2><p className="section-heading__support">{pulseFilter === "ALL" ? "Decision, unblock, or escalation." : "RAG filter · select the color again to clear."}</p></div><span className="section-heading__note">{pulseItems.length} items</span></div>
-        <div className="attention-ledger" aria-label="Work requiring immediate intervention">
+        <div aria-label="Work requiring immediate intervention" className="attention-ledger" tabIndex={0}>
           <div className="attention-ledger__header"><span>What</span><span>Taxpayer</span><span>Target</span><span>Owner</span><span>Reason / next action</span></div>
           {pulseItems.length === 0 ? <div className="inline-empty">{pulseFilter === "ALL" ? "Nothing needs attention right now." : `No ${pulseFilter.toLowerCase()} work in this view.`}</div> : pulseItems.map((work) => <button className="attention-ledger__row" key={work.id} onClick={() => setSelectedWorkId(work.id)} type="button">
             <span><strong>{work.title}</strong><small>{work.stage}</small></span>

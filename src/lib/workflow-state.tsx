@@ -246,7 +246,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   type LivePortfolioRecord = Parameters<typeof portfolioClientToFixtureClient>[0];
   const emptyPrototypeMode = prototypeMode && isPrototypeEmptyMode();
   const [currentRole, setCurrentRole] = useState<WorkflowRole>("PREPARER");
-  const [workPerspective, setWorkPerspective] = useState<WorkflowPerspective>("MASTER_ADMIN");
+  const [workPerspective, setWorkPerspective] = useState<WorkflowPerspective>(prototypeMode ? "SUPER_ADMIN" : "MASTER_ADMIN");
   const [accessMatrix, setAccessMatrix] = useState<AccessMatrix>(() => cloneAccessMatrix());
   const [accessPolicyHistory, setAccessPolicyHistory] = useState<AccessPolicyEvent[]>([]);
   const [accessPerspectiveHydrated, setAccessPerspectiveHydrated] = useState(() => !prototypeMode);
@@ -312,15 +312,14 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   useEffect(() => {
     if (!prototypeMode || emptyPrototypeMode) return;
     try {
-      const storedPerspective = window.localStorage.getItem(accessPerspectiveStorageKey) as WorkflowPerspective | null;
-      if (storedPerspective && ["PREPARER", "CHECKER", "REVIEWER", "TOWER_LEADER", "CLUSTER_LEADER", "TAX_CONTROL", "MASTER_ADMIN", "SYSTEM_ADMIN", "SUPER_ADMIN"].includes(storedPerspective)) {
-        // Hydrate the prototype lens after the server/client markup is stable.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setWorkPerspective(storedPerspective);
-      }
+      // Temporary prototype policy: operate as one Super Admin until the
+      // production access model is reintroduced and assigned deliberately.
+      window.localStorage.removeItem(accessPerspectiveStorageKey);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setWorkPerspective("SUPER_ADMIN");
       setAccessPerspectiveHydrated(true);
     } catch {
-      // Keep the default HOD lens when browser storage is unavailable.
+      // Keep the default Super Admin lens when browser storage is unavailable.
       setAccessPerspectiveHydrated(true);
     }
   }, [emptyPrototypeMode, prototypeMode]);
@@ -385,9 +384,10 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   }, [accessMatrix, accessMatrixHydrated, accessPolicyHistory, prototypeMode]);
 
   const applyAccessPerspective = useCallback((perspective: WorkflowPerspective) => {
-    setCurrentRole(perspective === "PREPARER" || perspective === "CHECKER" || perspective === "REVIEWER" ? perspective : "PREPARER");
-    setWorkPerspective(perspective);
-  }, []);
+    const nextPerspective = prototypeMode ? "SUPER_ADMIN" : perspective;
+    setCurrentRole(nextPerspective === "PREPARER" || nextPerspective === "CHECKER" || nextPerspective === "REVIEWER" ? nextPerspective : "PREPARER");
+    setWorkPerspective(nextPerspective);
+  }, [prototypeMode]);
 
   const canManageAccess = prototypeMode && ["MASTER_ADMIN", "TAX_CONTROL", "SUPER_ADMIN"].includes(workPerspective);
   const commitAccessMatrix = useCallback((matrix: AccessMatrix, reason: string) => {

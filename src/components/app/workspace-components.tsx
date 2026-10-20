@@ -177,7 +177,7 @@ export function DetailDrawer({
 }) {
   const parentDepth = useContext(detailDrawerDepthContext);
   const depth = parentDepth;
-  const drawerRef = useRef<HTMLElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
   const titleId = useId();
@@ -228,7 +228,7 @@ export function DetailDrawer({
     <detailDrawerDepthContext.Provider value={depth + 1}>
       <div className={`drawer-layer${depth > 0 ? " drawer-layer--stacked" : ""}`} data-drawer-depth={depth} role="presentation">
         <button aria-label="Close detail panel" className="drawer-backdrop" onClick={onClose} tabIndex={-1} type="button" />
-        <aside aria-describedby={subtitle ? subtitleId : undefined} aria-labelledby={titleId} aria-modal="true" className="detail-drawer" data-detail-drawer ref={drawerRef} role="dialog" style={{ "--drawer-depth": depth } as CSSProperties}>
+        <div aria-describedby={subtitle ? subtitleId : undefined} aria-labelledby={titleId} aria-modal="true" className="detail-drawer" data-detail-drawer ref={drawerRef} role="dialog" style={{ "--drawer-depth": depth } as CSSProperties}>
           <div className="detail-drawer__header">
             <div>
               <p className="eyebrow">{eyebrow}</p>
@@ -238,10 +238,54 @@ export function DetailDrawer({
             <button aria-label="Close detail panel" className="icon-button" onClick={onClose} ref={closeButtonRef} type="button">×</button>
           </div>
           <div className="detail-drawer__body">{children}</div>
-        </aside>
+        </div>
       </div>
     </detailDrawerDepthContext.Provider>
   );
+}
+
+/** Keep the focused evidence dialog contained and return focus to its trigger. */
+export function useDialogFocus(open: boolean, onClose: () => void) {
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previousActiveElement = document.activeElement as HTMLElement | null;
+    const dialog = document.querySelector<HTMLElement>(".work-evidence-dialog:last-of-type");
+    if (!dialog) return;
+
+    const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>("button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex=\"-1\"])")).filter((element) => element.offsetParent !== null);
+    window.setTimeout(() => (dialog.querySelector<HTMLElement>("[autofocus]") ?? focusable()[0])?.focus(), 0);
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const elements = focusable();
+      if (elements.length === 0) return;
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      previousActiveElement?.focus();
+    };
+  }, [open]);
 }
 
 export function WorkDetail({ work, onClose = () => undefined, fullPage = false, serverAuthorized = false }: { work: FixtureWorkItem; onClose?: () => void; fullPage?: boolean; serverAuthorized?: boolean }) {
@@ -284,6 +328,14 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
   const [clientPreviewOpen, setClientPreviewOpen] = useState(false);
   const [paymentAmountDraft, setPaymentAmountDraft] = useState(effectiveWork.paymentAmount === null || effectiveWork.paymentAmount === undefined ? "" : String(effectiveWork.paymentAmount));
   const [paymentAmountCorrectionOpen, setPaymentAmountCorrectionOpen] = useState(false);
+  const dialogOpen = Boolean(gateChecklistOpen || pendingStatusChange || paymentAmountCorrectionOpen || dataReadinessOpen || pendingProcessStatus);
+  useDialogFocus(dialogOpen, () => {
+    if (gateChecklistOpen) setGateChecklistOpen(false);
+    else if (pendingStatusChange) setPendingStatusChange(null);
+    else if (paymentAmountCorrectionOpen) setPaymentAmountCorrectionOpen(false);
+    else if (dataReadinessOpen) setDataReadinessOpen(false);
+    else if (pendingProcessStatus) setPendingProcessStatus(null);
+  });
   const dataBlocked = effectiveWork.blocker?.category === "CLIENT DATA";
   const stepById = new Map(effectiveWork.steps.map((step) => [step.id, step]));
   function baselineProcessStatus(state: string): WorkflowProcessStatus {

@@ -71,9 +71,9 @@ export async function POST(request: Request) {
     }
     const payload = asRecord(input.payload);
     if (!payload) return NextResponse.json({ error: "Unsupported deadline control action." }, { status: 400 });
-    const requiredStrings = ["calendarMonth", "requirementCode", "requirementName", "operatingCategory", "frequencyLabel", "sourceCode", "reason"];
+    const requiredStrings = ["calendarMonth", "requirementCode", "requirementName", "operatingCategory", "frequencyLabel", "reason"];
     if (requiredStrings.some((key) => !isNonEmptyString(payload[key]))) {
-      return NextResponse.json({ error: "Calendar month, requirement identity, category, frequency, source, and reason are required." }, { status: 400 });
+      return NextResponse.json({ error: "Calendar month, requirement identity, category, frequency, and reason are required." }, { status: 400 });
     }
     const data = await saveDeadlineControlEntry({
       entryId: typeof payload.entryId === "string" ? payload.entryId : null,
@@ -89,7 +89,7 @@ export async function POST(request: Request) {
       baseStatutoryDeadline: typeof payload.baseStatutoryDeadline === "string" ? payload.baseStatutoryDeadline : null,
       adjustedStatutoryDeadline: typeof payload.adjustedStatutoryDeadline === "string" ? payload.adjustedStatutoryDeadline : null,
       tmfPackageTarget: typeof payload.tmfPackageTarget === "string" ? payload.tmfPackageTarget : null,
-      sourceCode: String(payload.sourceCode),
+      sourceCode: typeof payload.sourceCode === "string" ? payload.sourceCode : "",
       sourceLocator: typeof payload.sourceLocator === "string" ? payload.sourceLocator : "",
       notes: typeof payload.notes === "string" ? payload.notes : "",
       reason: String(payload.reason),
