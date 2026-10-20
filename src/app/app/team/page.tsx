@@ -98,7 +98,7 @@ export default function TeamPage() {
       const storedRoster = window.localStorage.getItem(rosterStorageKey);
       const parsedRoster = storedRoster ? JSON.parse(storedRoster) as FixtureTeamMember[] : null;
       // Hydrate the browser-local prototype only after SSR; this is intentionally a state sync from external storage.
-      if (Array.isArray(parsedRoster) && parsedRoster.every((member) => typeof member.id === "string" && typeof member.name === "string" && typeof member.operatingModel === "string")) {
+      if (Array.isArray(parsedRoster) && parsedRoster.length > 0 && parsedRoster.every((member) => typeof member.id === "string" && typeof member.name === "string" && typeof member.operatingModel === "string")) {
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setTeamMembers(parsedRoster);
       }
