@@ -33,9 +33,7 @@ function OperationalRegisterRow({ mode, processStatuses, record, onSelect }: { m
   const statuses = registerStatuses(work, processStatuses);
   const currentStep = work.steps.find((step) => step.id === currentProcessStepId(work, statuses)) ?? work.steps[work.steps.length - 1];
   const workComplete = work.steps.every((step) => statuses[step.id] === "DONE" || statuses[step.id] === "NOT_APPLICABLE");
-  const currentAction = currentStep?.id === "payment-confirmation" && work.paymentApplicability === "REQUIRED" && (work.paymentAmount === null || work.paymentAmount === undefined)
-    ? "Record amount to pay"
-    : currentStep ? actionForProcessStep(currentStep.id, statuses[currentStep.id] ?? "NOT_STARTED") ?? currentStep.label : work.nextAction;
+  const currentAction = currentStep ? actionForProcessStep(currentStep.id, statuses[currentStep.id] ?? "NOT_STARTED") ?? currentStep.label : work.nextAction;
   const rowClass = mode === "due" ? "due-register__row" : "work-register__row";
   const dateClass = mode === "due" ? "due-register__date" : "work-register__date";
   const periodClass = mode === "due" ? "due-register__period" : "work-register__period";

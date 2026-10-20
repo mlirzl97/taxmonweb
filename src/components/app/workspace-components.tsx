@@ -327,12 +327,10 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
   const [pendingArchiveFacts, setPendingArchiveFacts] = useState<WorkflowArchiveFacts>({});
   const [clientPreviewOpen, setClientPreviewOpen] = useState(false);
   const [paymentAmountDraft, setPaymentAmountDraft] = useState(effectiveWork.paymentAmount === null || effectiveWork.paymentAmount === undefined ? "" : String(effectiveWork.paymentAmount));
-  const [paymentAmountCorrectionOpen, setPaymentAmountCorrectionOpen] = useState(false);
-  const dialogOpen = Boolean(gateChecklistOpen || pendingStatusChange || paymentAmountCorrectionOpen || dataReadinessOpen || pendingProcessStatus);
+  const dialogOpen = Boolean(gateChecklistOpen || pendingStatusChange || dataReadinessOpen || pendingProcessStatus);
   useDialogFocus(dialogOpen, () => {
     if (gateChecklistOpen) setGateChecklistOpen(false);
     else if (pendingStatusChange) setPendingStatusChange(null);
-    else if (paymentAmountCorrectionOpen) setPaymentAmountCorrectionOpen(false);
     else if (dataReadinessOpen) setDataReadinessOpen(false);
     else if (pendingProcessStatus) setPendingProcessStatus(null);
   });
@@ -373,9 +371,7 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
   ];
   const pendingStage = dataBlocked ? courseStages.find((stage) => stage.id === "data") : currentProcessStep ? courseStages.find((stage) => stage.stepId === currentProcessStep.id) : undefined;
   const pendingOwner = activeGate ?? pendingStage?.owner;
-  const paymentConfirmationStatus = processStatusForStep(stepById.get("payment-confirmation") ?? effectiveWork.steps[effectiveWork.steps.length - 1]);
-  const paymentAmountPending = effectiveWork.paymentApplicability === "REQUIRED" && !paymentAmountRecorded && (paymentConfirmationStatus === "IN_PROGRESS" || paymentConfirmationStatus === "NEEDS_ATTENTION");
-  const pendingTask = paymentAmountPending ? "Record amount to pay" : pendingStage?.label ?? (pendingOwner ? "Complete the assigned gate" : undefined);
+  const pendingTask = pendingStage?.label ?? (pendingOwner ? "Complete the assigned gate" : undefined);
   const pendingAssignee = pendingOwner === "PREPARER" ? client?.assignment.preparer : pendingOwner === "CHECKER" ? client?.assignment.checker : pendingOwner === "REVIEWER" ? client?.assignment.reviewer : undefined;
   const visibleProcessBundles = processBundles.filter((bundle) => bundle !== "Payment" || effectiveWork.paymentApplicability !== "NOT_APPLICABLE");
   const visibleJourneyStages = visibleProcessBundles.flatMap((bundle) => courseStages.filter((stage) => stage.bundle === bundle));
@@ -491,7 +487,7 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
   const isCurrentGate = activeGate === role;
   const allQuestionsAnswered = questions.every((question) => answers[question.id]);
   const taxDueAmountValid = role !== "CHECKER" || (taxDueAmountDraft.trim() !== "" && Number.isFinite(Number(taxDueAmountDraft)) && Number(taxDueAmountDraft) >= 0);
-  const preparerAmountValid = role !== "PREPARER" || effectiveWork.paymentApplicability !== "REQUIRED" || paymentAmountRecorded || (paymentAmountDraft.trim() !== "" && Number.isFinite(Number(paymentAmountDraft)) && Number(paymentAmountDraft) >= 0);
+  const paymentAmountValid = role !== "CHECKER" || effectiveWork.paymentApplicability !== "REQUIRED" || paymentAmountRecorded || (paymentAmountDraft.trim() !== "" && Number.isFinite(Number(paymentAmountDraft)) && Number(paymentAmountDraft) >= 0);
 
   if (!serverAuthorized && !isWorkVisible(work)) {
     return <section aria-labelledby="work-access-title" className="persona-access-state"><p className="eyebrow">Work access</p><h1 id="work-access-title">This work item is outside your assigned view</h1><p>Open work assigned to you or within your authorized reporting scope.</p><Link className="button button--quiet" href="/app/work">Back to Work</Link></section>;
@@ -499,15 +495,15 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
 
   async function recordDecision(decision: WorkflowDecision) {
     const taxDueAmount = taxDueAmountDraft.trim() === "" ? null : Number(taxDueAmountDraft);
-    const preparerPaymentAmount = role === "PREPARER" && effectiveWork.paymentApplicability === "REQUIRED" && !paymentAmountRecorded ? Number(paymentAmountDraft) : effectiveWork.paymentAmount ?? null;
-    if (role === "PREPARER" && decision !== "RETURN" && effectiveWork.paymentApplicability === "REQUIRED" && !paymentAmountRecorded) {
-      const amountResult = await setPaymentAmount(effectiveWork, preparerPaymentAmount);
+    const checkerPaymentAmount = role === "CHECKER" && effectiveWork.paymentApplicability === "REQUIRED" && !paymentAmountRecorded ? Number(paymentAmountDraft) : effectiveWork.paymentAmount ?? null;
+    if (prototypeMode && role === "CHECKER" && decision !== "RETURN" && effectiveWork.paymentApplicability === "REQUIRED" && !paymentAmountRecorded) {
+      const amountResult = await setPaymentAmount(effectiveWork, checkerPaymentAmount);
       if (!amountResult.ok) {
         setFeedback(amountResult.error ?? "The amount to pay could not be recorded.");
         return amountResult;
       }
     }
-    const result = await submitDecision(effectiveWork, role, decision, answers, note, overrideReason, pendingGateStatus ?? "DONE", taxDueAmount, decision === "RETURN" ? null : preparerPaymentAmount);
+    const result = await submitDecision(effectiveWork, role, decision, answers, note, overrideReason, pendingGateStatus ?? "DONE", taxDueAmount, decision === "RETURN" ? null : checkerPaymentAmount);
     if (!result.ok) {
       setFeedback(result.error ?? "The decision could not be recorded.");
       return result;
@@ -565,12 +561,6 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
   }
 
   function openStatusDialog(stepId: string, currentStatus: WorkflowProcessStatus) {
-    if (stepId === "payment-confirmation" && effectiveWork.paymentApplicability === "REQUIRED" && !paymentAmountRecorded) {
-      setPaymentAmountDraft("");
-      setProcessFeedback("");
-      setPaymentAmountCorrectionOpen(true);
-      return;
-    }
     if (gateProcessStepIds.has(stepId)) {
       setPendingGateStatus(null);
       setFeedback("");
@@ -582,21 +572,6 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
     setProcessFeedback("");
   }
 
-  async function savePaymentAmountCorrection() {
-    const amount = Number(paymentAmountDraft);
-    if (paymentAmountDraft.trim() === "" || !Number.isFinite(amount) || amount < 0) {
-      setProcessFeedback("Enter a valid non-negative amount before continuing.");
-      return;
-    }
-    const result = await setPaymentAmount(effectiveWork, amount);
-    if (!result.ok) {
-      setProcessFeedback(result.error ?? "The amount to pay could not be recorded.");
-      return;
-    }
-    setPaymentAmountCorrectionOpen(false);
-    setProcessFeedback("Amount recorded. Confirm payment to continue.");
-  }
-
   function confirmStatusChange() {
     if (!pendingStatusChange || pendingStatusValue === pendingStatusChange.currentStatus) return;
     const { stepId } = pendingStatusChange;
@@ -606,13 +581,6 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
 
   async function confirmPendingProcessStatus() {
     if (!pendingProcessStatus) return;
-    if (pendingProcessStatus.stepId === "payment-confirmation" && pendingProcessStatus.status === "DONE" && effectiveWork.paymentApplicability !== "NOT_APPLICABLE" && !paymentAmountRecorded) {
-      setPendingProcessStatus(null);
-      setPaymentAmountDraft("");
-      setProcessFeedback("");
-      setPaymentAmountCorrectionOpen(true);
-      return;
-    }
     const isArchiving = pendingProcessStatus.stepId === "evidence" && pendingProcessStatus.status === "DONE";
     const isESubmission = pendingProcessStatus.stepId === "esubmission" && pendingProcessStatus.status === "DONE";
     const requiresActualDate = ["filing", "payment-confirmation", "esubmission"].includes(pendingProcessStatus.stepId) && pendingProcessStatus.status === "DONE";
@@ -687,11 +655,11 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
         <p className="workflow-gate-panel__hint">Selected outcome: {gateStatusLabel}. {workPerspective === "MASTER_ADMIN" ? `HOD preview · acting for ${workflowRoleLabel(role)}.` : `Acting view: ${workflowPerspectiveLabel(workPerspective)}.`}</p>
         {!canAct && <div className="workflow-gate-panel__warning"><span>View only. This checklist belongs to the {workflowRoleLabel(activeGate)}.</span><button className="button button--quiet button--small" onClick={() => { setWorkPerspective(activeGate); }} type="button">Switch to {workflowRoleLabel(activeGate)} view</button></div>}
         <div className="workflow-question-list">{questions.map((question) => { const latestChecklistUpdate = [...workflowRecord.checklistHistory].reverse().find((update) => update.role === role && update.questionId === question.id); return <label className={`workflow-question${answers[question.id] ? " workflow-question--checked" : ""}`} key={question.id}><input aria-label={question.label} checked={Boolean(answers[question.id])} disabled={periodLock.locked || !canAct || !isCurrentGate} onChange={(event) => updateChecklist(question.id, event.target.checked)} type="checkbox" /><span>{question.label}</span><small>{answers[question.id] ? `Done${latestChecklistUpdate ? ` · ${latestChecklistUpdate.actor}` : ""}` : "Open"}</small></label>; })}</div>
-        {role === "PREPARER" && effectiveWork.paymentApplicability === "REQUIRED" && <label className="workflow-note-field"><span>Amount to pay</span>{paymentAmountRecorded ? <strong aria-label={`Payment amount ${paymentAmountLabel}`} className="work-course-map__amount-readonly">{paymentAmountLabel}</strong> : <input aria-describedby="workflow-payment-amount-help" aria-label="Amount to pay" disabled={periodLock.locked || !canAct || !isCurrentGate} inputMode="decimal" min="0" onChange={(event) => setPaymentAmountDraft(event.target.value)} step="0.01" type="number" value={paymentAmountDraft} /> }<small id="workflow-payment-amount-help">Record the amount from the drafted return. Do not calculate it here.</small></label>}
+        {role === "CHECKER" && effectiveWork.paymentApplicability === "REQUIRED" && <label className="workflow-note-field"><span>Amount to pay</span>{paymentAmountRecorded ? <strong aria-label={`Payment amount ${paymentAmountLabel}`} className="work-course-map__amount-readonly">{paymentAmountLabel}</strong> : <input aria-describedby="workflow-payment-amount-help" aria-label="Amount to pay" disabled={periodLock.locked || !canAct || !isCurrentGate} inputMode="decimal" min="0" onChange={(event) => setPaymentAmountDraft(event.target.value)} step="0.01" type="number" value={paymentAmountDraft} /> }<small id="workflow-payment-amount-help">Record the amount from the approved return or working papers. Do not calculate it here.</small></label>}
         {role === "CHECKER" && <label className="workflow-note-field"><span>Tax due amount</span><input aria-describedby="workflow-tax-due-help" aria-label="Tax due amount" disabled={periodLock.locked || !canAct || !isCurrentGate} inputMode="decimal" min="0" onChange={(event) => setTaxDueAmountDraft(event.target.value)} step="0.01" type="number" value={taxDueAmountDraft} /><small id="workflow-tax-due-help">Record the amount from the approved return or working papers. Do not calculate it here.</small></label>}
         <label className="workflow-note-field"><span>Decision note</span><textarea disabled={periodLock.locked} onChange={(event) => setNote(event.target.value)} placeholder="What did you check, or what needs correction?" value={note} /></label>
         {feedback && <p className="workflow-gate-panel__feedback" role="status">{feedback}</p>}
-        <div className="workflow-gate-actions"><button className="button button--primary" disabled={periodLock.locked || !canAct || !isCurrentGate || !allQuestionsAnswered || !taxDueAmountValid || !preparerAmountValid || !note.trim()} onClick={() => { void recordDecision(role === "PREPARER" ? "CERTIFY" : "APPROVE"); }} type="button">Certify as {gateStatusLabel}</button><button className="button button--quiet" disabled={periodLock.locked || !canAct || !isCurrentGate || !note.trim()} onClick={() => { void recordDecision("RETURN"); }} type="button">Return for correction</button></div>
+        <div className="workflow-gate-actions"><button className="button button--primary" disabled={periodLock.locked || !canAct || !isCurrentGate || !allQuestionsAnswered || !taxDueAmountValid || !paymentAmountValid || !note.trim()} onClick={() => { void recordDecision(role === "PREPARER" ? "CERTIFY" : "APPROVE"); }} type="button">Certify as {gateStatusLabel}</button><button className="button button--quiet" disabled={periodLock.locked || !canAct || !isCurrentGate || !note.trim()} onClick={() => { void recordDecision("RETURN"); }} type="button">Return for correction</button></div>
         {workflowRecord.attempts.length > 0 && <div className="workflow-attempt-history"><span className="eyebrow">Decision history</span>{workflowRecord.attempts.map((attempt) => <div className="workflow-attempt" key={attempt.id}><strong>{workflowRoleLabel(attempt.role)} · {attempt.decision === "RETURN" ? "Returned for correction" : attempt.role === "PREPARER" ? "Certified" : "Approved"}</strong><small>{attempt.recordedAt} · {attempt.note}{attempt.taxDueAmount !== undefined ? ` · Tax due: ${new Intl.NumberFormat("en-PH", { currency: "PHP", maximumFractionDigits: 2, style: "currency" }).format(attempt.taxDueAmount)}` : ""}</small></div>)}</div>}
       </section></div>}
     </>;
@@ -700,7 +668,6 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
   const detailContent = (
     <div className="work-detail-content">
       {pendingStatusChange && <div className="work-evidence-dialog-layer" role="presentation"><section aria-labelledby="work-status-dialog-title" aria-modal="true" className="work-evidence-dialog" onKeyDown={(event) => { if (event.key === "Escape") setPendingStatusChange(null); }} role="dialog"><div className="work-evidence-dialog__header"><div><p className="eyebrow">Change status</p><h2 id="work-status-dialog-title">Update process status</h2><p>{courseStages.find((stage) => stage.stepId === pendingStatusChange.stepId)?.label ?? "Process step"}</p></div><button aria-label="Close status dialog" className="icon-button" onClick={() => setPendingStatusChange(null)} type="button">×</button></div><label className="work-evidence-dialog__field"><span>Status</span><select autoFocus aria-label="Process status" onChange={(event) => setPendingStatusValue(event.target.value as WorkflowProcessStatus)} value={pendingStatusValue}>{statusOptions.map((option) => <option key={option} value={option}>{processStatusLabels[option]}</option>)}</select></label><div className="work-evidence-dialog__actions"><button className="button button--quiet" onClick={() => setPendingStatusChange(null)} type="button">Cancel</button><button className="button button--primary" disabled={pendingStatusValue === pendingStatusChange.currentStatus || periodLock.locked} onClick={confirmStatusChange} type="button">Continue</button></div></section></div>}
-      {paymentAmountCorrectionOpen && <div className="work-evidence-dialog-layer" role="presentation"><section aria-labelledby="payment-amount-correction-title" aria-modal="true" className="work-evidence-dialog" onKeyDown={(event) => { if (event.key === "Escape") setPaymentAmountCorrectionOpen(false); }} role="dialog"><div className="work-evidence-dialog__header"><div><p className="eyebrow">Preparer correction</p><h2 id="payment-amount-correction-title">Record amount to pay</h2><p>Payment confirmation is waiting for the amount captured from the drafted return.</p></div><button aria-label="Close payment amount correction" className="icon-button" onClick={() => setPaymentAmountCorrectionOpen(false)} type="button">×</button></div><label className="work-evidence-dialog__field"><span>Amount to pay</span><input autoFocus aria-label="Amount to pay" inputMode="decimal" min="0" onChange={(event) => setPaymentAmountDraft(event.target.value)} step="0.01" type="number" value={paymentAmountDraft} /><small>Enter the amount from the Preparer’s drafted return. Do not calculate it here.</small></label>{processFeedback && <p className="work-process-feedback" role="alert">{processFeedback}</p>}<div className="work-evidence-dialog__actions"><button className="button button--quiet" onClick={() => setPaymentAmountCorrectionOpen(false)} type="button">Cancel</button><button className="button button--primary" disabled={periodLock.locked} onClick={() => void savePaymentAmountCorrection()} type="button">Save amount</button></div></section></div>}
       <section aria-label="Return status" className="work-package-timeline" tabIndex={0}>
         <div className="work-package-timeline__summary"><div><p className="eyebrow">Return status</p><h2>{packageCurrentIndex === -1 ? "Return complete" : `Currently in ${packageStages[packageCurrentIndex].label}`}</h2></div><span>{packageCompletedCount} of {packageStages.length} stages complete</span></div>
         {pendingOwner && pendingTask && <div className="work-package-timeline__handoff"><span className="work-package-timeline__handoff-label">Next handoff</span><strong>Waiting for {workflowProcessRoleLabel(pendingOwner)}</strong>{pendingAssignee && <span className="work-package-timeline__handoff-person">{pendingAssignee}</span>}<em>{pendingTask}</em></div>}
@@ -752,7 +719,7 @@ export function WorkDetail({ work, onClose = () => undefined, fullPage = false, 
             return <div className={`work-course-map__stage-wrap${isCurrentGateStep ? " work-course-map__stage-wrap--active" : ""}`} key={stage.id}>
               <div className={`work-course-map__stage ${stageClassName}`}>
               <span className="work-course-map__marker" aria-hidden="true">{stage.id === "data" ? "P" : processStatus === "DONE" ? "✓" : processNumber}</span>
-              <div className="work-course-map__body"><span className="work-course-map__responsibility">{workflowProcessRoleLabel(stage.owner)}</span><div className="work-course-map__stage-title"><strong>{stage.label}</strong><details className="work-stage-help"><summary aria-label={`Show help for ${stage.label}`}>i</summary><p>{stage.detail}</p></details></div>{stage.id === "prepare" && <div className={`work-course-map__amount-field work-course-map__draft-result${paymentAmountRecorded ? " work-course-map__draft-result--recorded" : ""}`}><span className="work-course-map__field-label">Draft result</span><label><span>Payment</span><select aria-label="Payment applicability" disabled={paymentApplicabilityLocked} onChange={(event) => void savePaymentApplicability(event.target.value as FixturePaymentApplicability)} value={effectiveWork.paymentApplicability}><option value="UNRESOLVED">Resolve applicability</option><option value="REQUIRED">Payment required</option><option value="NOT_APPLICABLE">No payment — skip payment phase</option></select></label>{paymentProcessIncluded && <><span>Amount to pay</span>{paymentAmountRecorded ? <strong aria-label={`Payment amount ${paymentAmountLabel}`} className="work-course-map__amount-readonly">{paymentAmountLabel}</strong> : <small>Captured during Preparer certification.</small>}</>}</div>}</div>
+              <div className="work-course-map__body"><span className="work-course-map__responsibility">{workflowProcessRoleLabel(stage.owner)}</span><div className="work-course-map__stage-title"><strong>{stage.label}</strong><details className="work-stage-help"><summary aria-label={`Show help for ${stage.label}`}>i</summary><p>{stage.detail}</p></details></div>{stage.id === "prepare" && <div className={`work-course-map__amount-field work-course-map__draft-result${paymentAmountRecorded ? " work-course-map__draft-result--recorded" : ""}`}><span className="work-course-map__field-label">Draft result</span><label><span>Payment</span><select aria-label="Payment applicability" disabled={paymentApplicabilityLocked} onChange={(event) => void savePaymentApplicability(event.target.value as FixturePaymentApplicability)} value={effectiveWork.paymentApplicability}><option value="UNRESOLVED">Resolve applicability</option><option value="REQUIRED">Payment required</option><option value="NOT_APPLICABLE">No payment — skip payment phase</option></select></label>{paymentProcessIncluded && <><span>Amount to pay</span>{paymentAmountRecorded ? <strong aria-label={`Payment amount ${paymentAmountLabel}`} className="work-course-map__amount-readonly">{paymentAmountLabel}</strong> : <small>Captured during Checker certification.</small>}</>}</div>}</div>
               {!step && <div className="work-step__action">{stage.id === "data" && dataBlocked && canActOnProcessStep("prepare", effectiveWork) ? <button className="button button--primary button--small" onClick={() => setDataReadinessOpen(true)} type="button">Confirm data ready</button> : <span className="work-course-map__state">{stage.state}</span>}</div>}
               <div className="work-step__action">
                 {step && processStatus && (canEditStatus ? <label className="work-course-map__status-control"><span className="sr-only">{stage.label} status</span><select aria-label={`${stage.label} status`} onChange={(event) => requestProcessStatus(step.id, event.target.value as WorkflowProcessStatus)} value={processStatus}>{statusOptions.map((option) => <option key={option} value={option}>{processStatusLabels[option]}</option>)}</select></label> : <span aria-label={`${stage.label} status`} className={`work-course-map__status-pill work-course-map__status-pill--${processStatus.toLowerCase().replaceAll("_", "-")}`}>{processStatusLabels[processStatus]}</span>)}

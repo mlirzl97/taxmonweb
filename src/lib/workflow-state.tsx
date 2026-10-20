@@ -178,13 +178,13 @@ function prototypeWorkSeed(): FixtureWorkItem[] {
   return fixtureWork.map((work) => work.id === "work-02"
     ? {
         ...work,
-        detail: "Payment applies; record the amount during Preparer certification.",
+        detail: "Payment applies; record the amount during Checker certification.",
         stage: "PREPARE",
         nextAction: "Complete preparation",
         status: "AMBER",
         statusReason: "The return package is reset for a fresh Preparer certification.",
         steps: work.steps.map((step, index) => ({ ...step, state: index === 0 ? "current" : "not-started" })),
-        components: work.components.map((component) => component.label === "Payment" ? { ...component, state: "Required · amount not recorded", detail: "Record the amount during Preparer certification." } : { ...component, state: component.label === "Submission" ? "Not started" : component.label === "Attachments" ? "Waiting" : "Not started" }),
+        components: work.components.map((component) => component.label === "Payment" ? { ...component, state: "Required · amount not recorded", detail: "Record the amount during Checker certification." } : { ...component, state: component.label === "Submission" ? "Not started" : component.label === "Attachments" ? "Waiting" : "Not started" }),
         returnedFrom: undefined,
       }
     : work);
@@ -759,7 +759,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (isGateStep && (status === "DONE" || status === "NOT_APPLICABLE")) return { ok: false, error: "Complete this step through its certification gate." };
     if (status === "NOT_APPLICABLE" && paymentProcessStepIds.has(stepId) && work.paymentApplicability === "UNRESOLVED") return { ok: false, error: "Resolve payment applicability before skipping the payment branch." };
     const paymentAmount = paymentAmountOverride !== undefined ? paymentAmountOverride : work.paymentAmount;
-    if (status === "DONE" && stepId === "payment-confirmation" && (paymentAmount === null || paymentAmount === undefined || !Number.isFinite(paymentAmount) || paymentAmount < 0)) return { ok: false, error: "Record the amount to pay in the Preparer gate before confirming payment." };
+    if (status === "DONE" && stepId === "payment-confirmation" && (paymentAmount === null || paymentAmount === undefined || !Number.isFinite(paymentAmount) || paymentAmount < 0)) return { ok: false, error: "Record the amount to pay in the Checker gate before confirming payment." };
     if ((status === "DONE" || status === "NOT_APPLICABLE") && !evidenceReference.trim()) return { ok: false, error: status === "NOT_APPLICABLE" ? "Record why this process step is not applicable." : "Record the result or evidence reference before marking this step complete." };
     if (status === "DONE" && ["filing", "payment-confirmation", "esubmission"].includes(stepId) && !/^\d{4}-\d{2}-\d{2}$/.test(completedOn)) return { ok: false, error: "Record the actual completion date before marking this outcome complete." };
     if (status === "DONE" && stepId === "esubmission" && (!/^\d{4}-\d{2}-\d{2}$/.test(acknowledgedOn) || !/^\d{4}-\d{2}-\d{2}$/.test(validatedOn))) return { ok: false, error: "Record the BIR acknowledgment and validation dates before completing eSubmission." };
@@ -834,7 +834,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (!prototypeMode) return executeLiveCommand(work, "payment_profile", { paymentApplicability: work.paymentApplicability.toLowerCase(), paymentAmount: amount });
     const record = recordForWork(work, records[work.id]);
     if (periodLocks[workReturnLockKey(work)]?.locked || record.periodLock.locked) return { ok: false, error: "This return and compliance period are locked by Tax Team and cannot be edited." };
-    if (!canActOnWorkflow("PREPARER", work)) return { ok: false, error: `The ${rbacPersonaLabel(workPerspective)} access view cannot record the amount to pay for this taxpayer.` };
+    if (!canActOnWorkflow("CHECKER", work)) return { ok: false, error: `The ${rbacPersonaLabel(workPerspective)} access view cannot record the amount to pay for this taxpayer.` };
     if (work.paymentAmount !== null && work.paymentAmount !== undefined && amount !== work.paymentAmount) return { ok: false, error: "The amount to pay is already recorded and cannot be edited." };
     if (amount !== null && (!Number.isFinite(amount) || amount < 0)) return { ok: false, error: "Enter a valid non-negative payment amount." };
     const actor = rbacPersonaLabel(workPerspective);
@@ -856,7 +856,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (!prototypeMode) {
       // shortcut: live gate storage still treats non-return outcomes as complete; enable live N/A after its migration adds the outcome.
       if (gateStatus === "NOT_APPLICABLE") return { ok: false, error: "Not applicable gate outcomes are not yet enabled for live work." };
-      const result = await executeLiveCommand(work, "gate_decision", { role: role.toLowerCase(), decision: decision.toLowerCase(), answers: role === "CHECKER" && decision !== "RETURN" ? { ...answers, taxDueAmount: recordedTaxDueAmount } : answers, note, overrideReason, gateStatus: gateStatus.toLowerCase(), ...(role === "PREPARER" && decision !== "RETURN" ? { paymentAmount } : {}) });
+      const result = await executeLiveCommand(work, "gate_decision", { role: role.toLowerCase(), decision: decision.toLowerCase(), answers: role === "CHECKER" && decision !== "RETURN" ? { ...answers, taxDueAmount: recordedTaxDueAmount } : answers, note, overrideReason, gateStatus: gateStatus.toLowerCase(), ...(role === "CHECKER" && decision !== "RETURN" ? { paymentAmount } : {}) });
       return { ...result, nextGate: decision === "RETURN" ? "PREPARER" as WorkflowRole : role === "PREPARER" ? "CHECKER" as WorkflowRole : role === "CHECKER" ? "REVIEWER" as WorkflowRole : null };
     }
     const record = recordForWork(work, records[work.id]);
@@ -866,7 +866,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     const questions = roleQuestions[role];
     if (decision !== "RETURN" && questions.some((question) => !answers[question.id])) return { ok: false, error: "Complete every gate question before recording this decision." };
     if (role === "CHECKER" && decision !== "RETURN" && !isValidTaxDueAmount(recordedTaxDueAmount)) return { ok: false, error: "Record the tax due amount before certifying the Checker gate." };
-    if (role === "PREPARER" && decision !== "RETURN" && work.paymentApplicability === "REQUIRED" && !isValidTaxDueAmount(paymentAmount)) return { ok: false, error: "Record the amount to pay before certifying the Preparer gate." };
+    if (role === "CHECKER" && decision !== "RETURN" && work.paymentApplicability === "REQUIRED" && !isValidTaxDueAmount(paymentAmount)) return { ok: false, error: "Record the amount to pay before certifying the Checker gate." };
     if (!note.trim()) return { ok: false, error: "Add a short review note before recording this decision." };
     const elevatedOverride = canUseElevatedOverride(workPerspective) && Boolean(overrideReason.trim());
     if (elevatedOverride && !overrideReason.trim()) return { ok: false, error: "Record an override reason when Master Admin records another role's gate decision." };
