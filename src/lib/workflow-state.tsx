@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { canAccessModule, cloneAccessMatrix, isAccessMatrix, moduleAccessForPersona, rbacPersonaDescription, rbacPersonaLabel, type AccessLevel, type AccessMatrix, type ModuleKey, type RbacPersona } from "@/lib/domain/access";
-import { fixtureClients, fixtureClock, fixtureOrgDirectoryMembers, fixtureWork, type FixtureClient, type FixturePaymentApplicability, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
+import { fixtureClients, fixtureClock, fixtureOrgDirectoryMembers, fixtureWork, type FixtureClient, type FixtureDataReadiness, type FixturePaymentApplicability, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
 import { applySavedCalibrationToClient, prototypeClientProfileUpdatedEvent } from "@/lib/domain/client-profile-persistence";
 import { clientIsAssignedForRole, clientMatchesPerspective, staffMemberIdForPerspective } from "@/lib/domain/team";
 import { towerForScopeFilter } from "@/lib/domain/organization-catalog";
@@ -112,6 +112,7 @@ export type WorkflowRecord = {
   checklistHistory: readonly WorkflowChecklistUpdate[];
   processStatuses: Readonly<Record<string, WorkflowProcessStatus>>;
   processHistory: readonly WorkflowProcessUpdate[];
+  dataReadiness?: FixtureDataReadiness;
   archiveFacts?: WorkflowArchiveFacts;
   changeHistory: readonly WorkflowChangeEvent[];
   periodLock: WorkflowPeriodLock;
@@ -802,12 +803,14 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (!reason.trim()) return { ok: false, error: "Record why the source data is ready before continuing." };
     if (!prototypeMode) return executeLiveCommand(work, "data_readiness", { ready, source, reason: reason.trim() });
     if (periodLocks[workReturnLockKey(work)]?.locked) return { ok: false, error: "This return and compliance period are locked by Tax Team." };
+    const record = recordForWork(work, records[work.id]);
+    const dataReadiness: FixtureDataReadiness = { state: ready ? "READY" : "NOT_READY", source, reason: reason.trim(), actor: rbacPersonaLabel(workPerspective), recordedAt: workflowTimestamp(record.processHistory.length + record.changeHistory.length) };
     setRecords((current) => {
       const existing = recordForWork(work, current[work.id]);
-      return { ...current, [work.id]: { ...existing, patch: { ...existing.patch, blocker: ready ? null : { category: "CLIENT DATA", reason: reason.trim() } } } };
+      return { ...current, [work.id]: { ...existing, dataReadiness, patch: { ...existing.patch, blocker: ready ? null : { category: "CLIENT DATA", reason: reason.trim() } } } };
     });
     return { ok: true };
-  }, [executeLiveCommand, periodLocks, prototypeMode]);
+  }, [executeLiveCommand, periodLocks, prototypeMode, records, workPerspective]);
 
   const setPaymentApplicability = useCallback(async (work: FixtureWorkItem, applicability: FixturePaymentApplicability) => {
     if (!prototypeMode) return executeLiveCommand(work, "payment_profile", { paymentApplicability: applicability.toLowerCase(), paymentAmount: applicability === "NOT_APPLICABLE" ? null : work.paymentAmount ?? null });

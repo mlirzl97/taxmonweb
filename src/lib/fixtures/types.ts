@@ -28,6 +28,14 @@ export type FixtureWorkComponent = {
 
 export type FixturePaymentApplicability = "REQUIRED" | "NOT_APPLICABLE" | "UNRESOLVED";
 
+export type FixtureDataReadiness = {
+  state: "READY" | "NOT_READY";
+  source: "CLIENT_RECORDS" | "TMF_BOOKS";
+  reason: string;
+  actor: string;
+  recordedAt: string;
+};
+
 export type FixtureWorkflowSnapshot = {
   currentGate: "PREPARER" | "CHECKER" | "REVIEWER" | null;
   attempts: readonly {
@@ -67,6 +75,7 @@ export type FixtureWorkflowSnapshot = {
     elevatedOverride?: boolean;
     overrideReason?: string;
   }[];
+  dataReadiness?: FixtureDataReadiness;
   archiveFacts?: {
     filingDate?: string;
     filingReferenceNumber?: string;

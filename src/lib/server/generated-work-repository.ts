@@ -8,6 +8,7 @@ export type LiveGeneratedWork = {
   period_label: string;
   period_locked?: boolean;
   data_readiness: "not_ready" | "ready";
+  source_context?: { dataReadiness?: { state?: "ready" | "not_ready"; source?: "CLIENT_RECORDS" | "TMF_BOOKS"; reason?: string; recordedAt?: string; recordedBy?: string } } | null;
   lifecycle_stage: "preparation" | "checking" | "review" | "client_approval" | "filing" | "payment" | "other_submissions" | "complete";
   engagement_status: "open" | "complete" | "cancelled" | "superseded";
   rag_status: "green" | "amber" | "red" | "unresolved";
@@ -173,6 +174,7 @@ export async function listLiveGeneratedWork(): Promise<LiveGeneratedWork[]> {
       period_label,
       period_locked,
       data_readiness,
+      source_context,
       lifecycle_stage,
       engagement_status,
       rag_status,

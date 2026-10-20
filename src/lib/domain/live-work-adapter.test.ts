@@ -62,6 +62,28 @@ describe("live generated work adapter", () => {
     expect(projected.blocker?.category).toBe("CLIENT DATA");
   });
 
+  it("retains the source and recorded date for readiness", () => {
+    const projected = adaptLiveGeneratedWork({
+      ...work,
+      source_context: {
+        dataReadiness: {
+          state: "ready",
+          source: "TMF_BOOKS",
+          reason: "Books confirmed for preparation.",
+          recordedAt: "2026-10-20T01:00:00Z",
+          recordedBy: "user-1",
+        },
+      },
+    }, new Map([["user-1", "Assigned preparer"]]));
+    expect(projected.workflowSnapshot?.dataReadiness).toEqual({
+      state: "READY",
+      source: "TMF_BOOKS",
+      reason: "Books confirmed for preparation.",
+      actor: "Assigned preparer",
+      recordedAt: "2026-10-20T01:00:00Z",
+    });
+  });
+
   it("normalizes live process aliases to the Work journey identifiers", () => {
     const projected = adaptLiveGeneratedWork({
       ...work,
