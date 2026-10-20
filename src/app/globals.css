@@ -1627,6 +1627,7 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
 .work-journey-table__status--needs-attention { background: var(--amber-bg); border-color: #ead3a9; color: var(--amber-dark); }
 .work-journey-table__status--not-applicable { color: var(--muted); }
 .work-journey-table__status--ready { background: transparent; border: 0; color: var(--muted); padding-left: 0; }
+.work-journey-table__status-control select { background: var(--surface); border: 1px solid var(--border-strong); border-radius: 999px; color: var(--ink); font: inherit; font-size: 9px; font-weight: 800; min-height: 27px; min-width: 104px; padding: 2px 24px 2px 9px; }
 .work-journey-table__status-stack { align-items: flex-start; display: grid; gap: 4px; justify-items: start; }
 .work-journey-table__status-stack > .button--primary.button--small { align-items: center; background: var(--amber-bg); border: 1px solid #ead3a9; border-radius: 999px; color: var(--amber-dark); display: inline-flex; font-size: 9px; font-weight: 800; height: 27px; justify-content: center; min-width: 104px; padding: 2px 7px; }
 .work-journey-table__action > small { color: var(--slate); flex-basis: 100%; font-size: 9px; line-height: 1.3; }
