@@ -758,8 +758,6 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (isUndo && !overrideReason.trim()) return { ok: false, error: "Record an override reason before correcting a completed step." };
     if (isGateStep && (status === "DONE" || status === "NOT_APPLICABLE")) return { ok: false, error: "Complete this step through its certification gate." };
     if (status === "NOT_APPLICABLE" && paymentProcessStepIds.has(stepId) && work.paymentApplicability === "UNRESOLVED") return { ok: false, error: "Resolve payment applicability before skipping the payment branch." };
-    const paymentAmount = paymentAmountOverride !== undefined ? paymentAmountOverride : work.paymentAmount;
-    if (status === "DONE" && stepId === "payment-confirmation" && (paymentAmount === null || paymentAmount === undefined || !Number.isFinite(paymentAmount) || paymentAmount < 0)) return { ok: false, error: "Record the amount to pay in the Checker gate before confirming payment." };
     if ((status === "DONE" || status === "NOT_APPLICABLE") && !evidenceReference.trim()) return { ok: false, error: status === "NOT_APPLICABLE" ? "Record why this process step is not applicable." : "Record the result or evidence reference before marking this step complete." };
     if (status === "DONE" && ["filing", "payment-confirmation", "esubmission"].includes(stepId) && !/^\d{4}-\d{2}-\d{2}$/.test(completedOn)) return { ok: false, error: "Record the actual completion date before marking this outcome complete." };
     if (status === "DONE" && stepId === "esubmission" && (!/^\d{4}-\d{2}-\d{2}$/.test(acknowledgedOn) || !/^\d{4}-\d{2}-\d{2}$/.test(validatedOn))) return { ok: false, error: "Record the BIR acknowledgment and validation dates before completing eSubmission." };
