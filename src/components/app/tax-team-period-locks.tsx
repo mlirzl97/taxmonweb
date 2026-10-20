@@ -6,6 +6,7 @@ import Link from "next/link";
 import { deriveWorkReturnOutcome, type WorkOutcomeState, type WorkReturnOutcome } from "@/lib/domain/work-outcome";
 import { type FixtureWorkItem } from "@/lib/fixtures";
 import { useWorkflow, workPeriodKey, workReturnCode, workReturnLockKey } from "@/lib/workflow-state";
+import { useDialogFocus } from "./workspace-components";
 
 type ReturnGroup = { key: string; code: string; work: FixtureWorkItem[] };
 type PeriodGroup = { key: string; year: string; month: string; label: string; returns: ReturnGroup[] };
@@ -68,6 +69,7 @@ export function PeriodLocksView() {
   const [pendingLock, setPendingLock] = useState<PendingLock | null>(null);
   const [reasonDraft, setReasonDraft] = useState("");
   const [feedback, setFeedback] = useState<Record<string, string>>({});
+  useDialogFocus(Boolean(pendingLock), () => setPendingLock(null));
   const canManage = workPerspective === "TAX_CONTROL" || workPerspective === "MASTER_ADMIN" || workPerspective === "SUPER_ADMIN";
   const periods = useMemo<PeriodGroup[]>(() => {
     const groups = new Map<string, { key: string; year: string; month: string; label: string; returns: Map<string, ReturnGroup> }>();

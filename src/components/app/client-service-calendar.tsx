@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 
 import { fixtureClock, type FixtureClient, type FixtureTaxProfile } from "@/lib/fixtures";
-import { getClientServiceCalendarRows, readDeadlinePublicationOverrides, type ClientServiceCalendarRow } from "@/lib/domain/deadline-control";
+import { getClientServiceCalendarRows, readDeadlinePublicationOverrides, type ClientServiceCalendarRow, type DeadlineControlRow } from "@/lib/domain/deadline-control";
 import { normalizeClientDeadlinePolicy } from "@/lib/domain/client-deadline-policy";
 import { useWorkflow } from "@/lib/workflow-state";
 import { AntMark } from "../brand/ant-mark";
@@ -22,17 +22,23 @@ export type ServiceCalendarRow = {
   dueDate: string;
 };
 
+function formatCalendarDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const [year, month, day] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-PH", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
 function serviceCalendarRow(item: ClientServiceCalendarRow): ServiceCalendarRow {
   return {
     activityMonth: item.activityMonth,
     taxableMonth: item.taxablePeriod,
     taxReturn: `${item.formNumber} · ${item.taxCategory}`,
-    clientProvideDate: item.clientProvideDate,
-    tmfCommitmentDate: item.tmfPackageTarget ?? "Not configured",
-    clientApprovalDate: item.clientApprovalDate,
-    estimatedFilingDate: item.estimatedFilingDate,
-    estimatedPaymentDate: item.estimatedPaymentDate,
-    dueDate: item.publishedOperationalDeadline ?? "Not configured",
+    clientProvideDate: formatCalendarDate(item.clientProvideDate),
+    tmfCommitmentDate: formatCalendarDate(item.tmfPackageTarget ?? "Not configured"),
+    clientApprovalDate: formatCalendarDate(item.clientApprovalDate),
+    estimatedFilingDate: formatCalendarDate(item.estimatedFilingDate),
+    estimatedPaymentDate: formatCalendarDate(item.estimatedPaymentDate),
+    dueDate: formatCalendarDate(item.publishedOperationalDeadline ?? "Not configured"),
   };
 }
 
@@ -87,6 +93,12 @@ function activityMonthForPeriod(period: string) {
   return calendarMonths.find((month) => normalized.startsWith(month.toLowerCase()) || normalized.startsWith(month.slice(0, 3).toLowerCase())) ?? null;
 }
 
+function formatPeriodLabel(value?: string) {
+  if (!value || !/^\d{4}-\d{2}$/.test(value)) return value || "not configured";
+  const [year, month] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-PH", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, 1)));
+}
+
 function drawPdfAnt(page: PDFPage, x: number, y: number, scale: number, color: ReturnType<typeof rgb>) {
   page.drawEllipse({ color, x: x + scale * 0.25, y: y + scale * 0.24, xScale: scale * 0.22, yScale: scale * 0.16 });
   page.drawEllipse({ color, x: x + scale * 0.55, y: y + scale * 0.43, xScale: scale * 0.16, yScale: scale * 0.16 });
@@ -100,29 +112,51 @@ function drawPdfAnt(page: PDFPage, x: number, y: number, scale: number, color: R
 
 export function ClientServiceCalendarView({ client, clientName, profile }: { client: FixtureClient; clientName: string; profile?: FixtureTaxProfile }) {
   const { prototypeMode } = useWorkflow();
-  const currentYear = Number(fixtureClock.today.slice(0, 4));
+  const currentYear = prototypeMode ? Number(fixtureClock.today.slice(0, 4)) : new Date().getUTCFullYear();
   const goLiveYear = profile?.goLiveDate ? Number(profile.goLiveDate.slice(0, 4)) : currentYear;
   const firstYear = Math.min(currentYear, Number.isFinite(goLiveYear) ? goLiveYear : currentYear);
   const years = Array.from({ length: Math.max(2, currentYear - firstYear + 2) }, (_, index) => String(firstYear + index));
   const [year, setYear] = useState(years[0] ?? "2026");
   const [overrides, setOverrides] = useState(() => readDeadlinePublicationOverrides(typeof window === "undefined" ? undefined : window.localStorage));
+  const [liveCalendar, setLiveCalendar] = useState<{ rows: ClientServiceCalendarRow[]; heldRows: DeadlineControlRow[] } | null>(null);
+  const [liveCalendarState, setLiveCalendarState] = useState<"loading" | "ready" | "error">(prototypeMode ? "ready" : "loading");
   useEffect(() => {
     const handleStorage = () => setOverrides(readDeadlinePublicationOverrides(window.localStorage));
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
+  useEffect(() => {
+    if (prototypeMode) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      setLiveCalendarState("loading");
+      void fetch(`/api/clients/${client.id}/service-calendar?year=${year}`, { headers: { accept: "application/json" }, cache: "no-store" })
+        .then(async (response) => {
+          const payload = await response.json() as { data?: ClientServiceCalendarRow[]; heldRows?: DeadlineControlRow[]; error?: string };
+          if (!response.ok) throw new Error(payload.error ?? "Unable to load the service calendar.");
+          if (cancelled) return;
+          setLiveCalendar({ rows: payload.data ?? [], heldRows: payload.heldRows ?? [] });
+          setLiveCalendarState("ready");
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setLiveCalendar(null);
+          setLiveCalendarState("error");
+        });
+    }, 0);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [client.id, prototypeMode, year]);
   const calendarClient: FixtureClient = profile ? { ...client, entities: client.entities.map((entity, index) => index === 0 ? { ...entity, profile } : entity) } : client;
   const deadlinePolicy = normalizeClientDeadlinePolicy(profile?.deadlinePolicy ?? calendarClient.entities[0]?.profile.deadlinePolicy);
   const configuredReturnCount = calendarClient.entities[0]?.profile.registeredReturnCodes?.length ?? 0;
   const candidateBasis = configuredReturnCount > 0 ? "selected client returns" : "registered tax types awaiting return confirmation";
   const timingLabel = deadlinePolicy.mode === "follow_group" ? "Follows group schedule" : "Client-specific working-day offsets";
-  const firstPeriodLabel = profile?.firstPeriodToFile || (profile?.goLiveDate ? `from ${profile.goLiveDate.slice(0, 7)}` : "not configured");
-  // The deadline-control read model is still a prototype-only projection until
-  // released Supabase calendar entries are available. Never derive production
-  // service dates from illustrative fixture rules.
+  const firstPeriodLabel = formatPeriodLabel(profile?.firstPeriodToFile || (profile?.goLiveDate ? profile.goLiveDate.slice(0, 7) : undefined));
+  const localCalendar = getClientServiceCalendarRows(calendarClient, Number(year), overrides);
   const { rows, heldRows } = prototypeMode
-    ? getClientServiceCalendarRows(calendarClient, Number(year), overrides)
-    : { rows: [], heldRows: [] };
+    ? localCalendar
+    : liveCalendar ?? { rows: [], heldRows: [] };
   const calendarSections = calendarMonths
     .map((month) => ({ month, rows: rows.filter((item) => activityMonthForPeriod(item.activityMonth) === month) }))
     .filter((section) => section.rows.length > 0);
@@ -279,8 +313,8 @@ export function ClientServiceCalendarView({ client, clientName, profile }: { cli
     </header>
     <div className="service-calendar-print-summary" aria-label="Service calendar summary"><div><span>Published returns</span><strong>{rows.length}</strong></div><div><span>Activity months</span><strong>{new Set(rows.map((item) => serviceCalendarRow(item).activityMonth)).size}</strong></div><div><span>Calendar year</span><strong>{year}</strong></div></div>
     <section aria-label="Service calendar year" className="registry-toolbar"><div className="registry-toolbar__filters"><label className="select-control"><span>Year</span><select aria-label="Year" onChange={(event) => setYear(event.target.value)} value={year}>{years.map((option) => <option key={option}>{option}</option>)}</select></label></div></section>
-    {heldRows.length > 0 && <section aria-labelledby="service-calendar-gate-title" className="panel service-calendar-gate"><SectionHeading title="Selected returns awaiting due-date release" detail="These returns came from onboarding. They are connected to the client, but no operational date is shown until the governing deadline is approved and published." /><p id="service-calendar-gate-title">{heldRows.length} return period{heldRows.length === 1 ? " is" : "s are"} held outside the operational calendar. Once Tax Team publishes the deadline rule, the due date and service milestones will appear here automatically.</p><ul>{[...new Set(heldRows.map((row) => `${row.formNumber} · ${row.publicationStatus === "unresolved" ? "deadline unresolved" : "Tax Team review required"}`))].map((label) => <li key={label}>{label}</li>)}</ul><a className="button button--quiet button--small" href="/app/tax-team?view=deadline-control">Open Tax Team Deadline Control</a></section>}
-    <section aria-labelledby="service-calendar-table-title" className="panel panel--table registry-panel"><SectionHeading title={`${rows.length} published service calendar row${rows.length === 1 ? "" : "s"}`} detail={`Only released operational dates are shown · candidate basis: ${candidateBasis}.`} /><div className="service-calendar-table-wrap">{!prototypeMode && <div className="inline-empty"><strong>No released service calendar</strong><br />Tax Team has not released operational dates for this client yet.</div>}{prototypeMode && <><table className="service-calendar-table"><thead><tr><th>Activity month</th><th>Taxable month</th><th>Tax / return</th><th>Due date client should provide</th><th>Committed date for client submission (TMF)</th><th>Approval date (client)</th><th>Estimated date for filing</th><th>Estimated date for payment</th><th>Published operational deadline</th></tr></thead><tbody>{calendarSections.flatMap((section) => [<tr className="service-calendar-month-row" key={`month-${section.month}`}><th colSpan={9}>{section.month}</th></tr>, ...section.rows.map((item) => { const row = serviceCalendarRow(item); return <tr key={item.id}><td data-label="Activity month">{row.activityMonth}</td><td data-label="Taxable month">{row.taxableMonth}</td><td data-label="Tax / return"><strong>{row.taxReturn}</strong></td><td data-label="Due date client should provide">{row.clientProvideDate}</td><td data-label="Committed date for client submission (TMF)">{row.tmfCommitmentDate}</td><td data-label="Approval date (client)">{row.clientApprovalDate}</td><td data-label="Estimated date for filing">{row.estimatedFilingDate}</td><td data-label="Estimated date for payment">{row.estimatedPaymentDate}</td><td data-label="Published operational deadline">{row.dueDate}</td></tr>; })])}</tbody></table>{rows.length === 0 && <div className="inline-empty">No Tax Team-published service calendar rows are available for this client in {year}.</div>}</>}</div></section>
+    {heldRows.length > 0 && <section aria-label="Selected returns awaiting due-date release" className="panel service-calendar-gate"><SectionHeading title="Selected returns awaiting due-date release" detail="These returns came from onboarding. They are connected to the client, but no operational date is shown until the governing deadline is approved and published." /><p>{heldRows.length} return period{heldRows.length === 1 ? " is" : "s are"} held outside the operational calendar. Once Tax Team publishes the deadline rule, the due date and service milestones will appear here automatically.</p><ul>{[...new Set(heldRows.map((row) => `${row.formNumber} · ${row.publicationStatus === "unresolved" ? "deadline unresolved" : "Tax Team review required"}`))].map((label) => <li key={label}>{label}</li>)}</ul><a className="button button--quiet button--small" href="/app/tax-team?view=deadline-control">Open Tax Team Deadline Control</a></section>}
+    <section aria-label={`${rows.length} published service calendar rows`} className="panel panel--table registry-panel"><SectionHeading title={`${rows.length} published service calendar row${rows.length === 1 ? "" : "s"}`} detail={`Only released operational dates are shown · candidate basis: ${candidateBasis}.`} /><div className="service-calendar-table-wrap">{liveCalendarState === "loading" && <div className="inline-empty" role="status">Loading published service calendar…</div>}{liveCalendarState === "error" && <div className="inline-empty" role="alert"><strong>Service calendar unavailable</strong><br />The published deadline projection could not be loaded. Try refreshing this client workspace.</div>}{liveCalendarState === "ready" && <><table className="service-calendar-table"><thead><tr><th scope="col">Activity</th><th scope="col">Period filed</th><th scope="col">Return</th><th scope="col">Client provide</th><th scope="col">TMF target</th><th scope="col">Client approval</th><th scope="col">Est. filing</th><th scope="col">Est. payment</th><th scope="col">Published due</th></tr></thead><tbody>{calendarSections.flatMap((section) => [<tr className="service-calendar-month-row" key={`month-${section.month}`}><th colSpan={9} scope="colgroup">{section.month}</th></tr>, ...section.rows.map((item) => { const row = serviceCalendarRow(item); return <tr key={item.id}><td data-label="Activity month">{row.activityMonth}</td><td data-label="Period filed">{row.taxableMonth}</td><td data-label="Return"><strong>{row.taxReturn}</strong></td><td data-label="Client provide">{row.clientProvideDate}</td><td data-label="TMF target">{row.tmfCommitmentDate}</td><td data-label="Client approval">{row.clientApprovalDate}</td><td data-label="Est. filing">{row.estimatedFilingDate}</td><td data-label="Est. payment">{row.estimatedPaymentDate}</td><td data-label="Published due">{row.dueDate}</td></tr>; })])}</tbody></table>{rows.length === 0 && <div className="inline-empty">No Tax Team-published service calendar rows are available for this client in {year}.</div>}</>}</div></section>
     <div className="service-calendar-print-sections">{calendarSections.map((section) => <section className="service-calendar-print-section" key={`print-${section.month}`}><h3>{section.month}</h3><table className="service-calendar-print-table"><thead><tr><th>Activity</th><th>Taxable</th><th>Tax / return</th><th>Client provide</th><th>TMF commit</th><th>Client approval</th><th>Est. filing</th><th>Est. payment</th><th>Published due</th></tr></thead><tbody>{section.rows.map((item) => { const row = serviceCalendarRow(item); return <tr key={item.id}><td>{row.activityMonth}</td><td>{row.taxableMonth}</td><td><strong>{row.taxReturn}</strong></td><td>{row.clientProvideDate}</td><td>{row.tmfCommitmentDate}</td><td>{row.clientApprovalDate}</td><td>{row.estimatedFilingDate}</td><td>{row.estimatedPaymentDate}</td><td>{row.dueDate}</td></tr>; })}</tbody></table></section>)}{calendarSections.length === 0 && <div className="inline-empty">No published returns for {year}.</div>}</div>
     <div className="service-calendar-print-footer">Prototype · Sanitized data · Tax Team-published deadlines only</div>
   </div>;

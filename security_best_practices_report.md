@@ -2,7 +2,7 @@
 
 ## Executive summary
 
-TaxMonWeb has a solid prototype security foundation: Supabase session lookup, server-side capability checks, RLS migrations, sanitized prototype mode, upload signature/size validation, safe API error responses, explicit mutation origin checks, baseline security headers, a server-only temporary-document purge executor, and zero production dependency vulnerabilities. The code-level gate now passes for these controls; live Vercel/Supabase configuration and authenticated negative testing remain deployment gates.
+TaxMonWeb has a solid prototype security foundation: Supabase session lookup, server-side capability checks, RLS migrations, sanitized prototype mode, upload signature/size validation, safe API error responses, explicit mutation origin checks, baseline security headers, a server-only temporary-document purge executor, and zero production dependency vulnerabilities. The local code-level gate passes, but live migration parity, authenticated negative testing, and deployment promotion remain release gates.
 
 ## Scope and assumptions
 
@@ -10,7 +10,8 @@ TaxMonWeb has a solid prototype security foundation: Supabase session lookup, se
 - Deployment assumption: Vercel application with Supabase Auth/Postgres/Storage.
 - Data assumption: structured client text is retained; 2303 files are temporary onboarding inputs only.
 - Cloudflare assumption: no Cloudflare configuration or deployment binding was found in this repository. This is therefore an application security review, not a Cloudflare edge configuration audit.
-- Live Supabase RLS and billing settings were not directly inspected. The production deployment, public response headers, and authenticated purge route were verified after release. Server-only purge variables are now configured in Vercel Production.
+- Live Supabase project state was inspected read-only on 18 October 2026. No external migration or deployment was applied during this audit.
+- Vercel deployment metadata was inspected read-only. The current production deployment still points to the older `4adbd624` commit, not this worktree.
 
 ## Findings
 
@@ -21,7 +22,7 @@ TaxMonWeb has a solid prototype security foundation: Supabase session lookup, se
 - Evidence: all state-changing application API handlers call the shared `requireSameOrigin` guard after authentication/capability checks. Unauthenticated requests still return 401 before origin evaluation; missing or foreign origins return 403.
 - Impact: a cross-site request could attempt a state-changing action using a user’s authenticated browser session if browser cookie policy or deployment configuration permits it.
 - Fix: implemented in `src/lib/server/request-origin.ts` and covered by unit tests. `TAXMON_TRUSTED_ORIGINS` supports explicitly governed additional origins; no permissive wildcard is used.
-- Status: resolved in code; live deployment verification remains.
+- Status: resolved in local code; live deployment verification remains.
 
 ### SEC-002 — Security response headers
 
@@ -38,7 +39,7 @@ TaxMonWeb has a solid prototype security foundation: Supabase session lookup, se
 - Evidence: `temporary_source_documents` contains `purge_eligible_at` and `purged_at`; the new server-only executor removes the private Storage object first and then marks the row `purged`. The Vercel cron route is authenticated by `CRON_SECRET` and processes only rows explicitly marked `purge_eligible` whose time has arrived.
 - Impact: onboarding documents could remain in private Storage longer than intended, increasing confidentiality and retention risk.
 - Fix: implemented in `src/lib/server/temporary-document-purge.ts` and `/api/internal/purge-temporary-2303`; `vercel.json` schedules it daily. The code does not invent a retention period: an upstream governed lifecycle decision must set `purge_eligible_at`.
-- Status: resolved in code; production env/cron invocation and retention policy remain operational gates.
+- Status: resolved in local code; production env/cron invocation and the approved retention policy remain operational gates.
 
 ### SEC-004 — Input validation is partly manual and partly type-asserted
 
@@ -52,11 +53,22 @@ TaxMonWeb has a solid prototype security foundation: Supabase session lookup, se
 
 - Dependency audit: `npm audit --omit=dev` reports 0 vulnerabilities.
 - Secrets: `.env.local` is ignored; only `.env.example` is tracked; no privileged Supabase service-role key is referenced in browser code.
-- Authentication: protected `/app` routes pass through `src/proxy.ts`; API routes use server-side Supabase context/capability checks.
+- Authentication: protected `/app` routes pass through `src/proxy.ts`; application API routes use server-side Supabase context/capability checks, while activation/password-reset routes use same-origin protection and their governed RPC boundary.
 - Authorization: RLS is enabled across the tax/client/reference tables and Storage policies are scoped to authenticated users and registration-unit permissions.
 - Error handling: API responses use safe fallback messages instead of returning repository/database messages.
 - Upload boundary: temporary 2303 uploads restrict MIME type, size, filename length, idempotency key, and file signature; prototype mode rejects non-synthetic sources.
 - XSS/dynamic code scan: no `dangerouslySetInnerHTML`, raw DOM HTML sinks, `eval`, `new Function`, or untrusted outbound URL fetch pattern was found.
+
+## Current live release audit
+
+- Supabase `taxmonweb-dev` is `ACTIVE_HEALTHY` with 61 applied migrations; the latest remote migration is `20261024000000`.
+- The local worktree has 67 unique migration versions, including the released-calendar read boundary, deadline source-gate removal, trigger-function hardening, and account-backed preferences. These are not yet proven against the live database.
+- Read-only function/policy inspection confirms the live database still lacks the released-calendar read policies, still rejects a deadline save without an authoritative source code, and still leaves `capture_checker_tax_due_amount` without an explicit search path. These are concrete schema-drift findings, not merely version-number differences.
+- Live data inspection found 476 calendar entries, all `unresolved` / `not_comparable`, with zero published operational dates. The empty live service calendar is therefore an expected safe state until the governed release data is reconciled; it is not a client-side projection failure.
+- Live account-preference inspection found no `user_preferences` table and no `taxmon-user-avatars` bucket. The local authenticated preferences boundary remains unapplied remotely.
+- Live inspection reports 80 RLS-enabled public tables, 24 without direct policies, and 56 policy definitions. Policyless tables may be intentional RPC-only boundaries, but they require explicit review before real data onboarding.
+- The live database still exposes 3 trigger-related `SECURITY DEFINER` functions to `anon` and 42 `SECURITY DEFINER` functions to `authenticated` according to the current advisor snapshot. The local `20261203000000_harden_internal_trigger_functions.sql` migration removes the four trigger-only grants and fixes their search paths; it has not been applied remotely.
+- Vercel production is `READY`, but the latest deployment is commit `4adbd624` (`Remove Copilot handoff documents`), behind the verified worktree.
 
 ## Production gate
 
@@ -64,12 +76,15 @@ TaxMonWeb has a solid prototype security foundation: Supabase session lookup, se
 
 Required before real client-data onboarding:
 
-1. Verify the scheduled purge invocation on its first scheduled run; the authenticated smoke test now returns 200 with `scanned: 0, purged: 0, failed: 0`.
-3. Ensure the approved lifecycle marks documents `purge_eligible` with an approved `purge_eligible_at`; no retention duration is invented in this code pass.
-4. Run authenticated negative tests against the live Supabase/Vercel environment: cross-client access, staff/upline/downline scope, unauthorized mutations, and Storage object access.
+1. Reconcile and review the pending local migrations against the live migration ledger; do not apply them blindly because the version names differ.
+2. Ensure the approved lifecycle marks documents `purge_eligible` with an approved `purge_eligible_at`; no retention duration is invented in this code pass.
+3. Run authenticated negative tests against the live Supabase/Vercel environment: cross-client access, staff/upline/downline scope, unauthorized mutations, and Storage object access.
+4. Promote the verified build only after the five-taxpayer sanitized pilot and live migration checks pass.
 
 ## Verification performed
 
 - `npm audit --omit=dev`: passed, 0 vulnerabilities.
+- Secret-shaped artifact scan: passed; no tracked private keys, tokens, service-role values, or real 2303 artifacts were found.
 - Repository scans for secrets, raw API error leakage, unsafe HTML/eval, service workers, and untrusted navigation: no critical match found.
-- Latest verification: lint passed; typecheck passed; 37 test files / 180 tests passed; clean isolated production build passed (22 static pages). Latest production deployment is READY at `https://taxmonweb.vercel.app`. Live checks: `/` returned 200, `/app/control-tower` redirected to `/login`, unauthenticated `/api/work` returned 401, purge endpoint without its secret returned 401, authenticated purge returned 200 with zero eligible documents, and baseline security headers were present. The earlier complete E2E run passed 44 tests with 2 intentional skips; a post-change E2E rerun was not completed because the local `next dev` runner repeatedly orphaned on port 3110 and exited with 143.
+- Latest local verification: `npm run verify` passed; migration check reported 67 unique local versions, lint and typecheck passed, Vitest passed 54 files / 258 tests, and the production build completed successfully. The full sanitized Playwright gate ran 62 tests: 60 passed with 2 intentional project-specific skips across desktop and mobile. These results are local evidence only; they do not prove the current Vercel deployment or live Supabase schema.
+- Non-demo runtime smoke check: a production build with `TAXMON_DEMO_MODE=false` passed; local `next start` redirected `/app/control-tower` to `/login`, returned `401` for unauthenticated `/api/work`, and emitted the baseline security headers.

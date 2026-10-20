@@ -62,6 +62,28 @@ describe("live generated work adapter", () => {
     expect(projected.blocker?.category).toBe("CLIENT DATA");
   });
 
+  it("retains the source and recorded date for readiness", () => {
+    const projected = adaptLiveGeneratedWork({
+      ...work,
+      source_context: {
+        dataReadiness: {
+          state: "ready",
+          source: "TMF_BOOKS",
+          reason: "Books confirmed for preparation.",
+          recordedAt: "2026-10-20T01:00:00Z",
+          recordedBy: "user-1",
+        },
+      },
+    }, new Map([["user-1", "Assigned preparer"]]));
+    expect(projected.workflowSnapshot?.dataReadiness).toEqual({
+      state: "READY",
+      source: "TMF_BOOKS",
+      reason: "Books confirmed for preparation.",
+      actor: "Assigned preparer",
+      recordedAt: "2026-10-20T01:00:00Z",
+    });
+  });
+
   it("normalizes live process aliases to the Work journey identifiers", () => {
     const projected = adaptLiveGeneratedWork({
       ...work,
@@ -83,5 +105,59 @@ describe("live generated work adapter", () => {
     expect(projected.steps[0]?.state).toBe("current");
     expect(projected.workflowSnapshot?.currentGate).toBe("PREPARER");
     expect(projected.workflowSnapshot?.processStatuses.prepare).toBe("IN_PROGRESS");
+  });
+
+  it("keeps the client-send date separate from the approval evidence date", () => {
+    const projected = adaptLiveGeneratedWork({
+      ...work,
+      generated_work_process_steps: [{
+        step_code: "client_approval",
+        bundle: "filing",
+        label: "Client approval",
+        owner_role: "preparer",
+        step_order: 4,
+        status: "complete",
+        started_at: "2026-10-19T01:00:00Z",
+        completed_at: "2026-10-20T01:00:00Z",
+        updated_at: "2026-10-20T01:00:00Z",
+      }],
+      generated_work_evidence: [{
+        step_code: "client_approval",
+        evidence_kind: "client_approval",
+        reference: "Approval email",
+        external_date: "2026-10-20",
+        acknowledged_on: null,
+        validated_on: null,
+        attachment_name: null,
+        external_reference: null,
+        external_channel: "Email",
+        sharepoint_url: null,
+        result_status: "reported",
+        note: null,
+        actor_id: "user-1",
+        recorded_at: "2026-10-20T02:00:00Z",
+      }, {
+        step_code: "check",
+        evidence_kind: "payment",
+        reference: "Amount to pay captured at Checker certification",
+        amount: 1234.56,
+        external_date: null,
+        acknowledged_on: null,
+        validated_on: null,
+        attachment_name: null,
+        external_reference: null,
+        external_channel: null,
+        sharepoint_url: null,
+        result_status: "reported",
+        note: null,
+        actor_id: "user-1",
+        recorded_at: "2026-10-20T02:01:00Z",
+      }],
+    }, new Map([["user-1", "Assigned preparer"]]));
+
+    const clientApprovalHistory = projected.workflowSnapshot?.processHistory.filter((event) => event.stepId === "client-approval");
+    expect(clientApprovalHistory?.find((event) => event.status === "IN_PROGRESS")?.recordedAt).toBe("2026-10-19T01:00:00Z");
+    expect(clientApprovalHistory?.find((event) => event.status === "DONE")?.completedOn).toBe("2026-10-20");
+    expect(projected.paymentAmount).toBe(1234.56);
   });
 });

@@ -1,0 +1,35 @@
+{
+  "product": "TaxMonWeb",
+  "direction": "quiet compliance control desk",
+  "tokens": {
+    "color": {
+      "brand": "#e31e24",
+      "brandStrong": "#b8191e",
+      "ink": "#1d1d1b",
+      "inkSoft": "#3d3d39",
+      "slate": "#6d6d67",
+      "muted": "#8a8a83",
+      "page": "#f6f6f4",
+      "surface": "#ffffff",
+      "surfaceSoft": "#f8f8f7",
+      "border": "#e5e5e1",
+      "borderStrong": "#cfcfca",
+      "success": "#217548",
+      "warning": "#986000",
+      "danger": "#a32b2d",
+      "info": "#2f638d",
+      "unresolved": "#675885"
+    },
+    "type": {
+      "family": "Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+      "body": "13px",
+      "bodyReadable": "14px",
+      "metadata": "11px",
+      "eyebrow": "10px",
+      "pageTitle": "clamp(24px, 2.2vw, 30px)"
+    },
+    "space": { "unit": "4px", "control": "36px", "mobileControl": "40px", "panel": "16px", "drawer": "22px" },
+    "shape": { "panelRadius": "8px", "drawerRadius": "0px", "pillRadius": "999px", "controlRadius": "6px" },
+    "motion": { "standard": "140ms ease", "drawer": "cubic-bezier(.32, .72, 0, 1)", "reduced": "none" }
+  }
+}

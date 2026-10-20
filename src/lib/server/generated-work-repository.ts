@@ -8,6 +8,7 @@ export type LiveGeneratedWork = {
   period_label: string;
   period_locked?: boolean;
   data_readiness: "not_ready" | "ready";
+  source_context?: { dataReadiness?: { state?: "ready" | "not_ready"; source?: "CLIENT_RECORDS" | "TMF_BOOKS"; reason?: string; recordedAt?: string; recordedBy?: string } } | null;
   lifecycle_stage: "preparation" | "checking" | "review" | "client_approval" | "filing" | "payment" | "other_submissions" | "complete";
   engagement_status: "open" | "complete" | "cancelled" | "superseded";
   rag_status: "green" | "amber" | "red" | "unresolved";
@@ -123,6 +124,16 @@ export type LivePublishedCalendarEntry = {
   publication_status: "published";
 };
 
+export type LiveClientCalendarEntry = LivePublishedCalendarEntry & {
+  calendar_year: number;
+  calendar_month: string;
+  requirement_code: string;
+  requirement_name: string;
+  operating_category: string;
+  frequency_label: string;
+  form_number: string;
+};
+
 export type CreateLiveGeneratedWorkInput = {
   clientReference: string;
   requirementCode: string;
@@ -163,6 +174,7 @@ export async function listLiveGeneratedWork(): Promise<LiveGeneratedWork[]> {
       period_label,
       period_locked,
       data_readiness,
+      source_context,
       lifecycle_stage,
       engagement_status,
       rag_status,
@@ -238,6 +250,7 @@ export async function listLiveGeneratedWork(): Promise<LiveGeneratedWork[]> {
         step_code,
         evidence_kind,
         reference,
+        amount,
         external_date,
         acknowledged_on,
         validated_on,
@@ -279,6 +292,103 @@ export async function listLivePublishedCalendarEntries(requirementIds: readonly 
 
   if (error) throw new Error(`Unable to load released calendar entries: ${error.message}`);
   return (data ?? []) as LivePublishedCalendarEntry[];
+}
+
+export async function listLiveClientCalendarEntries(requirementIds: readonly string[], year: number): Promise<LiveClientCalendarEntry[]> {
+  if (requirementIds.length === 0) return [];
+  const client = await createSupabaseServerClient();
+  if (!client) throw new Error("Supabase is not configured for this environment.");
+
+  const { data, error } = await client
+    .from("monthly_calendar_entries")
+    .select(`
+      id,
+      requirement_id,
+      requirement_version_id,
+      external_requirement_label,
+      period_or_event,
+      period_start,
+      period_end,
+      base_statutory_deadline,
+      adjusted_statutory_deadline,
+      tmf_package_target,
+      published_operational_deadline,
+      publication_status,
+      monthly_calendar_versions!inner(calendar_month, status),
+      bir_requirements!inner(requirement_code, requirement_name, operating_category, frequency_label),
+      requirement_version_forms(
+        relationship_type,
+        bir_forms(form_number)
+      )
+    `)
+    .in("requirement_id", [...requirementIds])
+    .eq("publication_status", "published")
+    .eq("monthly_calendar_versions.status", "released")
+    .gte("monthly_calendar_versions.calendar_month", `${year}-01-01`)
+    .lt("monthly_calendar_versions.calendar_month", `${year + 1}-01-01`)
+    .order("published_operational_deadline", { ascending: true, nullsFirst: false });
+
+  if (error) throw new Error(`Unable to load released client calendar entries: ${error.message}`);
+
+  return (data ?? []).flatMap((value) => {
+    const row = value as unknown as Record<string, unknown>;
+    const calendarVersion = Array.isArray(row.monthly_calendar_versions) ? row.monthly_calendar_versions[0] : row.monthly_calendar_versions;
+    const requirement = Array.isArray(row.bir_requirements) ? row.bir_requirements[0] : row.bir_requirements;
+    const forms = Array.isArray(row.requirement_version_forms) ? row.requirement_version_forms : [];
+    const formNumbers = forms.flatMap((relation) => {
+      if (!relation || typeof relation !== "object") return [];
+      const form = (relation as { bir_forms?: unknown }).bir_forms;
+      const record = Array.isArray(form) ? form[0] : form;
+      return record && typeof record === "object" && typeof (record as { form_number?: unknown }).form_number === "string" ? [(record as { form_number: string }).form_number] : [];
+    });
+    if (!calendarVersion || typeof calendarVersion !== "object" || !requirement || typeof requirement !== "object" || formNumbers.length === 0) return [];
+    const calendarMonth = (calendarVersion as { calendar_month?: unknown }).calendar_month;
+    const requirementCode = (requirement as { requirement_code?: unknown }).requirement_code;
+    const requirementName = (requirement as { requirement_name?: unknown }).requirement_name;
+    if (typeof calendarMonth !== "string" || typeof requirementCode !== "string" || typeof requirementName !== "string") return [];
+    return [{
+      id: String(row.id),
+      requirement_id: String(row.requirement_id),
+      requirement_version_id: typeof row.requirement_version_id === "string" ? row.requirement_version_id : null,
+      external_requirement_label: String(row.external_requirement_label ?? requirementName),
+      period_or_event: typeof row.period_or_event === "string" ? row.period_or_event : null,
+      period_start: typeof row.period_start === "string" ? row.period_start : null,
+      period_end: typeof row.period_end === "string" ? row.period_end : null,
+      base_statutory_deadline: typeof row.base_statutory_deadline === "string" ? row.base_statutory_deadline : null,
+      adjusted_statutory_deadline: typeof row.adjusted_statutory_deadline === "string" ? row.adjusted_statutory_deadline : null,
+      tmf_package_target: typeof row.tmf_package_target === "string" ? row.tmf_package_target : null,
+      published_operational_deadline: typeof row.published_operational_deadline === "string" ? row.published_operational_deadline : null,
+      publication_status: "published" as const,
+      calendar_year: year,
+      calendar_month: calendarMonth,
+      requirement_code: requirementCode,
+      requirement_name: requirementName,
+      operating_category: typeof (requirement as { operating_category?: unknown }).operating_category === "string" ? (requirement as { operating_category: string }).operating_category : "others",
+      frequency_label: typeof (requirement as { frequency_label?: unknown }).frequency_label === "string" ? (requirement as { frequency_label: string }).frequency_label : "as_needed",
+      form_number: [...new Set(formNumbers)].join(" · "),
+    } satisfies LiveClientCalendarEntry];
+  });
+}
+
+export async function listRequirementIdsForFormNumbers(formNumbers: readonly string[]) {
+  const normalized = [...new Set(formNumbers.map((value) => value.trim().toUpperCase()).filter(Boolean))];
+  if (normalized.length === 0) return [];
+  const client = await createSupabaseServerClient();
+  if (!client) throw new Error("Supabase is not configured for this environment.");
+
+  const { data: forms, error: formsError } = await client.from("bir_forms").select("id, form_number").in("form_number", normalized);
+  if (formsError) throw new Error(`Unable to resolve governed return forms: ${formsError.message}`);
+  const formIds = (forms ?? []).map((form) => form.id as string);
+  if (formIds.length === 0) return [];
+
+  const { data: relations, error: relationsError } = await client.from("requirement_version_forms").select("requirement_version_id, form_id").in("form_id", formIds);
+  if (relationsError) throw new Error(`Unable to resolve governed return requirements: ${relationsError.message}`);
+  const versionIds = [...new Set((relations ?? []).map((relation) => relation.requirement_version_id as string))];
+  if (versionIds.length === 0) return [];
+
+  const { data: versions, error: versionsError } = await client.from("bir_requirement_versions").select("id, requirement_id").in("id", versionIds);
+  if (versionsError) throw new Error(`Unable to resolve governed requirement versions: ${versionsError.message}`);
+  return [...new Set((versions ?? []).map((version) => version.requirement_id as string))];
 }
 
 export async function getLiveGeneratedWorkDetail(workId: string) {

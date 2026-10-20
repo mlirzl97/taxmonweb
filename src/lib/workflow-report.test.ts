@@ -2,10 +2,17 @@ import { describe, expect, it } from "vitest";
 import { PDFDocument } from "pdf-lib";
 
 import { fixtureWork } from "@/lib/fixtures";
-import { generateWorkflowReportPdf } from "@/lib/workflow-report";
+import { generateWorkflowReportPdf, workflowClientApprovalDates } from "@/lib/workflow-report";
 import type { WorkflowRecord } from "@/lib/workflow-state";
 
 describe("workflow report", () => {
+  it("uses the process history handoff and approval events", () => {
+    expect(workflowClientApprovalDates({ processHistory: [
+      { id: "sent", stepId: "client-approval", status: "IN_PROGRESS", actor: "Preparer", recordedAt: "October 19, 2026 at 9:00 AM (Asia/Manila)" },
+      { id: "approved", stepId: "client-approval", status: "DONE", actor: "Preparer", recordedAt: "October 20, 2026 at 9:00 AM (Asia/Manila)", completedOn: "2026-10-20" },
+    ] })).toEqual({ sentToClientOn: "October 19, 2026 at 9:00 AM (Asia/Manila)", clientApprovedOn: "2026-10-20" });
+  });
+
   it("generates a PDF from the return journey record", async () => {
     const record: WorkflowRecord = {
       currentGate: null,

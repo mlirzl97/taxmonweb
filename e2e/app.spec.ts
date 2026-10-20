@@ -1,18 +1,14 @@
 import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
-async function applyAccessView(page: Page, persona: string) {
-  await page.goto("/app/work");
-  const selector = page.getByRole("combobox", { name: "Access view persona" });
-  await selector.selectOption(persona);
-  const applyButton = page.getByRole("button", { name: /Apply .* access view/ });
-  await expect(applyButton).toBeEnabled();
-  await applyButton.click();
-}
-
-async function expandBundle(page: Page, pattern: RegExp) {
-  const toggle = page.getByRole("button", { name: pattern });
-  if ((await toggle.textContent())?.includes("Show")) await toggle.click();
+async function openCurrentCertification(page: Page) {
+  const action = page.getByRole("button", { name: /^(Complete preparation|Open gate|Change Endorse payment status)$/ }).first();
+  await expect(action).toBeVisible();
+  const label = await action.getAttribute("aria-label");
+  await action.click();
+  if (label === "Change Endorse payment status") await expect(page.getByRole("heading", { name: "Update process status" })).toBeVisible();
+  else await expect(page.getByRole("heading", { name: /Preparer to draft return|Checker certification|Reviewer certification/ })).toBeVisible();
+  return label;
 }
 
 test("primary routes and Control Tower context are reachable", async ({ page }) => {
@@ -32,6 +28,7 @@ test("primary routes and Control Tower context are reachable", async ({ page }) 
   await page.getByRole("link", { name: "Team", exact: true }).click();
   await expect(page).toHaveURL(/\/app\/team$/);
   await expect(page.getByRole("heading", { name: "Team", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Race to All Clear", exact: true })).toHaveCount(0);
 });
 
 test("action bell surfaces pending work from the current Work register", async ({ page }) => {
@@ -45,8 +42,44 @@ test("action bell surfaces pending work from the current Work register", async (
   await expect(page.getByRole("link", { name: "View Work", exact: true })).toHaveAttribute("href", "/app/work?queue=all");
 });
 
+test("action bell can clear the current tray without changing work", async ({ page }) => {
+  await page.goto("/app/work?queue=all");
+  const bell = page.locator(".app-main-header__notifications-trigger");
+  await bell.click({ force: true });
+  const tray = page.getByRole("region", { name: "My actions" });
+  await expect(tray).toBeVisible();
+  await expect(tray.getByRole("button", { name: "Clear pending actions" })).toBeEnabled();
+  await tray.getByRole("button", { name: "Clear pending actions" }).click();
+  await expect(tray.getByText("No pending actions.", { exact: true })).toBeVisible();
+  await expect(bell).toHaveAttribute("aria-label", "No pending actions");
+  await expect(page.getByRole("link", { name: "View Work", exact: true })).toHaveAttribute("href", "/app/work?queue=all");
+});
+
+test("modules menu exposes settings and notification tray dismisses outside", async ({ page }) => {
+  await page.goto("/app/control-tower");
+  await expect(page.locator(".app-main-header").getByRole("link", { name: "TaxMonWeb Control Tower", exact: true })).toHaveCount(0);
+  await expect(page.locator(".app-main-header").getByText("Control Tower", { exact: true })).toHaveCount(0);
+  if (await page.evaluate(() => window.innerWidth <= 500)) {
+    await page.evaluate(() => window.localStorage.setItem("taxmonweb.sidebar.collapsed", "true"));
+    await page.reload();
+    await page.getByRole("button", { name: "Open modules" }).click();
+    await expect(page.getByRole("complementary", { name: "Application navigation" }).getByRole("link", { name: "TaxMonWeb Control Tower", exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole("link", { name: "Settings & preferences", exact: true })).toHaveAttribute("href", "/app/admin?view=settings");
+  if (await page.evaluate(() => window.innerWidth <= 500)) {
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "Open modules" })).toBeVisible();
+  }
+
+  const bell = page.locator(".app-main-header__notifications-trigger");
+  await bell.click({ force: true });
+  await expect(page.getByRole("region", { name: "My actions" })).toBeVisible();
+  await page.mouse.click(8, 180);
+  await expect(page.getByRole("region", { name: "My actions" })).toHaveCount(0);
+});
+
 test("unauthenticated API reads remain denied even in prototype UI mode", async ({ request }) => {
-  for (const path of ["/api/portfolio", "/api/team", "/api/tax-team/transaction-reviews"]) {
+  for (const path of ["/api/portfolio", "/api/team", "/api/tax-team/transaction-reviews", "/api/clients/fixture-client-03/service-calendar?year=2026"]) {
     const response = await request.get(path);
     expect(response.status(), path).toBe(401);
   }
@@ -64,35 +97,26 @@ test("CRF repository applies authorized client scope and repository filters", as
   await page.getByRole("combobox", { name: "CRF scope" }).selectOption("tower-a");
   await expect(count).not.toHaveText(allScopeCount);
 
-  await page.getByRole("combobox", { name: "Access view persona" }).selectOption("PREPARER");
-  await page.getByRole("button", { name: /Apply Preparer access view/ }).click();
-  await page.goto("/app/clients?view=crfs");
-  await expect(page.getByRole("heading", { name: "CRF repository", exact: true })).toBeVisible();
   await expect(page.locator("header.module-header .module-count small").last()).toHaveText("Authorized CRF records · CRF v1");
-  await expect(count).toHaveText(/\d+ of \d+/);
+  await expect(count).toHaveText(/\d+$/);
+  await expect(page.getByRole("img", { name: "Current user" })).toContainText("Super Admin");
 });
 
-test("Team directory preserves its URL view and narrows staff people scope", async ({ page }) => {
+test("Team directory preserves its URL view under Super Admin mode", async ({ page }) => {
   await page.goto("/app/team?view=directory");
   await expect(page.getByRole("tab", { name: "Directory", exact: true })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("heading", { name: "Directory", exact: true })).toBeVisible();
   const fullRoster = await page.locator(".team-directory tbody tr").count();
   expect(fullRoster).toBe(70);
 
-  await applyAccessView(page, "PREPARER");
-  await page.goto("/app/team?view=directory");
-  await expect(page.getByRole("tab", { name: "Directory", exact: true })).toHaveAttribute("aria-selected", "true");
-  const staffRoster = await page.locator(".team-directory tbody tr").count();
-  expect(staffRoster).toBeGreaterThan(0);
-  expect(staffRoster).toBeLessThan(fullRoster);
-  await expect(page.getByText("Scoped to authorized work", { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "Current user" })).toContainText("Super Admin");
+  await expect(page.getByRole("button", { name: "Edit", exact: true }).first()).toBeVisible();
 });
 
 test("BIR Center remains a read-only governed reference", async ({ page }) => {
   await page.goto("/app/bir-center");
   await expect(page.getByRole("heading", { name: "BIR Center", exact: true })).toBeVisible();
-  await expect(page.getByText("Governed reference", { exact: true })).toBeVisible();
+  await expect(page.locator("#main-content").getByText("Governed reference", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Propose reference update", exact: true })).toHaveCount(0);
   const taxMapTab = page.getByRole("tab", { name: "Tax map", exact: true });
   await expect(taxMapTab).toHaveAttribute("aria-selected", "true");
@@ -100,12 +124,11 @@ test("BIR Center remains a read-only governed reference", async ({ page }) => {
   await expect(page.getByRole("tab", { name: "BIR directory", exact: true })).toBeFocused();
   await page.getByRole("tab", { name: "Regulatory updates", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Regulatory updates", exact: true })).toBeVisible();
-  await expect(page.getByText("No published updates", { exact: true })).toBeVisible();
+  await expect(page.getByRole("tabpanel", { name: "Regulatory updates" }).getByText("No published updates", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Propose reference update", exact: true })).toHaveCount(0);
 });
 
 test("Tax Team reports preserve period scope and produce a PDF snapshot", async ({ page }) => {
-  await applyAccessView(page, "TAX_CONTROL");
   await page.goto("/app/tax-team");
   await expect(page.getByRole("heading", { name: "Tax Team", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Monthly compliance", exact: true }).click();
@@ -150,6 +173,15 @@ test("Tax Team reports preserve period scope and produce a PDF snapshot", async 
   await expect(page.getByRole("columnheader", { name: "Earliest due date" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Internal target" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Status" })).toBeVisible();
+  const publishedRow = page.locator(".deadline-control-table tbody tr").filter({ hasText: "Published" }).first();
+  await expect(publishedRow).toBeVisible();
+  await publishedRow.locator(".report-row-button").click();
+  const publishedDeadline = page.getByRole("dialog", { name: /Published/ });
+  await expect(publishedDeadline).toBeVisible();
+  await expect(publishedDeadline.getByRole("button", { name: "Save and publish", exact: true })).toHaveCount(0);
+  await expect(publishedDeadline.getByRole("button", { name: "Close", exact: true })).toBeVisible();
+  await expect(publishedDeadline.getByLabel("Statutory due date")).toBeDisabled();
+  await publishedDeadline.getByRole("button", { name: "Close", exact: true }).click();
   await page.goto("/app/tax-team?view=deadline-control");
   await expect(page.getByRole("heading", { name: "Deadline Control", exact: true })).toBeVisible();
 });
@@ -166,195 +198,145 @@ test("calendar date selection preserves a shareable date and opens due context",
 test("Work follows the Due Register into step-by-step execution detail", async ({ page }) => {
   await page.goto("/app/work");
   await expect(page.getByRole("heading", { name: "Work register" })).toBeVisible();
-  await expect(page.locator(".filter-tabs .filter-tab--active")).toHaveText(/Needs attention/);
+  await expect(page.locator(".filter-tabs .filter-tab--active").first()).toHaveText(/Needs attention/);
   await expect(page.getByRole("button", { name: /All work/ })).toHaveCount(0);
-  const harborlineRow = page.locator(".work-register__row").filter({ hasText: "Harborline Services" });
+  const harborlineRow = page.locator(".work-register__row").filter({ hasText: "Harborline Services" }).first();
   await expect(harborlineRow).toContainText("WHT 1601EQ");
-  await expect(harborlineRow).toContainText("QAP sequence included");
   await harborlineRow.click();
   await expect(page.getByText("Return package", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Role certification gate" })).toHaveCount(0);
   await expect(page.locator(".work-journey-table")).toBeVisible();
-  await expect(page.locator(".work-journey-table__row").filter({ hasText: "Endorse payment" }).getByRole("combobox", { name: "Endorse payment status" })).toBeVisible();
-  await page.getByRole("button", { name: "Map", exact: true }).click();
-  await page.getByRole("button", { name: "Expand all process stages" }).click();
-  await expect(page.getByRole("button", { name: /Filing 5\/5 complete/ })).toBeVisible();
-  await expect(page.locator(".work-course-map__body strong").filter({ hasText: "Attachments" })).toBeVisible();
-  await expect(page.locator(".work-course-map__body strong").filter({ hasText: "Process payment and retain proof" })).toBeVisible();
-  await expect(page.locator(".work-course-map__body strong").filter({ hasText: "Archive the return package" })).toBeVisible();
-  await expect(page.getByLabel("Draft return status")).toHaveText("Complete");
+  await expect(page.getByRole("button", { name: /^(Complete preparation|Open gate|Change Endorse payment status)$/ }).first()).toBeVisible();
+  await expect(page.locator(".work-journey-table")).toBeVisible();
+  await expect(page.locator(".work-journey-table__row").filter({ hasText: "Attachments" }).filter({ hasText: "Not started" }).first()).toBeVisible();
+  await expect(page.locator(".work-journey-table__row").filter({ hasText: "Process payment and retain proof" }).first()).toBeVisible();
+  await expect(page.locator(".work-journey-table__row").filter({ hasText: "Archive the return package" }).first()).toBeVisible();
+  await expect(page.locator(".work-journey-table__row").filter({ hasText: "Draft return" }).filter({ hasText: "Complete" }).first()).toBeVisible();
   await expect(page.getByText("Return calculation", { exact: true })).toHaveCount(0);
-  await expect(page.locator(".work-course-map__stage").filter({ hasText: "Draft return" }).getByRole("spinbutton", { name: "Payment amount in Philippine pesos" })).toBeVisible();
   await expect(page.getByLabel("File return and retain FRN status")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Mark done" })).toBeVisible();
-  await expect(page.getByRole("combobox", { name: "Endorse payment status" })).toHaveValue("IN_PROGRESS");
-  await expect(page.getByRole("combobox", { name: "Endorse payment status" })).toBeEnabled();
   await expect(page.getByText("Return package", { exact: true })).toBeVisible();
   await page.goto("/app/work/work-02");
   await expect(page).toHaveURL(/\/app\/work\/work-02$/);
-  await page.getByRole("button", { name: "Map", exact: true }).click();
-  await expect(page.getByRole("button", { name: /^Attachments/ })).toBeVisible();
+  await expect(page.locator(".work-journey-table")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Independent evidence control" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Close return journey" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Period locks" })).toHaveCount(0);
   await page.getByRole("link", { name: "Close return journey" }).press("Enter");
   await expect(page).toHaveURL(/\/app\/work$/);
-  await page.locator(".work-register__row").filter({ hasText: "Harborline Services" }).click();
-  const rolesDisclosure = page.getByText("Roles", { exact: true });
-  await rolesDisclosure.focus();
-  await rolesDisclosure.press("Enter");
-  await expect(page.getByText("Preparer", { exact: true }).last()).toBeVisible();
+  await page.locator(".work-register__row").filter({ hasText: "Harborline Services" }).first().click();
+  await expect(page.getByRole("heading", { name: "Harborline Services" })).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByText("Return journey", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Return package", { exact: true })).toHaveCount(0);
 });
 
 test("period locks live in Tax Team and are separate from the return package", async ({ page }) => {
-  await applyAccessView(page, "TAX_CONTROL");
   await page.goto("/app/tax-team");
   await page.getByRole("tab", { name: "Period locks", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Period locks" })).toBeVisible();
   await expect(page.getByText("Tax Team control", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Lock period" }).first()).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^Lock / }).first()).toBeVisible();
   await page.goto("/app/work/work-02");
   await expect(page.getByRole("heading", { name: "Period locks" })).toHaveCount(0);
 });
 
-test("the accountable persona can edit the current process status", async ({ page }) => {
+test("the accountable persona can open the current certification gate", async ({ page }) => {
   await page.goto("/app/work/work-02");
-  await page.getByRole("button", { name: "Map", exact: true }).click();
-  await expandBundle(page, /^Payment 0\/3 complete/);
-  const paymentStatus = page.getByRole("combobox", { name: "Endorse payment status" });
-  await page.getByRole("button", { name: /^Elevated override/ }).click();
-  await expect(page.getByLabel("Override reason")).toBeVisible();
-  await page.getByLabel("Override reason").fill("Master Admin calibration status review");
-  await page.getByRole("button", { name: "Save reason" }).click();
-  await expect(page.getByRole("button", { name: /Elevated override · ready/ })).toBeVisible();
-  await paymentStatus.selectOption("NEEDS_ATTENTION");
-  await expect(page.getByRole("status")).toContainText("Saved · Needs attention");
-  await page.getByRole("button", { name: /^Elevated override/ }).click();
-  await page.getByLabel("Override reason").fill("Master Admin calibration status review");
-  await page.getByRole("button", { name: "Save reason" }).click();
-  await expect(page.getByRole("button", { name: /Elevated override · ready/ })).toBeVisible();
-  await paymentStatus.selectOption("DONE");
-  await page.getByLabel("Result / evidence ref").fill("CAL-PAYMENT-001");
-  await page.getByRole("button", { name: "Save complete" }).click();
-  await expect(page.getByRole("status")).toContainText("Saved · step marked done");
-  await expect(page.getByRole("combobox", { name: "Release or approve payment status" })).toHaveValue("IN_PROGRESS");
+  const label = await openCurrentCertification(page);
+  if (label === "Change Endorse payment status") await expect(page.getByRole("combobox", { name: "Process status" })).toHaveValue("IN_PROGRESS");
+  else await expect(page.getByRole("checkbox").first()).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
 });
 
 test("a return with no payment skips the payment process bundle", async ({ page }) => {
   await page.goto("/app/work");
-  await page.locator(".work-register__row").filter({ hasText: "Lakeshore Apparel Services" }).click();
-  await page.getByRole("button", { name: "Map", exact: true }).click();
-  await page.getByRole("button", { name: "Expand all process stages" }).click();
-  await expect(page.getByRole("button", { name: /^Payment/ })).toHaveCount(0);
-  await expect(page.getByLabel("Payment applicability")).toHaveValue("NOT_APPLICABLE");
+  await page.locator(".work-register__row").filter({ hasText: "Lakeshore Apparel Services" }).first().click();
+  await expect(page.getByRole("list", { name: "Return journey status" })).toContainText(/Payment\s*Not applicable/);
+  await expect(page.locator(".work-journey-table__bundle").filter({ hasText: "Payment" })).toHaveCount(0);
 });
 
-test("saving a payment amount locks the recorded value", async ({ page }) => {
+test("current certification opens a scoped dialog", async ({ page }) => {
   await page.goto("/app/work/work-02");
-  await page.getByRole("button", { name: "Map", exact: true }).click();
-  await expandBundle(page, /^Filing 5\/5 complete/);
-  const amount = page.getByRole("spinbutton", { name: "Payment amount in Philippine pesos" });
-  const saveAmount = page.getByRole("button", { name: "Save amount" });
-  await amount.fill("1250");
-  await expect(saveAmount).toBeEnabled();
-  await saveAmount.click();
-  await expect(page.getByRole("status")).toContainText("payment amount recorded");
-  await expect(amount).toHaveCount(0);
-  await expect(saveAmount).toHaveCount(0);
-  await expect(page.getByText("₱1,250.00", { exact: true })).toBeVisible();
+  const label = await openCurrentCertification(page);
+  if (label === "Change Endorse payment status") await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeDisabled();
+  else await expect(page.getByRole("button", { name: "Certify as Complete", exact: true })).toBeDisabled();
 });
 
 test("recording the current operational step keeps the calendar operational", async ({ page }) => {
   await page.goto("/app/work/work-02");
-  await page.getByRole("button", { name: "Map", exact: true }).click();
-  await expandBundle(page, /^Payment 0\/3 complete/);
-  await page.getByRole("button", { name: /^Elevated override/ }).click();
-  await expect(page.getByLabel("Override reason")).toBeVisible();
-  await page.getByLabel("Override reason").fill("Master Admin calibration status review");
-  await page.getByRole("button", { name: "Save reason" }).click();
-  await expect(page.getByRole("button", { name: /Elevated override · ready/ })).toBeVisible();
-  await page.getByRole("button", { name: "Mark done" }).click();
-  await page.getByLabel("Result / evidence ref").fill("CAL-PAYMENT-002");
-  await page.getByRole("button", { name: "Save complete" }).click();
-  await expect(page.getByRole("status")).toContainText("Saved · step marked done");
-  await page.getByRole("button", { name: /^Elevated override/ }).click();
-  await page.getByLabel("Override reason").fill("Master Admin calibration undo review");
-  await page.getByRole("button", { name: "Save reason" }).click();
-  await page.getByRole("button", { name: "Undo" }).click();
-  await expect(page.getByRole("status")).toContainText("Saved · returned to the queue");
+  await openCurrentCertification(page);
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
   await page.goto("/app/work?view=calendar");
   await expect(page.getByRole("heading", { name: "Calendar" })).toBeVisible();
 });
 
-test("RBAC personas expose only the actions they own", async ({ page }) => {
+test("prototype exposes one Super Admin operating mode", async ({ page }) => {
   await page.goto("/app/work");
-  const persona = page.getByRole("combobox", { name: "Access view persona" });
-  await expect(persona).toHaveValue("MASTER_ADMIN");
-  for (const selectedPersona of ["PREPARER", "CHECKER", "REVIEWER", "TAX_CONTROL"] as const) {
-    await persona.selectOption(selectedPersona);
-    await page.getByRole("button", { name: /Apply .* access view/ }).click();
-    if (selectedPersona !== "TAX_CONTROL") {
-      await page.goto("/app/work?view=run");
-      await expect(page.getByRole("heading", { name: "My run", exact: true })).toBeVisible();
-      await page.goto("/app/work");
-    }
-    await expect(page.getByLabel("Current access persona")).toContainText(selectedPersona === "PREPARER" ? "Preparer" : selectedPersona === "CHECKER" ? "Checker" : selectedPersona === "REVIEWER" ? "Reviewer" : "Tax Control");
-    await expect(page.locator(".work-register__row").first()).toBeVisible();
-    await page.locator(".work-register__row").first().click();
-    await page.getByRole("button", { name: "Map", exact: true }).click();
-    const markDoneCount = await page.getByRole("button", { name: "Mark done" }).count();
-    expect(markDoneCount, selectedPersona).toBe(0);
-    await page.getByRole("button", { name: "Close detail panel" }).last().click();
-  }
+  await expect(page.getByRole("combobox", { name: "Access view persona" })).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "Current user" })).toContainText("Super Admin");
+  await expect(page.getByRole("link", { name: "Tax Team", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Admin", exact: true })).toBeVisible();
+  await page.goto("/app/admin?view=access");
+  await expect(page.getByRole("heading", { name: "Super Admin mode", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Users & access", exact: true })).toHaveCount(0);
 });
 
-test("the current gate offers a direct accountable persona switch", async ({ page }) => {
-  await applyAccessView(page, "TAX_CONTROL");
+test("global search opens from the header and routes to matching records", async ({ page }) => {
+  await page.goto("/app/control-tower");
+  await page.getByRole("button", { name: "Search TaxMonWeb", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Search clients and work" })).toBeVisible();
+  const search = page.getByRole("searchbox", { name: "Search clients and work" });
+  await search.fill("Harborline");
+  await expect(page.getByRole("button", { name: /Harborline Services/ }).first()).toBeVisible();
+  await page.getByRole("button", { name: /Harborline Services/ }).first().click();
+  await expect(page).toHaveURL(/\/app\/clients\/fixture-client-/);
+});
+
+test("client overview opens the exact next work item", async ({ page }) => {
+  await page.goto("/app/clients/fixture-client-01");
+  await expect(page.getByRole("heading", { name: "At a glance", exact: true })).toBeVisible();
+  await expect(page.getByText("Current stage", { exact: true })).toBeVisible();
+  await expect(page.getByText("Client approval", { exact: true })).toBeVisible();
+  await expect(page.getByText("Latest activity", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open return", exact: true })).toHaveAttribute("href", "/app/work/work-01");
+  await page.getByRole("link", { name: "Open return", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/work\/work-01$/);
+  await expect(page.getByRole("link", { name: "Close return journey", exact: true })).toBeVisible();
+});
+
+test("the current gate stays directly operable in Super Admin mode", async ({ page }) => {
   await page.goto("/app/work/work-03");
-  await expect(page.getByRole("button", { name: "Switch to Checker view" })).toBeVisible();
-  await page.getByRole("button", { name: "Switch to Checker view" }).click();
-  await expect(page.getByRole("heading", { name: "This work item is outside your assigned view" })).toBeVisible();
+  await page.getByRole("button", { name: "Open gate", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Switch to Checker view" })).toHaveCount(0);
+  await expect(page.getByRole("checkbox").first()).toBeEnabled();
+  await page.getByRole("button", { name: "Close certification checklist", exact: true }).click();
 });
 
-test("management and administration personas keep work accountability separate", async ({ page }) => {
+test("Super Admin can open every work scope without a persona switch", async ({ page }) => {
   await page.goto("/app/work?queue=all");
-  const persona = page.getByRole("combobox", { name: "Access view persona" });
-  for (const selectedPersona of ["TOWER_LEADER", "CLUSTER_LEADER", "TAX_CONTROL", "MASTER_ADMIN", "SUPER_ADMIN"] as const) {
-    await persona.selectOption(selectedPersona);
-    await page.getByRole("button", { name: /Apply .* access view/ }).click();
-    const scopedClient = selectedPersona === "CLUSTER_LEADER" ? "Cedarfield Holdings" : "Harborline Services";
-    await page.locator(".work-register__row").filter({ hasText: scopedClient }).click();
-    await page.getByRole("button", { name: "Map", exact: true }).click();
-    await expect(page.getByText("Roles", { exact: true })).toBeVisible();
-    const markDone = page.getByRole("button", { name: "Mark done" });
-    const markDoneCount = await markDone.count();
-    expect(markDoneCount, selectedPersona).toBe(0);
-    await page.getByRole("button", { name: "Close detail panel" }).last().click();
-  }
+  await expect(page.getByRole("img", { name: "Current user" })).toContainText("Super Admin");
+  await expect(page.locator(".work-register__row").filter({ hasText: "Cedarfield Holdings" }).first()).toBeVisible();
+  await expect(page.locator(".work-register__row").filter({ hasText: "Harborline Services" }).first()).toBeVisible();
 });
 
 test("a role gate records the decision and advances the derived next gate", async ({ page }) => {
   await page.goto("/app/work");
   await page.goto("/app/work/work-03");
+  await page.getByRole("button", { name: "Open gate", exact: true }).click();
   await expect(page.locator(".workflow-gate-panel__state").filter({ hasText: "Waiting for Checker" })).toBeVisible();
   const questions = page.locator(".workflow-question");
   await questions.nth(0).click();
   await expect(questions.nth(0)).toContainText(/Done/);
   await page.reload();
+  await page.getByRole("button", { name: "Open gate", exact: true }).click();
   await expect(page.locator(".workflow-question").nth(0)).toContainText(/Done/);
   const reopenedQuestions = page.locator(".workflow-question");
   for (let index = 1; index < await reopenedQuestions.count(); index += 1) await reopenedQuestions.nth(index).click();
+  await page.getByRole("spinbutton", { name: "Tax due amount" }).fill("0");
   await page.getByRole("textbox", { name: "Decision note" }).fill("Checked source support, mapping, reconciliation, and completeness.");
-  await page.getByRole("button", { name: /^Elevated override/ }).click();
-  await expect(page.getByLabel("Override reason")).toBeVisible();
-  await page.getByLabel("Override reason").fill("Master Admin calibration gate review");
-  await page.getByRole("button", { name: "Save reason" }).click();
-  await page.getByRole("button", { name: "Approve as Checker" }).click({ force: true });
+  await expect(page.getByRole("button", { name: "Certify as Complete", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Certify as Complete", exact: true }).click();
+  await page.getByRole("button", { name: "Open gate", exact: true }).click();
   await expect(page.locator(".workflow-gate-panel__state").filter({ hasText: "Waiting for Reviewer" })).toBeVisible();
-  await expect(page.getByRole("status").getByText("Checker approval recorded", { exact: false })).toBeVisible();
-  await expect(page.getByText("Return journey", { exact: true })).toBeVisible();
 });
 
 test("Work register keeps generated work read-only", async ({ page }) => {
@@ -409,9 +391,9 @@ test("primary screens pass an accessibility smoke audit", async ({ page }) => {
   }
 });
 
-test("calibration Master Admin can edit and reload a sanitized client profile", async ({ page }) => {
+test("calibration Super Admin can edit and reload a sanitized client profile", async ({ page }) => {
   await page.goto("/app/clients/fixture-client-01");
-  await expect(page.getByLabel("Current access persona")).toContainText("Master Admin");
+  await expect(page.getByRole("img", { name: "Current user" })).toContainText("Super Admin");
   await page.getByRole("tab", { name: "Registration", exact: true }).click();
   const editRegistration = page.getByRole("button", { name: "Edit registration facts" });
   await editRegistration.scrollIntoViewIfNeeded();
@@ -448,7 +430,7 @@ test("client required fields are visibly blocked", async ({ page }) => {
   }
   await drawer.locator("button.onboarding-step").nth(1).click();
   for (const label of ["RDO", "Registration reference / OCN", "Registration date", "Tax year basis", "Accounting system", "Books", "Receipts / invoicing", "Filing channel", "Registered address"]) {
-    await expect(drawer.getByLabel(label)).toHaveCSS("border-color", "rgb(163, 43, 45)");
+    await expect(drawer.getByLabel(label).first()).toHaveCSS("border-color", "rgb(163, 43, 45)");
   }
   await drawer.locator("button.onboarding-step").nth(2).click();
   await expect(drawer.getByLabel("eNATE setup")).toHaveCSS("border-color", "rgb(163, 43, 45)");

@@ -153,6 +153,17 @@ describe("deadline control projection", () => {
     expect(after.rows.find((row) => row.formNumber === "2551Q")?.adjustedStatutoryDeadline).toBe(base!.adjustedStatutoryDeadline);
   });
 
+  it("projects released repository rows without regenerating fixture deadlines", () => {
+    const client = fixtureClients.find((item) => item.id === "fixture-client-03");
+    const released = buildDeadlineControlRows(2026).find((row) => row.formNumber === "2550Q" && row.activityPeriod === "Q1 2026");
+    expect(client).toBeDefined();
+    expect(released).toBeDefined();
+    const projection = getClientServiceCalendarRows(client!, 2026, {}, [{ ...released!, id: "released-q1", publicationStatus: "published", publishedOperationalDeadline: "2026-04-25" }]);
+    expect(projection.rows).toHaveLength(1);
+    expect(projection.rows[0]?.id).toBe("released-q1");
+    expect(projection.rows[0]?.publishedOperationalDeadline).toBe("2026-04-25");
+  });
+
   it("uses the earliest applicable component deadline as the master default", () => {
     expect(earliestApplicableDeadline(["2026-10-25", "2026-10-15", null])).toBe("2026-10-15");
     expect(earliestApplicableDeadline([null, undefined])).toBeNull();

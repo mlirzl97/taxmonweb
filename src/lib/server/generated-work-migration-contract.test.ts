@@ -10,9 +10,11 @@ const executionMigration = readFileSync(join(process.cwd(), "supabase/migrations
 const periodCloseMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261118000000_accounting_period_close.sql"), "utf8");
 const periodCloseHardeningMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261118010000_harden_period_close_triggers.sql"), "utf8");
 const returnPeriodLockMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261119000000_return_period_locks.sql"), "utf8");
-const preparerPaymentAmountMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261121000000_preparer_payment_amount_control.sql"), "utf8");
+const checkerPaymentAmountMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261205000000_checker_payment_amount_control.sql"), "utf8");
+const clientApprovalDateMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261206000000_require_client_approval_date.sql"), "utf8");
 const manualWorkMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261123000000_enable_authorized_manual_work.sql"), "utf8");
 const manualWorkAssignmentMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261124000000_manual_work_uses_effective_unit_assignments.sql"), "utf8");
+const triggerHardeningMigration = readFileSync(join(process.cwd(), "supabase/migrations/20261203000000_harden_internal_trigger_functions.sql"), "utf8");
 
 describe("generated work persistence contract", () => {
   it("uses one generated-work source with idempotent identity", () => {
@@ -68,12 +70,19 @@ describe("generated work persistence contract", () => {
     expect(returnPeriodLockMigration).not.toContain("Every active work item in the accounting period must be archived and closure-certified before close.");
   });
 
-  it("locks the payment amount to the Preparer certification", () => {
-    expect(preparerPaymentAmountMigration).toContain("guard_preparer_payment_amount");
-    expect(preparerPaymentAmountMigration).toContain("Only the assigned Preparer can record the amount to pay.");
-    expect(preparerPaymentAmountMigration).toContain("already recorded and cannot be edited");
-    expect(preparerPaymentAmountMigration).toContain("record_payment_amount_evidence");
-    expect(preparerPaymentAmountMigration).toContain("Amount to pay captured at Preparer certification");
+  it("locks the payment amount to the Checker certification", () => {
+    expect(checkerPaymentAmountMigration).toContain("guard_checker_payment_amount");
+    expect(checkerPaymentAmountMigration).toContain("Only the assigned Checker can record the amount to pay.");
+    expect(checkerPaymentAmountMigration).toContain("already recorded and cannot be edited");
+    expect(checkerPaymentAmountMigration).toContain("record_payment_amount_evidence");
+    expect(checkerPaymentAmountMigration).toContain("Amount to pay captured at Checker certification");
+    expect(checkerPaymentAmountMigration).toContain("Record the amount to pay before certifying the Checker gate.");
+  });
+
+  it("requires a recorded client approval date before completion", () => {
+    expect(clientApprovalDateMigration).toContain("step_code_value = ''client-approval''");
+    expect(clientApprovalDateMigration).toContain("externalDate");
+    expect(clientApprovalDateMigration).toContain("Record the client approval date before completing client approval.");
   });
 
   it("keeps manual Work creation behind approved masters and an audited command", () => {
@@ -93,5 +102,10 @@ describe("generated work persistence contract", () => {
     expect(manualWorkAssignmentMigration).toContain("client_team_assignments");
     expect(manualWorkAssignmentMigration).toContain("source_priority");
     expect(manualWorkAssignmentMigration).toContain("current_owner_user_id");
+  });
+
+  it("keeps trigger-only functions out of the RPC surface", () => {
+    expect(triggerHardeningMigration).toContain("alter function public.capture_checker_tax_due_amount() set search_path = public;");
+    expect(triggerHardeningMigration).toContain("revoke execute on function public.materialize_generated_work_components() from public, anon, authenticated;");
   });
 });

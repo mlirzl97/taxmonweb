@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixtureClients, fixtureOrgChartNodes, fixtureOrgDirectoryMembers, fixtureSpecialistCases, fixtureWork } from "@/lib/fixtures";
 import { fixtureOrganizationScopes } from "./organization-catalog";
-import { buildEditableOrgChartNodes, buildOrgChartTree, careerServiceLevelLabels, careerServiceLevelTitle, clientMatchesPerspective, derivePersonalControlPulse, deriveTeamControlPulses, deriveTeamMemberLoad, deriveTeamSpecialistSummary, deriveTeamTowerSummary, hasCoverageGap, overlayOrgChartLoad, reportingLineMemberIds, reportingManagerLevelFor, teamMemberIdsForPerspective, workMatchesStaffPerspective } from "./team";
+import { buildEditableOrgChartNodes, buildOrgChartTree, careerServiceLevelLabels, careerServiceLevelTitle, clientMatchesPerspective, derivePersonalControlPulse, deriveTeamControlPulses, deriveTeamMemberLoad, deriveTeamSpecialistSummary, deriveTeamTowerSummary, deriveTeamWorkloadGuide, hasCoverageGap, overlayOrgChartLoad, reportingLineMemberIds, reportingManagerLevelFor, summarizeTeamWorkloadGuide, teamMemberIdsForPerspective, workMatchesStaffPerspective } from "./team";
 
 describe("team and portfolio foundation", () => {
   it("derives a member's client load once per client, not once per assigned role", () => {
@@ -143,6 +143,22 @@ describe("team and portfolio foundation", () => {
       const member = fixtureOrgDirectoryMembers.find((item) => item.id === memberId);
       return member?.operatingModel === "TAX_TEAM";
     }))).toBe(true);
+  });
+
+  it("uses a simple capacity guide without converting Tax Team cases into portfolio weight", () => {
+    const load = deriveTeamMemberLoad(fixtureOrgDirectoryMembers, fixtureClients, fixtureWork, fixtureSpecialistCases);
+    const guide = deriveTeamWorkloadGuide(load, fixtureClients);
+    const teamLeader = guide.find((member) => member.id === "org-c1-team-lead");
+    const supervisor = guide.find((member) => member.id === "org-c1-senior-supervisor");
+    const hod = guide.find((member) => member.id === "org-liezl");
+    const april = guide.find((member) => member.id === "org-c2-team-lead");
+
+    expect(teamLeader?.capacityTier).toBe(5);
+    expect(supervisor?.capacityTier).toBe(6);
+    expect(teamLeader?.capacityLabel).toBe("Training toward 4.1");
+    expect(hod).toMatchObject({ capacityApplicable: false, capacityTier: null, capacityLabel: "HOD oversight; explicit assignments only" });
+    expect(april).toMatchObject({ capacityApplicable: false, knownPortfolioWeight: 0, capacityLabel: "Specialist cases; portfolio weight not applicable" });
+    expect(summarizeTeamWorkloadGuide(guide, fixtureClients).unresolvedWeightClients).toBeGreaterThan(0);
   });
 
   it("narrows staff Team views to one person's reporting line, not peer branches", () => {

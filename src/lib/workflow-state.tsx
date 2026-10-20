@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { canAccessModule, cloneAccessMatrix, isAccessMatrix, moduleAccessForPersona, rbacPersonaDescription, rbacPersonaLabel, type AccessLevel, type AccessMatrix, type ModuleKey, type RbacPersona } from "@/lib/domain/access";
-import { fixtureClients, fixtureClock, fixtureOrgDirectoryMembers, fixtureWork, type FixtureClient, type FixturePaymentApplicability, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
+import { fixtureClients, fixtureClock, fixtureOrgDirectoryMembers, fixtureWork, type FixtureClient, type FixtureDataReadiness, type FixturePaymentApplicability, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
 import { applySavedCalibrationToClient, prototypeClientProfileUpdatedEvent } from "@/lib/domain/client-profile-persistence";
 import { clientIsAssignedForRole, clientMatchesPerspective, staffMemberIdForPerspective } from "@/lib/domain/team";
 import { towerForScopeFilter } from "@/lib/domain/organization-catalog";
@@ -11,7 +11,7 @@ import { portfolioClientToFixtureClient } from "@/lib/domain/live-client-adapter
 import { getFixtureOperationalRecords, getLiveOperationalRecords, type FixtureOperationalRecord } from "@/lib/fixtures-read-model";
 import { isPrototypeEmptyMode } from "@/lib/supabase/config";
 export { workflowProcessRole, workflowProcessRoleLabel } from "@/lib/workflow-rules";
-import { actionForProcessStep, applyWorkflowStepState, currentProcessStepId, isValidTaxDueAmount, nextApplicableProcessStep, paymentProcessStepIds, recordForWork, roleLabels, roleQuestions, stageForProcessStep, transition, workflowProcessRole, workflowTimestamp, workMatchesPerspective } from "@/lib/workflow-rules";
+import { actionForProcessStep, applyWorkflowStepState, autoStartProcessStep, currentProcessStepId, isValidTaxDueAmount, nextApplicableProcessStep, paymentProcessStepIds, recordForWork, roleLabels, roleQuestions, stageForProcessStep, transition, workflowProcessRole, workflowTimestamp, workMatchesPerspective } from "@/lib/workflow-rules";
 
 export type WorkflowRole = "PREPARER" | "CHECKER" | "REVIEWER";
 export type WorkflowProcessOwner = WorkflowRole | "TAX_CONTROL";
@@ -112,6 +112,7 @@ export type WorkflowRecord = {
   checklistHistory: readonly WorkflowChecklistUpdate[];
   processStatuses: Readonly<Record<string, WorkflowProcessStatus>>;
   processHistory: readonly WorkflowProcessUpdate[];
+  dataReadiness?: FixtureDataReadiness;
   archiveFacts?: WorkflowArchiveFacts;
   changeHistory: readonly WorkflowChangeEvent[];
   periodLock: WorkflowPeriodLock;
@@ -178,13 +179,13 @@ function prototypeWorkSeed(): FixtureWorkItem[] {
   return fixtureWork.map((work) => work.id === "work-02"
     ? {
         ...work,
-        detail: "Payment applies; record the amount during Preparer certification.",
+        detail: "Payment applies; record the amount during Checker certification.",
         stage: "PREPARE",
         nextAction: "Complete preparation",
         status: "AMBER",
         statusReason: "The return package is reset for a fresh Preparer certification.",
         steps: work.steps.map((step, index) => ({ ...step, state: index === 0 ? "current" : "not-started" })),
-        components: work.components.map((component) => component.label === "Payment" ? { ...component, state: "Required · amount not recorded", detail: "Record the amount during Preparer certification." } : { ...component, state: component.label === "Submission" ? "Not started" : component.label === "Attachments" ? "Waiting" : "Not started" }),
+        components: work.components.map((component) => component.label === "Payment" ? { ...component, state: "Required · amount not recorded", detail: "Record the amount during Checker certification." } : { ...component, state: component.label === "Submission" ? "Not started" : component.label === "Attachments" ? "Waiting" : "Not started" }),
         returnedFrom: undefined,
       }
     : work);
@@ -246,7 +247,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   type LivePortfolioRecord = Parameters<typeof portfolioClientToFixtureClient>[0];
   const emptyPrototypeMode = prototypeMode && isPrototypeEmptyMode();
   const [currentRole, setCurrentRole] = useState<WorkflowRole>("PREPARER");
-  const [workPerspective, setWorkPerspective] = useState<WorkflowPerspective>("MASTER_ADMIN");
+  const [workPerspective, setWorkPerspective] = useState<WorkflowPerspective>(prototypeMode ? "SUPER_ADMIN" : "MASTER_ADMIN");
   const [accessMatrix, setAccessMatrix] = useState<AccessMatrix>(() => cloneAccessMatrix());
   const [accessPolicyHistory, setAccessPolicyHistory] = useState<AccessPolicyEvent[]>([]);
   const [accessPerspectiveHydrated, setAccessPerspectiveHydrated] = useState(() => !prototypeMode);
@@ -312,15 +313,14 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   useEffect(() => {
     if (!prototypeMode || emptyPrototypeMode) return;
     try {
-      const storedPerspective = window.localStorage.getItem(accessPerspectiveStorageKey) as WorkflowPerspective | null;
-      if (storedPerspective && ["PREPARER", "CHECKER", "REVIEWER", "TOWER_LEADER", "CLUSTER_LEADER", "TAX_CONTROL", "MASTER_ADMIN", "SYSTEM_ADMIN", "SUPER_ADMIN"].includes(storedPerspective)) {
-        // Hydrate the prototype lens after the server/client markup is stable.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setWorkPerspective(storedPerspective);
-      }
+      // Temporary prototype policy: operate as one Super Admin until the
+      // production access model is reintroduced and assigned deliberately.
+      window.localStorage.removeItem(accessPerspectiveStorageKey);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setWorkPerspective("SUPER_ADMIN");
       setAccessPerspectiveHydrated(true);
     } catch {
-      // Keep the default HOD lens when browser storage is unavailable.
+      // Keep the default Super Admin lens when browser storage is unavailable.
       setAccessPerspectiveHydrated(true);
     }
   }, [emptyPrototypeMode, prototypeMode]);
@@ -385,9 +385,10 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   }, [accessMatrix, accessMatrixHydrated, accessPolicyHistory, prototypeMode]);
 
   const applyAccessPerspective = useCallback((perspective: WorkflowPerspective) => {
-    setCurrentRole(perspective === "PREPARER" || perspective === "CHECKER" || perspective === "REVIEWER" ? perspective : "PREPARER");
-    setWorkPerspective(perspective);
-  }, []);
+    const nextPerspective = prototypeMode ? "SUPER_ADMIN" : perspective;
+    setCurrentRole(nextPerspective === "PREPARER" || nextPerspective === "CHECKER" || nextPerspective === "REVIEWER" ? nextPerspective : "PREPARER");
+    setWorkPerspective(nextPerspective);
+  }, [prototypeMode]);
 
   const canManageAccess = prototypeMode && ["MASTER_ADMIN", "TAX_CONTROL", "SUPER_ADMIN"].includes(workPerspective);
   const commitAccessMatrix = useCallback((matrix: AccessMatrix, reason: string) => {
@@ -758,15 +759,13 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (isUndo && !overrideReason.trim()) return { ok: false, error: "Record an override reason before correcting a completed step." };
     if (isGateStep && (status === "DONE" || status === "NOT_APPLICABLE")) return { ok: false, error: "Complete this step through its certification gate." };
     if (status === "NOT_APPLICABLE" && paymentProcessStepIds.has(stepId) && work.paymentApplicability === "UNRESOLVED") return { ok: false, error: "Resolve payment applicability before skipping the payment branch." };
-    const paymentAmount = paymentAmountOverride !== undefined ? paymentAmountOverride : work.paymentAmount;
-    if (status === "DONE" && stepId === "payment-confirmation" && (paymentAmount === null || paymentAmount === undefined || !Number.isFinite(paymentAmount) || paymentAmount < 0)) return { ok: false, error: "Record the amount to pay in the Preparer gate before confirming payment." };
     if ((status === "DONE" || status === "NOT_APPLICABLE") && !evidenceReference.trim()) return { ok: false, error: status === "NOT_APPLICABLE" ? "Record why this process step is not applicable." : "Record the result or evidence reference before marking this step complete." };
-    if (status === "DONE" && ["filing", "payment-confirmation", "esubmission"].includes(stepId) && !/^\d{4}-\d{2}-\d{2}$/.test(completedOn)) return { ok: false, error: "Record the actual completion date before marking this outcome complete." };
+    if (status === "DONE" && ["client-approval", "filing", "payment-confirmation", "esubmission"].includes(stepId) && !/^\d{4}-\d{2}-\d{2}$/.test(completedOn)) return { ok: false, error: "Record the actual completion date before marking this outcome complete." };
     if (status === "DONE" && stepId === "esubmission" && (!/^\d{4}-\d{2}-\d{2}$/.test(acknowledgedOn) || !/^\d{4}-\d{2}-\d{2}$/.test(validatedOn))) return { ok: false, error: "Record the BIR acknowledgment and validation dates before completing eSubmission." };
     if (!isCurrentStep && !isUndo) return { ok: false, error: "Only the current process step can be edited." };
     if (!canActOnProcessStep(stepId, work)) return { ok: false, error: `The ${rbacPersonaLabel(workPerspective)} access view cannot update this process step for this taxpayer.` };
     const nextStep = status === "DONE" || status === "NOT_APPLICABLE" ? nextApplicableProcessStep(work, stepIndex, record.processStatuses) : undefined;
-    const nextStatus = nextStep && record.processStatuses[nextStep.id] !== "DONE" && record.processStatuses[nextStep.id] !== "NOT_APPLICABLE" ? "IN_PROGRESS" : undefined;
+    const nextStatus = nextStep && autoStartProcessStep(nextStep.id) && record.processStatuses[nextStep.id] !== "DONE" && record.processStatuses[nextStep.id] !== "NOT_APPLICABLE" ? "IN_PROGRESS" : undefined;
     const actor = rbacPersonaLabel(workPerspective);
     const recordedAt = workflowTimestamp(record.processHistory.length);
     const elevatedOverride = canUseElevatedOverride(workPerspective) && Boolean(overrideReason.trim());
@@ -780,7 +779,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
       processStatuses[currentStep.id] = "NOT_STARTED";
       updates.push({ id: `${work.id}-process-${record.processHistory.length + updates.length + 1}`, stepId: currentStep.id, status: "NOT_STARTED", actor, recordedAt, elevatedOverride, overrideReason: elevatedOverride ? overrideReason.trim() : undefined });
     }
-    const activeStepId = nextStep && nextStatus ? nextStep.id : status === "NOT_STARTED" ? stepId : stepId;
+    const activeStepId = nextStep?.id ?? stepId;
     const patch: WorkflowPatch = {
       ...record.patch,
       ...(status === "DONE" || status === "NOT_APPLICABLE" ? { blocker: null } : {}),
@@ -804,12 +803,14 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (!reason.trim()) return { ok: false, error: "Record why the source data is ready before continuing." };
     if (!prototypeMode) return executeLiveCommand(work, "data_readiness", { ready, source, reason: reason.trim() });
     if (periodLocks[workReturnLockKey(work)]?.locked) return { ok: false, error: "This return and compliance period are locked by Tax Team." };
+    const record = recordForWork(work, records[work.id]);
+    const dataReadiness: FixtureDataReadiness = { state: ready ? "READY" : "NOT_READY", source, reason: reason.trim(), actor: rbacPersonaLabel(workPerspective), recordedAt: workflowTimestamp(record.processHistory.length + record.changeHistory.length) };
     setRecords((current) => {
       const existing = recordForWork(work, current[work.id]);
-      return { ...current, [work.id]: { ...existing, patch: { ...existing.patch, blocker: ready ? null : { category: "CLIENT DATA", reason: reason.trim() } } } };
+      return { ...current, [work.id]: { ...existing, dataReadiness, patch: { ...existing.patch, blocker: ready ? null : { category: "CLIENT DATA", reason: reason.trim() } } } };
     });
     return { ok: true };
-  }, [executeLiveCommand, periodLocks, prototypeMode]);
+  }, [executeLiveCommand, periodLocks, prototypeMode, records, workPerspective]);
 
   const setPaymentApplicability = useCallback(async (work: FixtureWorkItem, applicability: FixturePaymentApplicability) => {
     if (!prototypeMode) return executeLiveCommand(work, "payment_profile", { paymentApplicability: applicability.toLowerCase(), paymentAmount: applicability === "NOT_APPLICABLE" ? null : work.paymentAmount ?? null });
@@ -834,7 +835,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (!prototypeMode) return executeLiveCommand(work, "payment_profile", { paymentApplicability: work.paymentApplicability.toLowerCase(), paymentAmount: amount });
     const record = recordForWork(work, records[work.id]);
     if (periodLocks[workReturnLockKey(work)]?.locked || record.periodLock.locked) return { ok: false, error: "This return and compliance period are locked by Tax Team and cannot be edited." };
-    if (!canActOnWorkflow("PREPARER", work)) return { ok: false, error: `The ${rbacPersonaLabel(workPerspective)} access view cannot record the amount to pay for this taxpayer.` };
+    if (!canActOnWorkflow("CHECKER", work)) return { ok: false, error: `The ${rbacPersonaLabel(workPerspective)} access view cannot record the amount to pay for this taxpayer.` };
     if (work.paymentAmount !== null && work.paymentAmount !== undefined && amount !== work.paymentAmount) return { ok: false, error: "The amount to pay is already recorded and cannot be edited." };
     if (amount !== null && (!Number.isFinite(amount) || amount < 0)) return { ok: false, error: "Enter a valid non-negative payment amount." };
     const actor = rbacPersonaLabel(workPerspective);
@@ -856,7 +857,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (!prototypeMode) {
       // shortcut: live gate storage still treats non-return outcomes as complete; enable live N/A after its migration adds the outcome.
       if (gateStatus === "NOT_APPLICABLE") return { ok: false, error: "Not applicable gate outcomes are not yet enabled for live work." };
-      const result = await executeLiveCommand(work, "gate_decision", { role: role.toLowerCase(), decision: decision.toLowerCase(), answers: role === "CHECKER" && decision !== "RETURN" ? { ...answers, taxDueAmount: recordedTaxDueAmount } : answers, note, overrideReason, gateStatus: gateStatus.toLowerCase(), ...(role === "PREPARER" && decision !== "RETURN" ? { paymentAmount } : {}) });
+      const result = await executeLiveCommand(work, "gate_decision", { role: role.toLowerCase(), decision: decision.toLowerCase(), answers: role === "CHECKER" && decision !== "RETURN" ? { ...answers, taxDueAmount: recordedTaxDueAmount } : answers, note, overrideReason, gateStatus: gateStatus.toLowerCase(), ...(role === "CHECKER" && decision !== "RETURN" ? { paymentAmount } : {}) });
       return { ...result, nextGate: decision === "RETURN" ? "PREPARER" as WorkflowRole : role === "PREPARER" ? "CHECKER" as WorkflowRole : role === "CHECKER" ? "REVIEWER" as WorkflowRole : null };
     }
     const record = recordForWork(work, records[work.id]);
@@ -866,7 +867,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     const questions = roleQuestions[role];
     if (decision !== "RETURN" && questions.some((question) => !answers[question.id])) return { ok: false, error: "Complete every gate question before recording this decision." };
     if (role === "CHECKER" && decision !== "RETURN" && !isValidTaxDueAmount(recordedTaxDueAmount)) return { ok: false, error: "Record the tax due amount before certifying the Checker gate." };
-    if (role === "PREPARER" && decision !== "RETURN" && work.paymentApplicability === "REQUIRED" && !isValidTaxDueAmount(paymentAmount)) return { ok: false, error: "Record the amount to pay before certifying the Preparer gate." };
+    if (role === "CHECKER" && decision !== "RETURN" && work.paymentApplicability === "REQUIRED" && !isValidTaxDueAmount(paymentAmount)) return { ok: false, error: "Record the amount to pay before certifying the Checker gate." };
     if (!note.trim()) return { ok: false, error: "Add a short review note before recording this decision." };
     const elevatedOverride = canUseElevatedOverride(workPerspective) && Boolean(overrideReason.trim());
     if (elevatedOverride && !overrideReason.trim()) return { ok: false, error: "Record an override reason when Master Admin records another role's gate decision." };
