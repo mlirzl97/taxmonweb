@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { moduleViewCapabilities } from "@/lib/domain/viewer-access";
 import { isPrototypeDemoMode } from "@/lib/supabase/config";
 import { getAuthenticatedRequestContext } from "@/lib/supabase/server";
 
@@ -19,14 +20,7 @@ async function capabilityResult(operation: PromiseLike<{ data: boolean | null; e
   }
 }
 
-const capabilityAlternatives: Record<ProtectedModule, readonly string[]> = {
-  control_tower: ["ViewAssignedWork", "ViewScopedPortfolio", "ViewTaxControlHistory"],
-  work: ["ViewAssignedWork", "ViewScopedPortfolio", "ViewTaxControlHistory"],
-  clients: ["ReviewTaxProfile", "ViewScopedPortfolio", "MaintainClientRepository"],
-  team: ["ViewScopedPortfolio", "AdministerUsers", "AdministerOrganization"],
-  tax_team: ["ViewTaxControlHistory"],
-  admin: ["AdministerUsers", "AdministerOrganization"],
-};
+const capabilityAlternatives: Readonly<Record<ProtectedModule, readonly string[]>> = moduleViewCapabilities;
 
 /** Client-side persona visibility is UX only; direct route requests need a server guard. */
 export async function requireModuleAccess(module: ProtectedModule) {
