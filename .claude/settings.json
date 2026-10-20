@@ -1,4 +1,13 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(claude plugin marketplace add:*)",
+      "Bash(claude plugin install:*)",
+      "Bash(npx skills add:*)",
+      "Bash(npx impeccable install:*)",
+      "Bash(claude mcp add:*)"
+    ]
+  },
   "enabledPlugins": {
     "feature-dev@claude-plugins-official": true,
     "pr-review-toolkit@claude-plugins-official": true,
