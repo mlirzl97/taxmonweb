@@ -238,6 +238,20 @@ begin
       where unit.unit_kind = 'tower' and unit.active and lower(unit.name) = lower(scope_label)
       having count(*) = 1;
     end if;
+    -- A tower must belong to the cluster submitted with it.
+    if resolved_scope_unit_id is not null
+       and nullif(trim(coalesce(new.assignment_data ->> 'cluster', '')), '') is not null
+       and lower(trim(new.assignment_data ->> 'cluster')) not in ('unassigned', 'unresolved')
+       and not exists (
+         select 1
+         from public.organization_units tower_unit
+         join public.organization_units cluster_unit on cluster_unit.id = tower_unit.parent_id
+         where tower_unit.id = resolved_scope_unit_id
+           and cluster_unit.unit_kind = 'cluster'
+           and lower(cluster_unit.name) = lower(trim(new.assignment_data ->> 'cluster'))
+       ) then
+      raise exception using errcode = '22023', message = 'The selected Tower does not belong to the selected Cluster.';
+    end if;
     if resolved_scope_unit_id is null then
       scope_label := nullif(trim(coalesce(new.assignment_data ->> 'cluster', '')), '');
       if scope_label is not null then

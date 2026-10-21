@@ -25,6 +25,7 @@ describe("single open team assignment migration", () => {
     expect(migration).toContain("not public.can_manage_organization_unit(resolved_scope_unit_id)");
     expect(migration).toContain("not public.can_manage_organization_unit(current_scope_unit_id)");
     expect(migration).toContain("A scope change cannot be dated before the current scope.");
+    expect(migration).toContain("The selected Tower does not belong to the selected Cluster.");
   });
 
   it("keeps the trigger function private", () => {

@@ -6,7 +6,8 @@ import { requireApiCapability } from "@/lib/server/api-authorization";
 import { listBirOfficeReference } from "@/lib/server/bir-center-repository";
 
 export async function GET() {
-  const denied = await requireApiCapability(["MaintainClientRepository"]);
+  // Governed reference data: anyone who reads or corrects client profiles needs the office master.
+  const denied = await requireApiCapability(["MaintainClientRepository", "CorrectTaxProfile", "ReviewTaxProfile", "ViewScopedPortfolio"]);
   if (denied) return denied;
 
   try {
