@@ -7,6 +7,7 @@ const migration = readFileSync(resolve(process.cwd(), "supabase/migrations/20261
 describe("validate latest resolved Tax Profile migration", () => {
   it("refuses to activate a version that a later save replaced", () => {
     expect(migration).toContain("newer.version_number > candidate.version_number");
+    expect(migration).toMatch(/newer\.version_number > candidate\.version_number[\s\S]{0,200}and newer\.effective_from <= current_date/);
     expect(migration).toContain("A newer Tax Profile version exists; reload and validate the latest version.");
   });
 

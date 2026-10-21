@@ -233,6 +233,8 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
     } catch (error) {
       setSavedMessage(error instanceof Error ? error.message : "The profile change could not be saved.");
       setIsSaving(false);
+      // A later step may have failed after the save committed; reload what is stored.
+      setProfileReload((current) => current + 1);
       return false;
     }
   }

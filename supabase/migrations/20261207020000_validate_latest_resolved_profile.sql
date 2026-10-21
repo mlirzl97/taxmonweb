@@ -62,6 +62,9 @@ begin
     select 1 from public.tax_profile_versions newer
     where newer.registration_unit_id = candidate.registration_unit_id
       and newer.version_number > candidate.version_number
+      -- A newer version that is not yet in effect does not replace this one
+      -- (the same rule get_latest_tax_profile_version uses).
+      and newer.effective_from <= current_date
   ) then
     raise exception using errcode = '40001', message = 'A newer Tax Profile version exists; reload and validate the latest version.';
   end if;
