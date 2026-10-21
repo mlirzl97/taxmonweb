@@ -4,6 +4,16 @@
 -- A validator could activate a version another person had already replaced,
 -- and a profile whose assignee labels matched no (or more than one) user could
 -- become active with no accountable owner for generated work.
+--
+-- A superseded version keeps the validation that once made it active, so a
+-- second validation no longer trips the validation-pair check. Superseded
+-- versions only ever come from active ones.
+
+alter table public.tax_profile_versions
+  drop constraint if exists tax_profile_validation_pair_check;
+alter table public.tax_profile_versions
+  add constraint tax_profile_validation_pair_check
+  check ((state in ('active', 'superseded')) = (validated_at is not null and validated_by is not null));
 
 create or replace function public.validate_tax_profile_version(
   p_tax_profile_version_id uuid,
@@ -58,7 +68,7 @@ begin
   end if;
 
   -- Every accountable role needs one current, uniquely resolved active person
-  -- whose engagement Team role may hold it,
+  -- whose engagement Team role may hold it, assigned from today or earlier,
   -- and the three people must differ; a label alone is not an owner.
   foreach required_key in array array['preparer', 'checker', 'reviewer'] loop
     select assignment.user_id into resolved_user_id
@@ -75,6 +85,7 @@ begin
         else array['leader', 'reviewer'] end)
     where assignment.registration_unit_id = candidate.registration_unit_id
       and assignment.assignment_role = required_key
+      and assignment.effective_from <= current_date
       and assignment.effective_to is null
     order by assignment.effective_from desc, assignment.assigned_at desc
     limit 1;

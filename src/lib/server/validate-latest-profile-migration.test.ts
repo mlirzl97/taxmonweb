@@ -14,9 +14,14 @@ describe("validate latest resolved Tax Profile migration", () => {
     expect(migration).toContain("join public.app_users app_user on app_user.id = assignment.user_id and app_user.is_active");
     expect(migration).toContain("(no uniquely resolved active person)");
     expect(migration).toContain("and member.effective_from <= current_date");
+    expect(migration).toContain("and assignment.effective_from <= current_date");
     expect(migration).toContain("distinct Preparer, Checker, and Reviewer");
     expect(migration).toContain("and member.operating_model <> 'tax_team'");
     expect(migration).toContain("when 'checker' then array['team_member', 'leader', 'reviewer']");
+  });
+
+  it("lets a superseded version keep the validation that activated it", () => {
+    expect(migration).toContain("check ((state in ('active', 'superseded')) = (validated_at is not null and validated_by is not null))");
   });
 
   it("keeps validation authority and the reason requirement", () => {
