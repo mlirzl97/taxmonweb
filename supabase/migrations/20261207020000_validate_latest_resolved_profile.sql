@@ -39,6 +39,10 @@ begin
   if candidate.id is null or not public.can_view_registration_unit(candidate.registration_unit_id) then
     raise exception using errcode = '42501', message = 'The Tax Profile is outside the caller''s authority.';
   end if;
+  -- Serialize with saves (the profile trigger takes the same lock), then
+  -- re-read the candidate so the checks below see committed saves.
+  perform 1 from public.registration_units unit where unit.id = candidate.registration_unit_id for update;
+  select * into candidate from public.tax_profile_versions where id = p_tax_profile_version_id;
   if candidate.state not in ('ready_for_validation', 'draft') then
     raise exception using errcode = '22023', message = 'Only a profile ready for validation can be activated.';
   end if;
@@ -57,7 +61,9 @@ begin
     'filingChannel', 'fiscalYearEnd', 'clientWeight', 'enateSetup', 'paymentRoute',
     'cluster', 'tower', 'preparer', 'checker', 'reviewer'
   ] loop
-    if nullif(trim(coalesce(candidate.profile_data ->> required_key, candidate.assignment_data ->> required_key, '')), '') is null then
+    -- Placeholder values are the absence of a fact, not a fact.
+    if lower(coalesce(nullif(trim(coalesce(candidate.profile_data ->> required_key, candidate.assignment_data ->> required_key, '')), ''), 'unassigned'))
+       in ('unassigned', 'unresolved', 'needs review', 'not configured') then
       missing_keys := array_append(missing_keys, required_key);
     end if;
   end loop;

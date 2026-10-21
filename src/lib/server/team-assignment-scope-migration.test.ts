@@ -43,6 +43,10 @@ describe("single open team assignment migration", () => {
     expect(migration).toContain("else array['leader', 'reviewer'] end)");
   });
 
+  it("locks the Registration Unit on every profile save", () => {
+    expect(migration).toContain("perform 1 from public.registration_units unit where unit.id = new.registration_unit_id for update;");
+  });
+
   it("refuses an unknown tower instead of widening scope to its cluster", () => {
     expect(migration).toContain("The selected Tower is not a single active tower.");
     expect(migration).toContain("The selected Cluster is not a single active cluster.");

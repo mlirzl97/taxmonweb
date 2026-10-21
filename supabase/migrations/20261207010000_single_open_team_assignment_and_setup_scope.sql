@@ -94,6 +94,11 @@ begin
      and new.assignment_data is not distinct from old.assignment_data then
     return new;
   end if;
+  -- Saves and validation for one Registration Unit take the same row lock,
+  -- so a validation cannot activate a version that a concurrent save replaces.
+  if tg_op = 'INSERT' then
+    perform 1 from public.registration_units unit where unit.id = new.registration_unit_id for update;
+  end if;
 
   office_source_label := nullif(trim(coalesce(new.profile_data ->> 'birOfficeCode', new.profile_data ->> 'rdoOrLts', '')), '');
   select office.id into resolved_office_id

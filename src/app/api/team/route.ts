@@ -9,7 +9,7 @@ import { asRecord, isNonEmptyString } from "@/lib/server/request-input";
 import { isPrototypeDemoMode } from "@/lib/supabase/config";
 
 export async function GET() {
-  const denied = await requireApiCapability(["ViewScopedPortfolio", "AdministerUsers", "AdministerOrganization"]);
+  const denied = await requireApiCapability(["ViewScopedPortfolio", "CorrectTaxProfile", "MaintainClientRepository", "AdministerUsers", "AdministerOrganization"]);
   if (denied) return denied;
 
   try {

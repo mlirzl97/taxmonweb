@@ -20,6 +20,14 @@ describe("validate latest resolved Tax Profile migration", () => {
     expect(migration).toContain("when 'checker' then array['team_member', 'leader', 'reviewer']");
   });
 
+  it("serializes validation with saves for the same Registration Unit", () => {
+    expect(migration).toContain("perform 1 from public.registration_units unit where unit.id = candidate.registration_unit_id for update;");
+  });
+
+  it("treats placeholder values as missing facts", () => {
+    expect(migration).toContain("in ('unassigned', 'unresolved', 'needs review', 'not configured') then");
+  });
+
   it("lets a superseded version keep the validation that activated it", () => {
     expect(migration).toContain("check ((state in ('active', 'superseded')) = (validated_at is not null and validated_by is not null))");
   });
