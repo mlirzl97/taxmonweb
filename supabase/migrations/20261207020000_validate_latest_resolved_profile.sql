@@ -30,6 +30,7 @@ declare
   activated_profile public.tax_profile_versions;
   resolved_user_id uuid;
   resolved_user_ids uuid[] := '{}';
+  go_live_valid boolean;
 begin
   if auth.uid() is null or not public.has_active_capability('ValidateTaxProfile') then
     raise exception using errcode = '42501', message = 'Tax Profile validation is not authorized.';
@@ -68,7 +69,7 @@ begin
   foreach required_key in array array[
     'registeredTaxpayerName', 'tinDisplay', 'registrationUnitIdentity', 'sourceReference',
     'filingChannel', 'fiscalYearEnd', 'clientWeight', 'enateSetup', 'paymentRoute',
-    'firstPeriodToFile', 'cluster', 'tower', 'preparer', 'checker', 'reviewer'
+    'goLiveDate', 'firstPeriodToFile', 'cluster', 'tower', 'preparer', 'checker', 'reviewer'
   ] loop
     -- Placeholder values are the absence of a fact, not a fact.
     if lower(coalesce(nullif(trim(coalesce(candidate.profile_data ->> required_key, candidate.assignment_data ->> required_key, '')), ''), 'unassigned'))
@@ -81,6 +82,24 @@ begin
   if nullif(trim(coalesce(candidate.profile_data ->> 'firstPeriodToFile', '')), '') is not null
      and candidate.profile_data ->> 'firstPeriodToFile' !~ '^\d{4}-(0[1-9]|1[0-2])$' then
     missing_keys := array_append(missing_keys, 'firstPeriodToFile (a calendar month, YYYY-MM)');
+  end if;
+  -- The go-live date must be a real date, and the first period to file must
+  -- not start before the go-live month.
+  if nullif(trim(coalesce(candidate.profile_data ->> 'goLiveDate', '')), '') is not null then
+    go_live_valid := candidate.profile_data ->> 'goLiveDate' ~ '^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$';
+    if go_live_valid then
+      begin
+        perform (candidate.profile_data ->> 'goLiveDate')::date;
+      exception when others then
+        go_live_valid := false;
+      end;
+    end if;
+    if not go_live_valid then
+      missing_keys := array_append(missing_keys, 'goLiveDate (a calendar date, YYYY-MM-DD)');
+    elsif candidate.profile_data ->> 'firstPeriodToFile' ~ '^\d{4}-(0[1-9]|1[0-2])$'
+       and candidate.profile_data ->> 'firstPeriodToFile' < left(candidate.profile_data ->> 'goLiveDate', 7) then
+      missing_keys := array_append(missing_keys, 'firstPeriodToFile on or after the go-live month');
+    end if;
   end if;
 
   if jsonb_typeof(candidate.profile_data -> 'assignmentActors') = 'array'

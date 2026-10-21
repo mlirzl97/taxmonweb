@@ -21,3 +21,8 @@ export function towerForScopeFilter(filter: OrganizationScopeFilter): FixtureTow
 export function clusterForTower(tower: FixtureTower): FixtureCluster {
   return fixtureOrganizationScopes.find((scope) => scope.tower === tower)?.cluster ?? "Cluster A";
 }
+
+/** True when an organization unit's effective window includes the given ISO date. */
+export function isOrganizationUnitInEffect(unit: { effective_from?: string | null; effective_to?: string | null }, onDate: string): boolean {
+  return (!unit.effective_from || unit.effective_from <= onDate) && (!unit.effective_to || unit.effective_to >= onDate);
+}

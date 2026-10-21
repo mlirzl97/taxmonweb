@@ -8,7 +8,7 @@ import { clientDeadlineModes, clientDeadlinePolicyErrors, type ClientDeadlineMod
 import { clientOnboardingContractTypes, clientOnboardingDocumentStatusOptions, clientOnboardingDocumentTypes, clientOnboardingMainContractTypes, formatTin, generatedEntityReference, getClientOnboardingReadiness, normalizeTinDigits, type ClientOnboardingContract, type ClientOnboardingDocument, type ClientOnboardingIdentity } from "@/lib/domain/client-onboarding";
 import { prototypeClientSetupUpdatedEvent, submittedSetupToFixtureClient } from "@/lib/domain/submitted-client-projection";
 import { applySavedCalibrationToClient, getClientDisplayWeight, getClientDisplayWeightLabel, hasCredibleTaxProfileValidation, prototypeClientProfileUpdatedEvent } from "@/lib/domain/client-profile-persistence";
-import { fixtureScopeFilterOptions } from "@/lib/domain/organization-catalog";
+import { fixtureScopeFilterOptions, isOrganizationUnitInEffect } from "@/lib/domain/organization-catalog";
 import type { BirOfficeOption } from "@/lib/domain/bir-office-reference";
 import { filingChannels } from "@/lib/domain/tax-foundation-catalog";
 import { isPermanentFileLocation, sourceSystemForFileLocation } from "@/lib/domain/manual-client-setup";
@@ -312,12 +312,13 @@ function ClientSetupDrawer({ initialDraft, onClose, onSaved, prototypeMode, rdoO
     fetch("/api/organization/units")
       .then(async (response) => {
         if (!response.ok) throw new Error("Unable to load operating scopes.");
-        return response.json() as Promise<{ data?: Array<{ id: string; name: string; unit_kind: string }> }>;
+        return response.json() as Promise<{ data?: Array<{ id: string; name: string; unit_kind: string; effective_from?: string | null; effective_to?: string | null }> }>;
       })
       .then((result) => {
         if (cancelled) return;
         // A client is owned by a Cluster or a Tower; other unit kinds cannot be resolved as client scope.
-        const units = (result.data ?? []).filter((unit) => unit.unit_kind === "cluster" || unit.unit_kind === "tower");
+        const today = new Date().toISOString().slice(0, 10);
+        const units = (result.data ?? []).filter((unit) => (unit.unit_kind === "cluster" || unit.unit_kind === "tower") && isOrganizationUnitInEffect(unit, today));
         if (units.length === 0) throw new Error("No active Cluster or Tower is available to receive this client.");
         setScopeOptions(units);
         // Choose for the person only when there is nothing to choose.

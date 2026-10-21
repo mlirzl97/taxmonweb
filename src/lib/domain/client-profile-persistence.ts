@@ -264,7 +264,9 @@ export function profileActivationGaps(profile: FixtureTaxProfile, assignment: Fi
   if (!profile.taxYearBasis) gaps.push("tax year basis");
   // Drafts may park without it, but an active profile needs the first period
   // the engagement covers so earlier periods never reach the calendar.
+  if (!profile.goLiveDate || !/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(profile.goLiveDate)) gaps.push("go-live date");
   if (!profile.firstPeriodToFile || !/^\d{4}-(0[1-9]|1[0-2])$/.test(profile.firstPeriodToFile)) gaps.push("first period to file");
+  else if (profile.goLiveDate && profile.firstPeriodToFile < profile.goLiveDate.slice(0, 7)) gaps.push("first period to file on or after the go-live month");
   if (profile.taxYearBasis === "Fiscal year" && (!profile.fiscalYearEnd?.trim() || /requires|not configured|needs/i.test(profile.fiscalYearEnd))) gaps.push("fiscal year-end");
   if (!assignment.cluster.trim()) gaps.push("Cluster");
   if (!assignment.tower.trim()) gaps.push("Tower");

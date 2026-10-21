@@ -53,8 +53,9 @@ begin
   if not exists (
     select 1 from public.organization_units unit
     where unit.id = p_organization_unit_id and unit.active and unit.unit_kind in ('cluster', 'tower')
+      and unit.effective_from <= current_date and (unit.effective_to is null or unit.effective_to >= current_date)
   ) then
-    raise exception using errcode = '22023', message = 'A client must be placed in an active Cluster or Tower.';
+    raise exception using errcode = '22023', message = 'A client must be placed in a Cluster or Tower that is active and in effect today.';
   end if;
 
   if jsonb_typeof(coalesce(p_source_pack, '[]'::jsonb)) <> 'array' then

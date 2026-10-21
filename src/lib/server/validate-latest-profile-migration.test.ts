@@ -41,7 +41,9 @@ describe("validate latest resolved Tax Profile migration", () => {
   });
 
   it("requires the first period to file before activation", () => {
-    expect(migration).toContain("'firstPeriodToFile', 'cluster', 'tower', 'preparer', 'checker', 'reviewer'");
+    expect(migration).toContain("'goLiveDate', 'firstPeriodToFile', 'cluster', 'tower', 'preparer', 'checker', 'reviewer'");
+    expect(migration).toContain("'firstPeriodToFile on or after the go-live month'");
+    expect(migration).toContain("'goLiveDate (a calendar date, YYYY-MM-DD)'");
     expect(migration).toContain("!~ '^\\d{4}-(0[1-9]|1[0-2])$' then");
   });
 

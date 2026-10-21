@@ -59,6 +59,10 @@ describe("single open team assignment migration", () => {
     expect(migration).toContain("new.assignment_data := jsonb_set(new.assignment_data, array[role_key], to_jsonb(canonical_name));");
   });
 
+  it("resolves a Tower or Cluster only when it is in effect on the change date", () => {
+    expect(migration.match(/and unit\.effective_from <= new\.effective_from and \(unit\.effective_to is null or unit\.effective_to >= new\.effective_from\)/g)?.length).toBe(2);
+  });
+
   it("refuses an unknown tower instead of widening scope to its cluster", () => {
     expect(migration).toContain("The selected Tower is not a single active tower.");
     expect(migration).toContain("The selected Cluster is not a single active cluster.");

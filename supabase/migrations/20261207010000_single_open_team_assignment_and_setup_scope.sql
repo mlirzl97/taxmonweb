@@ -343,6 +343,7 @@ begin
       select min(unit.id::text)::uuid into resolved_scope_unit_id
       from public.organization_units unit
       where unit.unit_kind = 'tower' and unit.active and lower(unit.name) = lower(scope_label)
+        and unit.effective_from <= new.effective_from and (unit.effective_to is null or unit.effective_to >= new.effective_from)
       having count(*) = 1;
     end if;
     -- A named tower that does not resolve is refused, never widened to its cluster.
@@ -374,6 +375,7 @@ begin
         select min(unit.id::text)::uuid into resolved_scope_unit_id
         from public.organization_units unit
         where unit.unit_kind = 'cluster' and unit.active and lower(unit.name) = lower(scope_label)
+        and unit.effective_from <= new.effective_from and (unit.effective_to is null or unit.effective_to >= new.effective_from)
         having count(*) = 1;
         if resolved_scope_unit_id is null then
           raise exception using errcode = '22023', message = 'The selected Cluster is not a single active cluster.';

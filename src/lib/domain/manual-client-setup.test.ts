@@ -320,6 +320,9 @@ describe("manual client setup contract", () => {
     expect(profileActivationGaps({ ...client.entities[0].profile, firstPeriodToFile: undefined }, client.assignment, unit)).toContain("first period to file");
     expect(profileActivationGaps({ ...client.entities[0].profile, firstPeriodToFile: "2026-03" }, client.assignment, unit)).not.toContain("first period to file");
     expect(profileActivationGaps({ ...client.entities[0].profile, firstPeriodToFile: "2026-13" }, client.assignment, unit)).toContain("first period to file");
+    expect(profileActivationGaps({ ...client.entities[0].profile, goLiveDate: undefined, firstPeriodToFile: "2026-03" }, client.assignment, unit)).toContain("go-live date");
+    expect(profileActivationGaps({ ...client.entities[0].profile, goLiveDate: "2026-03-01", firstPeriodToFile: "2026-02" }, client.assignment, unit)).toContain("first period to file on or after the go-live month");
+    expect(profileActivationGaps({ ...client.entities[0].profile, goLiveDate: "2026-03-01", firstPeriodToFile: "2026-03" }, client.assignment, unit)).not.toContain("go-live date");
   });
 
   it("treats two staff who share a name as distinct owners when their ids differ", () => {

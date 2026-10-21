@@ -22,6 +22,7 @@ import {
 import { fixtureClock } from "@/lib/fixtures";
 import { formatTin, normalizeTinDigits } from "@/lib/domain/client-onboarding";
 import { isPermanentFileLocation } from "@/lib/domain/manual-client-setup";
+import { isOrganizationUnitInEffect } from "@/lib/domain/organization-catalog";
 import type { BirOfficeOption } from "@/lib/domain/bir-office-reference";
 import { applyPersistedTaxProfileSnapshot, buildTaxProfilePersistencePayload, calibrationProfileStorageKey, getClientDisplayWeight, getClientDisplayWeightLabel, hasCredibleTaxProfileValidation, profileActivationGaps, prototypeClientProfileUpdatedEvent, reconcileClientAttention, type PersistedTaxProfileSnapshot } from "@/lib/domain/client-profile-persistence";
 import { hasCalibrationEditAccess } from "@/lib/domain/access";
@@ -554,8 +555,10 @@ function useLiveAssignmentOptions(live: boolean): LiveAssignmentOptions | null {
     let cancelled = false;
     Promise.all([
       fetch("/api/team", { cache: "no-store" }).then(async (response) => { if (!response.ok) throw new Error("Unable to load the live team."); return response.json() as Promise<{ data?: Array<{ id: string; name: string; active: boolean; roleKey: string | null; operatingModel: string; effectiveFrom: string | null; effectiveTo: string | null; careerServiceLevel: string | null; organizationUnitName: string | null }> }>; }),
-      fetch("/api/organization/units", { cache: "no-store" }).then(async (response) => { if (!response.ok) throw new Error("Unable to load clusters and towers."); return response.json() as Promise<{ data?: Array<{ id: string; name: string; unit_kind: string; parent_id: string | null }> }>; }),
-    ]).then(([team, units]) => {
+      fetch("/api/organization/units", { cache: "no-store" }).then(async (response) => { if (!response.ok) throw new Error("Unable to load clusters and towers."); return response.json() as Promise<{ data?: Array<{ id: string; name: string; unit_kind: string; parent_id: string | null; effective_from?: string | null; effective_to?: string | null }> }>; }),
+    ]).then(([team, allUnits]) => {
+      // Only units in effect today can receive a client.
+      const units = { data: (allUnits.data ?? []).filter((unit) => isOrganizationUnitInEffect(unit, new Date().toISOString().slice(0, 10))) };
       if (cancelled) return;
       const today = new Date().toISOString().slice(0, 10);
       // Only people whose Team profile is in effect today can own work.

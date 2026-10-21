@@ -21,6 +21,7 @@ describe("client onboarding dates migration", () => {
   });
   it("accepts only an active Cluster or Tower as the new client's scope", () => {
     expect(migration).toContain("unit.unit_kind in ('cluster', 'tower')");
-    expect(migration).toContain("A client must be placed in an active Cluster or Tower.");
+    expect(migration).toContain("A client must be placed in a Cluster or Tower that is active and in effect today.");
+    expect(migration).toContain("and unit.effective_from <= current_date and (unit.effective_to is null or unit.effective_to >= current_date)");
   });
 });
