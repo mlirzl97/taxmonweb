@@ -128,8 +128,10 @@ begin
         else array['leader', 'reviewer'] end)
     where assignment.registration_unit_id = candidate.registration_unit_id
       and assignment.assignment_role = required_key
+      -- The assignment in force today: it may already be bounded by a
+      -- scheduled future change.
       and assignment.effective_from <= current_date
-      and assignment.effective_to is null
+      and (assignment.effective_to is null or assignment.effective_to >= current_date)
     order by assignment.effective_from desc, assignment.assigned_at desc
     limit 1;
     if resolved_user_id is null then

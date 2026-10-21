@@ -58,6 +58,8 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
   const [drawer, setDrawer] = useState<DrawerMode>(null);
   const [savedVersionId, setSavedVersionId] = useState<string | null>(null);
   const [profileReload, setProfileReload] = useState(0);
+  // A reload after a command keeps that command's own success or error message.
+  const keepMessageOnReloadRef = useRef(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [profile, setProfile] = useState<FixtureTaxProfile>(() => cloneProfile(client.entities[0].profile));
   const [assignment, setAssignment] = useState(client.assignment);
@@ -108,7 +110,8 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
         const restored = applyPersistedTaxProfileSnapshot(initialProfileRef.current, initialAssignmentRef.current, result.data);
         setProfile(restored.profile);
         setAssignment(restored.assignment);
-        setSavedMessage("Saved Tax Profile version loaded.");
+        if (!keepMessageOnReloadRef.current) setSavedMessage("Saved Tax Profile version loaded.");
+        keepMessageOnReloadRef.current = false;
       } catch {
         // The fixture read model remains usable when the optional persistence
         // boundary is unavailable; a failed read must not erase local context.
@@ -134,6 +137,7 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
       const result = await response.json() as { error?: string };
       if (!response.ok) throw new Error(result.error ?? "The Tax Profile could not be validated.");
       setSavedMessage("Tax Profile validated.");
+      keepMessageOnReloadRef.current = true;
       setProfileReload((current) => current + 1);
       return true;
     } catch (error) {
@@ -226,6 +230,7 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
       // A save creates a new version that needs validation; never carry the
       // previous version's validation forward. Then reload the saved snapshot.
       setProfile(result.state === "active" ? next : { ...next, profileState: "Ready for validation", lastValidated: undefined, validator: undefined });
+      keepMessageOnReloadRef.current = true;
       setProfileReload((current) => current + 1);
       setSavedMessage(message);
       setIsSaving(false);
@@ -234,6 +239,7 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
       setSavedMessage(error instanceof Error ? error.message : "The profile change could not be saved.");
       setIsSaving(false);
       // A later step may have failed after the save committed; reload what is stored.
+      keepMessageOnReloadRef.current = true;
       setProfileReload((current) => current + 1);
       return false;
     }
