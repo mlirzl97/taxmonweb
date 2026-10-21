@@ -28,8 +28,10 @@ describe("single open team assignment migration", () => {
     expect(migration).toContain("The selected Tower does not belong to the selected Cluster.");
   });
 
-  it("links a label to a person only when exactly one active user carries it", () => {
-    expect(migration).toMatch(/lower\(app_user\.display_name\) = lower\(assignee_label\)\s+and app_user\.is_active\s+having count\(\*\) = 1;/);
+  it("prefers the submitted Team user id and only links a unique, in-effect name", () => {
+    expect(migration).toContain("new.assignment_data ->> (team_role || 'UserId')");
+    expect(migration).toContain("is not an active Team member on this date.");
+    expect(migration).toMatch(/member\.effective_from <= new\.effective_from[\s\S]*having count\(\*\) = 1;/);
   });
 
   it("refuses an unknown tower instead of widening scope to its cluster", () => {

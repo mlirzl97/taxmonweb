@@ -63,6 +63,10 @@ begin
     select assignment.user_id into resolved_user_id
     from public.registration_unit_team_assignments assignment
     join public.app_users app_user on app_user.id = assignment.user_id and app_user.is_active
+    join public.team_member_profiles member on member.user_id = assignment.user_id
+      and member.active
+      and member.effective_from <= current_date
+      and (member.effective_to is null or member.effective_to >= current_date)
     where assignment.registration_unit_id = candidate.registration_unit_id
       and assignment.assignment_role = required_key
       and assignment.effective_to is null

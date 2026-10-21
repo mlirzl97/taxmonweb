@@ -13,6 +13,7 @@ describe("validate latest resolved Tax Profile migration", () => {
   it("requires one current, active, distinct person for each accountable role", () => {
     expect(migration).toContain("join public.app_users app_user on app_user.id = assignment.user_id and app_user.is_active");
     expect(migration).toContain("(no uniquely resolved active person)");
+    expect(migration).toContain("and member.effective_from <= current_date");
     expect(migration).toContain("distinct Preparer, Checker, and Reviewer");
   });
 

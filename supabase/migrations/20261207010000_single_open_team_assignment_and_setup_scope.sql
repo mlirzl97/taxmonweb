@@ -80,6 +80,7 @@ declare
   resolved_user_id uuid;
   current_assignment public.registration_unit_team_assignments;
   team_role text;
+  submitted_user_id uuid;
   scope_label text;
   resolved_scope_unit_id uuid;
   current_scope_unit_id uuid;
@@ -212,14 +213,37 @@ begin
       if lower(coalesce(assignee_label, '')) in ('unassigned', 'unresolved') then
         assignee_label := null;
       end if;
-      -- A label links to a person only when exactly one active user carries
-      -- it; an ambiguous name stays unresolved instead of picking someone.
+      -- The submitted Team user id wins. Without one, a label links to a
+      -- person only when exactly one eligible user carries it, so an ambiguous
+      -- name stays unresolved instead of picking someone. Eligible means an
+      -- active account whose Team profile is in effect on the change date.
       resolved_user_id := null;
-      if assignee_label is not null then
+      submitted_user_id := case
+        when coalesce(new.assignment_data ->> (team_role || 'UserId'), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          then (new.assignment_data ->> (team_role || 'UserId'))::uuid
+        else null end;
+      if submitted_user_id is not null then
+        select app_user.id into resolved_user_id
+        from public.app_users app_user
+        join public.team_member_profiles member on member.user_id = app_user.id
+        where app_user.id = submitted_user_id
+          and app_user.is_active
+          and member.active
+          and member.effective_from <= new.effective_from
+          and (member.effective_to is null or member.effective_to >= new.effective_from);
+        if resolved_user_id is null then
+          raise exception using errcode = '22023', message = 'The selected ' || team_role || ' is not an active Team member on this date.';
+        end if;
+        assignee_label := coalesce(assignee_label, (select display_name from public.app_users where id = resolved_user_id));
+      elsif assignee_label is not null then
         select min(app_user.id::text)::uuid into resolved_user_id
         from public.app_users app_user
+        join public.team_member_profiles member on member.user_id = app_user.id
         where lower(app_user.display_name) = lower(assignee_label)
           and app_user.is_active
+          and member.active
+          and member.effective_from <= new.effective_from
+          and (member.effective_to is null or member.effective_to >= new.effective_from)
         having count(*) = 1;
       end if;
 
