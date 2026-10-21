@@ -68,6 +68,14 @@ export type ManualClientSetupResult =
  * The permanent file location is either a SharePoint link or a shared-drive
  * path; only a SharePoint web address is recorded as SharePoint provenance.
  */
+export function isPermanentFileLocation(location: string, sourceSystem?: ManualClientSetupInput["sourceSystem"]): boolean {
+  const value = location.trim();
+  if (sourceSystem === "synthetic_fixture" && /^synthetic:\/\/\S+$/i.test(value)) return true;
+  return /^https:\/\/[^/\s]+\/\S/i.test(value) // SharePoint or other web link
+    || /^\\\\[^\\/\s]+[\\/][^\\/]/.test(value) // UNC share: \\server\share
+    || /^[A-Za-z]:[\\/]\S/.test(value); // mapped drive: S:\ or S:/
+}
+
 export function sourceSystemForFileLocation(location: string): "sharepoint" | "manual_reference" {
   return /^https:\/\/[^/\s]*sharepoint\.[^/\s]+\//i.test(location.trim()) ? "sharepoint" : "manual_reference";
 }
@@ -195,8 +203,14 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
   if (goLiveDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(goLiveDate)) errors.push("profileData.goLiveDate must use YYYY-MM-DD.");
   const firstPeriodToFile = profileText("firstPeriodToFile", 7);
   if (firstPeriodToFile !== undefined && !/^\d{4}-\d{2}$/.test(firstPeriodToFile)) errors.push("profileData.firstPeriodToFile must use YYYY-MM.");
+  if (goLiveDate && firstPeriodToFile && /^\d{4}-\d{2}$/.test(firstPeriodToFile) && firstPeriodToFile < goLiveDate.slice(0, 7)) {
+    errors.push("profileData.firstPeriodToFile cannot be before the go-live month.");
+  }
   // A SharePoint link or a shared-drive path; it is a location reference, not a fetched URL.
   const permanentFileLink = profileText("permanentFileLink", 240);
+  if (permanentFileLink && !isPermanentFileLocation(permanentFileLink, readText(source, "sourceSystem") as ManualClientSetupInput["sourceSystem"] | undefined)) {
+    errors.push("profileData.permanentFileLink must be a SharePoint link (https://…), a network share (\\\\server\\share) or a mapped drive path (S:\\…).");
+  }
   const enateSetup = profileText("enateSetup", 32);
   if (enateSetup !== undefined && !["Yes", "No", "Unknown"].includes(enateSetup)) errors.push("profileData.enateSetup must be Yes, No, or Unknown.");
   const paymentRoute = profileText("paymentRoute", 32);

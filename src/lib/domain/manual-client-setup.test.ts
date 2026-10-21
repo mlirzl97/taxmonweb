@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixtureClients } from "@/lib/fixtures";
 import { applyPersistedTaxProfileSnapshot, buildTaxProfilePersistencePayload, profileActivationGaps } from "./client-profile-persistence";
-import { sourceSystemForFileLocation, isManualClientSetupSourceAllowed, parseManualClientSetupInput } from "./manual-client-setup";
+import { isPermanentFileLocation, sourceSystemForFileLocation, isManualClientSetupSourceAllowed, parseManualClientSetupInput } from "./manual-client-setup";
 
 describe("manual client setup contract", () => {
   it("allows fixture source only in prototype mode", () => {
@@ -55,6 +55,30 @@ describe("manual client setup contract", () => {
       if (result.ok) expect(result.value.profileData?.permanentFileLink).toBe(location);
     }
     expect(parseManualClientSetupInput({ ...base, profileData: { permanentFileLink: "x".repeat(241) } }).ok).toBe(false);
+    for (const notALocation of ["TBD", "notes pending", "http://insecure.invalid/AT", "fileserver/AT"]) {
+      expect(parseManualClientSetupInput({ ...base, profileData: { permanentFileLink: notALocation } }).ok).toBe(false);
+    }
+    expect(parseManualClientSetupInput({ ...base, profileData: { permanentFileLink: "synthetic://permanent-file/CRM-2026-001" } }).ok).toBe(true);
+    expect(isPermanentFileLocation("synthetic://permanent-file/CRM-2026-001", "manual_reference")).toBe(false);
+  });
+
+  it("refuses a first period to file before the go-live month", () => {
+    const base = {
+      clientReferenceCode: "FIXTURE-CLIENT-05",
+      clientDisplayName: "Brightwater Trading (synthetic)",
+      entityReferenceCode: "FIXTURE-ENTITY-05",
+      entityDisplayName: "Brightwater Trading (synthetic)",
+      unitReferenceCode: "FIXTURE-RU-05",
+      unitDisplayName: "Head Office",
+      unitKind: "head_office",
+      organizationUnitId: "00000000-0000-4000-8000-000000000001",
+      sourceReference: "synthetic-2303-05",
+      sourceSystem: "synthetic_fixture",
+    };
+    const early = parseManualClientSetupInput({ ...base, profileData: { goLiveDate: "2026-03-01", firstPeriodToFile: "2026-02" } });
+    expect(early.ok).toBe(false);
+    if (!early.ok) expect(early.errors).toContain("profileData.firstPeriodToFile cannot be before the go-live month.");
+    expect(parseManualClientSetupInput({ ...base, profileData: { goLiveDate: "2026-03-01", firstPeriodToFile: "2026-03" } }).ok).toBe(true);
   });
 
   it("generates the internal entity reference and normalizes a source-formatted TIN", () => {

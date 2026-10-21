@@ -98,7 +98,8 @@ function currentAssignment(client: PortfolioClient): Pick<FixtureClient["assignm
   const today = new Date().toISOString().slice(0, 10);
   const clientAssignments = client.client_team_assignments.map((assignment) => ({ ...assignment, source: "client" as const }));
   const unitAssignments = client.taxpayer_entities.flatMap((entity) => entity.registration_units.flatMap((unit) => unit.registration_unit_team_assignments.map((assignment) => ({ ...assignment, source: "registration_unit" as const }))));
-  const current = [...clientAssignments, ...unitAssignments].filter((assignment) => assignment.effective_from <= today && (!assignment.effective_to || assignment.effective_to >= today));
+  // Registration-unit owners are authoritative; client-level rows are a legacy fallback.
+  const current = [...unitAssignments, ...clientAssignments].filter((assignment) => assignment.effective_from <= today && (!assignment.effective_to || assignment.effective_to >= today));
   const namesFor = (role: PortfolioClient["client_team_assignments"][number]["assignment_role"]) => current
     .filter((assignment) => assignment.assignment_role === role)
     .map((assignment) => Array.isArray(assignment.app_users) ? assignment.app_users[0]?.display_name ?? assignment.assignee_label : assignment.app_users?.display_name ?? assignment.assignee_label)

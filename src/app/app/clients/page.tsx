@@ -11,7 +11,7 @@ import { applySavedCalibrationToClient, getClientDisplayWeight, getClientDisplay
 import { fixtureScopeFilterOptions } from "@/lib/domain/organization-catalog";
 import type { BirOfficeOption } from "@/lib/domain/bir-office-reference";
 import { filingChannels } from "@/lib/domain/tax-foundation-catalog";
-import { sourceSystemForFileLocation } from "@/lib/domain/manual-client-setup";
+import { isPermanentFileLocation, sourceSystemForFileLocation } from "@/lib/domain/manual-client-setup";
 import { birOfficeLabel, clientAccountingSystemOptions, clientBooksOptions, clientEfpsGroupOptions, clientFilingChannelOptions, clientInvoicingOptions, controlledOptionLabel, prototypeBirOfficeOptions } from "@/lib/domain/client-profile-options";
 import { fixtureClock } from "@/lib/fixtures";
 import { useWorkflow } from "@/lib/workflow-state";
@@ -366,6 +366,11 @@ function ClientSetupDrawer({ initialDraft, onClose, onSaved, prototypeMode, rdoO
     }
     if (!permanentFileLink.trim()) {
       setError("Record the permanent file location before saving the intake draft.");
+      setStep(3);
+      return;
+    }
+    if (!isPermanentFileLocation(permanentFileLink, prototypeMode ? "synthetic_fixture" : undefined)) {
+      setError("Enter the permanent file location as a SharePoint link (https://…), a network share (\\\\server\\share) or a mapped drive path (S:\\…).");
       setStep(3);
       return;
     }
