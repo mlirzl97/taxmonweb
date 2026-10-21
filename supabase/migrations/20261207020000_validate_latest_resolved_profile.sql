@@ -198,33 +198,31 @@ language plpgsql
 security definer set search_path = public
 as $$
 declare
-  target_client_id uuid;
+  target_unit public.registration_units;
   latest_profile public.tax_profile_versions;
 begin
   if auth.uid() is null then
     raise exception using errcode = '42501', message = 'Authentication is required to read a Tax Profile.';
   end if;
 
-  select client.id into target_client_id
-  from public.clients client
-  join public.taxpayer_entities entity on entity.client_id = client.id
-  join public.registration_units registration_unit on registration_unit.taxpayer_entity_id = entity.id
-  where client.reference_code = p_client_reference_code
-    and registration_unit.active = true
-    and public.can_view_registration_unit(registration_unit.id)
+  -- The same Registration Unit save_tax_profile_version writes to: the
+  -- head office, else the earliest active unit. Reading and validating any
+  -- other unit's version from this screen would act on facts it never showed.
+  select registration_unit.* into target_unit
+  from public.registration_units registration_unit
+  join public.taxpayer_entities entity on entity.id = registration_unit.taxpayer_entity_id
+  join public.clients client on client.id = entity.client_id
+  where client.reference_code = p_client_reference_code and registration_unit.active = true
+  order by registration_unit.unit_kind = 'head_office' desc, registration_unit.created_at
   limit 1;
 
-  if target_client_id is null then
+  if target_unit.id is null or not public.can_view_registration_unit(target_unit.id) then
     return jsonb_build_object('clientFound', false, 'data', null);
   end if;
 
   select profile.* into latest_profile
   from public.tax_profile_versions profile
-  join public.registration_units registration_unit on registration_unit.id = profile.registration_unit_id
-  join public.taxpayer_entities entity on entity.id = registration_unit.taxpayer_entity_id
-  where entity.client_id = target_client_id
-    and registration_unit.active = true
-    and public.can_view_registration_unit(registration_unit.id)
+  where profile.registration_unit_id = target_unit.id
   order by (profile.effective_from <= current_date) desc, profile.version_number desc, profile.created_at desc
   limit 1;
 

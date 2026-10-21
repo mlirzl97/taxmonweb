@@ -58,6 +58,11 @@ describe("validate latest resolved Tax Profile migration", () => {
     expect(migration).toContain("check ((state in ('active', 'superseded')) = (validated_at is not null and validated_by is not null))");
   });
 
+  it("reads the latest version of the same Registration Unit that save_tax_profile_version writes", () => {
+    expect(migration).toContain("order by registration_unit.unit_kind = 'head_office' desc, registration_unit.created_at");
+    expect(migration).toContain("where profile.registration_unit_id = target_unit.id");
+  });
+
   it("keeps validation authority and the reason requirement", () => {
     expect(migration).toContain("has_active_capability('ValidateTaxProfile')");
     expect(migration).toContain("A reason is required for validation.");
