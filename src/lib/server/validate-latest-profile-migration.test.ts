@@ -40,6 +40,10 @@ describe("validate latest resolved Tax Profile migration", () => {
     expect(migration).toContain("set search_path = public, pg_temp");
   });
 
+  it("requires the first period to file before activation", () => {
+    expect(migration).toContain("'firstPeriodToFile', 'cluster', 'tower', 'preparer', 'checker', 'reviewer'");
+  });
+
   it("treats placeholder values as missing facts", () => {
     expect(migration).toContain("in ('unassigned', 'unresolved', 'needs review', 'not configured') then");
   });

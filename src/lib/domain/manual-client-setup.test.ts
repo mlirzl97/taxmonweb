@@ -313,6 +313,14 @@ describe("manual client setup contract", () => {
     expect(gaps).not.toContain("accounting system");
   });
 
+  it("requires the first period to file before activation, while drafts may park without it", () => {
+    const client = fixtureClients.find((item) => item.id === "fixture-client-06");
+    if (!client) throw new Error("Expected incomplete fixture.");
+    const unit = client.entities[0].units[0];
+    expect(profileActivationGaps({ ...client.entities[0].profile, firstPeriodToFile: undefined }, client.assignment, unit)).toContain("first period to file");
+    expect(profileActivationGaps({ ...client.entities[0].profile, firstPeriodToFile: "2026-03" }, client.assignment, unit)).not.toContain("first period to file");
+  });
+
   it("treats two staff who share a name as distinct owners when their ids differ", () => {
     const client = fixtureClients.find((item) => item.id === "fixture-client-06");
     if (!client) throw new Error("Expected incomplete fixture.");
