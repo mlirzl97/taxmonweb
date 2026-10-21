@@ -34,6 +34,7 @@ describe("single open team assignment migration", () => {
 
   it("refuses an unknown tower instead of widening scope to its cluster", () => {
     expect(migration).toContain("The selected Tower is not a single active tower.");
+    expect(migration).toContain("The selected Cluster is not a single active cluster.");
   });
 
   it("repairs piled-up open rows once by closing them, never deleting", () => {

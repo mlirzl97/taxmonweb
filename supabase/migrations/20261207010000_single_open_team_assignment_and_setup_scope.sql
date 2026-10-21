@@ -298,11 +298,17 @@ begin
     end if;
     if resolved_scope_unit_id is null then
       scope_label := nullif(trim(coalesce(new.assignment_data ->> 'cluster', '')), '');
+      if lower(coalesce(scope_label, '')) in ('unassigned', 'unresolved') then
+        scope_label := null;
+      end if;
       if scope_label is not null then
         select min(unit.id::text)::uuid into resolved_scope_unit_id
         from public.organization_units unit
         where unit.unit_kind = 'cluster' and unit.active and lower(unit.name) = lower(scope_label)
         having count(*) = 1;
+        if resolved_scope_unit_id is null then
+          raise exception using errcode = '22023', message = 'The selected Cluster is not a single active cluster.';
+        end if;
       end if;
     end if;
     -- Only a signed-in caller moves scope; a direct database write never does.

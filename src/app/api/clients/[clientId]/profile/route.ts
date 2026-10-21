@@ -45,6 +45,10 @@ export async function POST(request: Request, context: RouteContext) {
   try {
     if (action === "validate") {
       if (typeof command.versionId !== "string") return NextResponse.json({ error: "A saved profile version is required before validation." }, { status: 400 });
+      // Bind validation to this client's latest version; a stale page must reload first.
+      const latest = await getLatestTaxProfileVersion((await context.params).clientId);
+      if (!latest?.clientFound || !latest.data) return NextResponse.json({ error: "Client or saved Tax Profile not found." }, { status: 404 });
+      if (latest.data.id !== command.versionId) return NextResponse.json({ error: "A newer Tax Profile version exists; reload and validate the latest version." }, { status: 409 });
       const data = await validateTaxProfileVersion(command.versionId, reason);
       return NextResponse.json({ data, state: "active" });
     }
