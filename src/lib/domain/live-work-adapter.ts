@@ -210,6 +210,11 @@ export function adaptLiveGeneratedWork(work: LiveGeneratedWork, userNames: UserN
     deadlineType: deadline.type,
     dueDate: work.adjusted_statutory_deadline ?? work.base_statutory_deadline,
     owner,
+    assignedUsers: Object.fromEntries(([
+      ["PREPARER", work.preparer_user_id],
+      ["CHECKER", work.checker_user_id],
+      ["REVIEWER", work.reviewer_user_id],
+    ] as const).flatMap(([role, id]) => id ? [[role, { id, name: userNames.get(id) ?? "Assigned user" }]] : [])),
     scope: scopeFromUnit(tower?.name),
     ...(cluster?.name ? { cluster: cluster.name } : {}),
     paymentApplicability,
