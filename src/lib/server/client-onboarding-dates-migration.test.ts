@@ -9,7 +9,8 @@ describe("client onboarding dates migration", () => {
     expect(migration).toContain("'goLiveDate', p_profile_data ->> 'goLiveDate'");
     expect(migration).toContain("'firstPeriodToFile', p_profile_data ->> 'firstPeriodToFile'");
     expect(migration).toContain("'registrationEffective', p_profile_data ->> 'registrationEffective'");
-    expect(migration).toContain("'permanentFileLink', coalesce(nullif(p_profile_data ->> 'permanentFileLink', ''), p_source_reference)");
+    expect(migration).toContain("'permanentFileLink', nullif(p_profile_data ->> 'permanentFileLink', ''),");
+    expect(migration).not.toContain("coalesce(nullif(p_profile_data ->> 'permanentFileLink', ''), p_source_reference)");
     expect(migration).toContain("'registeredReturnCodes', coalesce(p_profile_data -> 'registeredReturnCodes', p_profile_data -> 'proposedReturnCodes', '[]'::jsonb)");
   });
 

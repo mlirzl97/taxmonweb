@@ -268,7 +268,9 @@ export function profileActivationGaps(profile: FixtureTaxProfile, assignment: Fi
   if (!assignment.preparer.trim() || assignment.preparer === "Unassigned") gaps.push("Preparer");
   if (!assignment.checker.trim() || assignment.checker === "Unassigned") gaps.push("Checker");
   if (!assignment.reviewer.trim() || assignment.reviewer === "Unassigned") gaps.push("Reviewer");
-  if (new Set([assignment.preparer, assignment.checker, assignment.reviewer]).size !== 3) gaps.push("distinct Preparer, Checker, and Reviewer");
+  // Distinct people, not distinct names: two staff may share a display name.
+  const owners = (["preparer", "checker", "reviewer"] as const).map((role) => assignment[`${role}UserId`] ?? `label:${assignment[role].trim().toLowerCase()}`);
+  if (new Set(owners).size !== 3) gaps.push("distinct Preparer, Checker, and Reviewer");
   if (profile.weight < 1 || profile.weight > 5) gaps.push("Client Weight");
   if (profile.enateSetup === "Unknown") gaps.push("eNATE setup");
   if (profile.paymentRoute === "Not configured") gaps.push("payment route");

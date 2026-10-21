@@ -313,6 +313,17 @@ describe("manual client setup contract", () => {
     expect(gaps).not.toContain("accounting system");
   });
 
+  it("treats two staff who share a name as distinct owners when their ids differ", () => {
+    const client = fixtureClients.find((item) => item.id === "fixture-client-06");
+    if (!client) throw new Error("Expected incomplete fixture.");
+    const sameName = { ...client.assignment, preparer: "Totoy Bibo", checker: "Totoy Bibo", reviewer: "Kristine Kalamansi" };
+    const unit = client.entities[0].units[0];
+    expect(profileActivationGaps(client.entities[0].profile, sameName, unit)).toContain("distinct Preparer, Checker, and Reviewer");
+    const withIds = { ...sameName, preparerUserId: "user-totoy-1", checkerUserId: "user-totoy-2", reviewerUserId: "user-kristine" };
+    expect(profileActivationGaps(client.entities[0].profile, withIds, unit)).not.toContain("distinct Preparer, Checker, and Reviewer");
+    expect(profileActivationGaps(client.entities[0].profile, { ...withIds, checkerUserId: "user-totoy-1" }, unit)).toContain("distinct Preparer, Checker, and Reviewer");
+  });
+
   it("rehydrates a saved version without replacing immutable fixture context", () => {
     const client = fixtureClients[0];
     const unit = client.entities[0].units[0];

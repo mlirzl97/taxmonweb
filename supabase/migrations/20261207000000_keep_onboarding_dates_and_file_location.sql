@@ -157,7 +157,9 @@ begin
     'registrationEffective', p_profile_data ->> 'registrationEffective',
     'goLiveDate', p_profile_data ->> 'goLiveDate',
     'firstPeriodToFile', p_profile_data ->> 'firstPeriodToFile',
-    'permanentFileLink', coalesce(nullif(p_profile_data ->> 'permanentFileLink', ''), p_source_reference),
+    -- Only a location the caller supplied (and the parser checked) is kept;
+    -- the registration source reference is never promoted to the file location.
+    'permanentFileLink', nullif(p_profile_data ->> 'permanentFileLink', ''),
     'deadlinePolicy', coalesce(p_profile_data -> 'deadlinePolicy', '{}'::jsonb),
     'sourceNotes', coalesce(p_profile_data ->> 'sourceNotes', p_source_notes)
   );
