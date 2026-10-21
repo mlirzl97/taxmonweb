@@ -72,7 +72,8 @@ begin
   foreach required_key in array array[
     'registeredTaxpayerName', 'tinDisplay', 'registrationUnitIdentity', 'sourceReference',
     'filingChannel', 'fiscalYearEnd', 'clientWeight', 'enateSetup', 'paymentRoute',
-    'goLiveDate', 'firstPeriodToFile', 'cluster', 'tower', 'preparer', 'checker', 'reviewer'
+    -- Tower is optional: onboarding may place a client directly in a Cluster.
+    'goLiveDate', 'firstPeriodToFile', 'cluster', 'preparer', 'checker', 'reviewer'
   ] loop
     -- Placeholder values are the absence of a fact, not a fact.
     if lower(coalesce(nullif(trim(coalesce(candidate.profile_data ->> required_key, candidate.assignment_data ->> required_key, '')), ''), 'unassigned'))

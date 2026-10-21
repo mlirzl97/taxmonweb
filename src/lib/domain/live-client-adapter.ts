@@ -100,19 +100,19 @@ function currentAssignment(client: PortfolioClient): Pick<FixtureClient["assignm
   const unitAssignments = client.taxpayer_entities.flatMap((entity) => entity.registration_units.flatMap((unit) => unit.registration_unit_team_assignments.map((assignment) => ({ ...assignment, source: "registration_unit" as const }))));
   // Registration-unit owners are authoritative; client-level rows are a legacy fallback.
   const current = [...unitAssignments, ...clientAssignments].filter((assignment) => assignment.effective_from <= today && (!assignment.effective_to || assignment.effective_to >= today));
-  const namesFor = (role: PortfolioClient["client_team_assignments"][number]["assignment_role"]) => current
-    .filter((assignment) => assignment.assignment_role === role)
-    .map((assignment) => Array.isArray(assignment.app_users) ? assignment.app_users[0]?.display_name ?? assignment.assignee_label : assignment.app_users?.display_name ?? assignment.assignee_label)
-    .filter((name): name is string => Boolean(name));
-  const first = (names: string[]) => names[0] ?? "Unassigned";
+  const displayName = (assignment: (typeof current)[number]) => Array.isArray(assignment.app_users) ? assignment.app_users[0]?.display_name ?? assignment.assignee_label : assignment.app_users?.display_name ?? assignment.assignee_label;
+  // One row per role decides both the name and the id. A unit row with no
+  // resolved user stays unresolved; it never borrows a legacy row's id.
+  const ownerRow = (role: PortfolioClient["client_team_assignments"][number]["assignment_role"]) => current
+    .find((assignment) => assignment.assignment_role === role && Boolean(displayName(assignment)));
+  const nameFor = (role: PortfolioClient["client_team_assignments"][number]["assignment_role"]) => (ownerRow(role) && displayName(ownerRow(role)!)) || "Unassigned";
   // The relational row's user id is the authoritative owner, so a resave of
   // a label-only profile keeps the same person.
-  const userIdFor = (role: PortfolioClient["client_team_assignments"][number]["assignment_role"]) => current
-    .find((assignment) => assignment.assignment_role === role && assignment.user_id)?.user_id ?? undefined;
+  const userIdFor = (role: PortfolioClient["client_team_assignments"][number]["assignment_role"]) => ownerRow(role)?.user_id ?? undefined;
   return {
-    preparer: first(namesFor("preparer")),
-    checker: first(namesFor("checker")),
-    reviewer: first(namesFor("reviewer")),
+    preparer: nameFor("preparer"),
+    checker: nameFor("checker"),
+    reviewer: nameFor("reviewer"),
     preparerUserId: userIdFor("preparer"),
     checkerUserId: userIdFor("checker"),
     reviewerUserId: userIdFor("reviewer"),

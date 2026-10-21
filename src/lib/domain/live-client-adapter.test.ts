@@ -305,6 +305,24 @@ describe("live client adapter", () => {
     expect(projected.assignment.preparerUserId).toBe("user-unit");
   });
 
+  it("keeps an unresolved registration-unit owner unresolved instead of borrowing a legacy id", () => {
+    const base = liveClient({
+      client_team_assignments: [
+        { id: "legacy", user_id: "user-legacy", assignment_role: "preparer", effective_from: "2026-01-01", effective_to: null, app_users: { display_name: "Legacy Preparer" } },
+      ],
+    });
+    const unit = base.taxpayer_entities[0].registration_units[0];
+    const projected = portfolioClientToFixtureClient({
+      ...base,
+      taxpayer_entities: [{ ...base.taxpayer_entities[0], registration_units: [{ ...unit, registration_unit_team_assignments: [
+        { id: "unit", user_id: null, assignment_role: "preparer", assignee_label: "Label Only", effective_from: "2026-02-01", effective_to: null, app_users: null },
+      ] }] }],
+    });
+
+    expect(projected.assignment.preparer).toBe("Label Only");
+    expect(projected.assignment.preparerUserId).toBeUndefined();
+  });
+
   it("projects effective-dated registration-unit team history without inventing staff identities", () => {
     const projected = portfolioClientToFixtureClient(liveClient({
       taxpayer_entities: [{

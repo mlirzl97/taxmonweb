@@ -313,15 +313,15 @@ describe("manual client setup contract", () => {
     expect(gaps).not.toContain("accounting system");
   });
 
-  it("treats an unresolved Cluster or Tower as a gap, as the database validator does", () => {
+  it("treats an unresolved Cluster as a gap, as the database validator does, and accepts a Cluster-only scope", () => {
     const client = fixtureClients.find((item) => item.id === "fixture-client-06");
     if (!client) throw new Error("Expected incomplete fixture.");
     const profile = client.entities[0].profile;
     const unit = client.entities[0].units[0];
     const gaps = profileActivationGaps(profile, { ...client.assignment, cluster: "Unresolved", tower: "Unresolved" as typeof client.assignment.tower }, unit);
     expect(gaps).toContain("Cluster");
-    expect(gaps).toContain("Tower");
-    expect(profileActivationGaps(profile, client.assignment, unit)).not.toContain("Tower");
+    expect(gaps).not.toContain("Tower");
+    expect(profileActivationGaps(profile, { ...client.assignment, tower: "Unresolved" as typeof client.assignment.tower }, unit)).not.toContain("Cluster");
   });
 
   it("requires the first period to file before activation, while drafts may park without it", () => {

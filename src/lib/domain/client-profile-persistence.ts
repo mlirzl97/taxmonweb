@@ -269,10 +269,10 @@ export function profileActivationGaps(profile: FixtureTaxProfile, assignment: Fi
   else if (profile.goLiveDate && profile.firstPeriodToFile < profile.goLiveDate.slice(0, 7)) gaps.push("first period to file on or after the go-live month");
   if (profile.taxYearBasis === "Fiscal year" && (!profile.fiscalYearEnd?.trim() || /requires|not configured|needs/i.test(profile.fiscalYearEnd))) gaps.push("fiscal year-end");
   // The live adapter shows "Unresolved" when scope cannot be resolved; the
-  // database validator treats it as missing, so the gap list must too.
+  // database validator treats it as missing, so the gap list must too. Tower
+  // is optional: onboarding may place a client directly in a Cluster.
   const isPlaceholder = (value: string) => !value.trim() || /^(unassigned|unresolved|needs review|not configured)$/i.test(value.trim());
   if (isPlaceholder(assignment.cluster)) gaps.push("Cluster");
-  if (isPlaceholder(assignment.tower)) gaps.push("Tower");
   if (!assignment.preparer.trim() || assignment.preparer === "Unassigned") gaps.push("Preparer");
   if (!assignment.checker.trim() || assignment.checker === "Unassigned") gaps.push("Checker");
   if (!assignment.reviewer.trim() || assignment.reviewer === "Unassigned") gaps.push("Reviewer");
