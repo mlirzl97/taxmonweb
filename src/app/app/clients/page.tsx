@@ -11,6 +11,7 @@ import { applySavedCalibrationToClient, getClientDisplayWeight, getClientDisplay
 import { fixtureScopeFilterOptions } from "@/lib/domain/organization-catalog";
 import type { BirOfficeOption } from "@/lib/domain/bir-office-reference";
 import { filingChannels } from "@/lib/domain/tax-foundation-catalog";
+import { sourceSystemForFileLocation } from "@/lib/domain/manual-client-setup";
 import { birOfficeLabel, clientAccountingSystemOptions, clientBooksOptions, clientEfpsGroupOptions, clientFilingChannelOptions, clientInvoicingOptions, controlledOptionLabel, prototypeBirOfficeOptions } from "@/lib/domain/client-profile-options";
 import { fixtureClock } from "@/lib/fixtures";
 import { useWorkflow } from "@/lib/workflow-state";
@@ -453,7 +454,7 @@ function ClientSetupDrawer({ initialDraft, onClose, onSaved, prototypeMode, rdoO
           registrationReference: registrationFacts.registrationReference.trim() || undefined,
           organizationUnitId,
           sourceReference: permanentFileLink.trim(),
-          sourceSystem: prototypeMode ? "synthetic_fixture" : "sharepoint",
+          sourceSystem: prototypeMode ? "synthetic_fixture" : sourceSystemForFileLocation(permanentFileLink),
           sourceNotes: readiness.sourcePackGaps.join(" ") || undefined,
           profileData: {
             ...draftRegistrationFacts,

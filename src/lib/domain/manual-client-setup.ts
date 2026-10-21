@@ -65,6 +65,14 @@ export type ManualClientSetupResult =
   | { ok: false; errors: string[] };
 
 /**
+ * The permanent file location is either a SharePoint link or a shared-drive
+ * path; only a SharePoint web address is recorded as SharePoint provenance.
+ */
+export function sourceSystemForFileLocation(location: string): "sharepoint" | "manual_reference" {
+  return /^https:\/\/[^/\s]*sharepoint\.[^/\s]+\//i.test(location.trim()) ? "sharepoint" : "manual_reference";
+}
+
+/**
  * Fixture writes are only valid inside the explicitly sanitized prototype.
  * Production and authenticated source-backed setup must never accept them.
  */

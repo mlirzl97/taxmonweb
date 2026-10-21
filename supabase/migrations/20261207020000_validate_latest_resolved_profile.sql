@@ -43,8 +43,17 @@ begin
   -- re-read the candidate so the checks below see committed saves.
   perform 1 from public.registration_units unit where unit.id = candidate.registration_unit_id for update;
   select * into candidate from public.tax_profile_versions where id = p_tax_profile_version_id;
+  -- Authority is rechecked under the lock: a concurrent save may have moved
+  -- the Registration Unit out of the caller's scope.
+  if not public.can_view_registration_unit(candidate.registration_unit_id) then
+    raise exception using errcode = '42501', message = 'The Tax Profile is outside the caller''s authority.';
+  end if;
   if candidate.state not in ('ready_for_validation', 'draft') then
     raise exception using errcode = '22023', message = 'Only a profile ready for validation can be activated.';
+  end if;
+  -- A future-dated version cannot replace the profile in force today.
+  if candidate.effective_from > current_date then
+    raise exception using errcode = '22023', message = 'This Tax Profile version takes effect on ' || candidate.effective_from || '; validate it on or after that date.';
   end if;
   -- Only the latest saved version may become active; a stale page cannot
   -- activate facts that a later save already replaced.

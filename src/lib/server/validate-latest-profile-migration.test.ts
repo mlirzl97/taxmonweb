@@ -24,6 +24,11 @@ describe("validate latest resolved Tax Profile migration", () => {
     expect(migration).toContain("perform 1 from public.registration_units unit where unit.id = candidate.registration_unit_id for update;");
   });
 
+  it("rechecks authority under the lock and refuses future-dated versions", () => {
+    expect(migration).toMatch(/for update;\s*select \* into candidate[^;]*;\s*--[^\n]*\n[^\n]*\n\s*if not public\.can_view_registration_unit\(candidate\.registration_unit_id\)/);
+    expect(migration).toContain("if candidate.effective_from > current_date then");
+  });
+
   it("treats placeholder values as missing facts", () => {
     expect(migration).toContain("in ('unassigned', 'unresolved', 'needs review', 'not configured') then");
   });

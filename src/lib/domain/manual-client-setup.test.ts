@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixtureClients } from "@/lib/fixtures";
 import { applyPersistedTaxProfileSnapshot, buildTaxProfilePersistencePayload, profileActivationGaps } from "./client-profile-persistence";
-import { isManualClientSetupSourceAllowed, parseManualClientSetupInput } from "./manual-client-setup";
+import { sourceSystemForFileLocation, isManualClientSetupSourceAllowed, parseManualClientSetupInput } from "./manual-client-setup";
 
 describe("manual client setup contract", () => {
   it("allows fixture source only in prototype mode", () => {
@@ -27,6 +27,13 @@ describe("manual client setup contract", () => {
     });
 
     expect(result.ok).toBe(true);
+  });
+
+  it("records SharePoint provenance only for a SharePoint web address", () => {
+    expect(sourceSystemForFileLocation("https://tenant.sharepoint.invalid/sites/AT/Brightwater")).toBe("sharepoint");
+    expect(sourceSystemForFileLocation("\\\\fileserver\\A&T\\Clients\\Brightwater")).toBe("manual_reference");
+    expect(sourceSystemForFileLocation("S:/A&T/Clients/Brightwater")).toBe("manual_reference");
+    expect(sourceSystemForFileLocation("http://sharepoint.invalid/sites/AT")).toBe("manual_reference");
   });
 
   it("accepts a shared-drive path or a SharePoint link as the permanent file location", () => {
