@@ -54,6 +54,8 @@ function clientTabFromHash(hash: string): ClientWorkspaceTab {
 export function ClientWorkspace({ client, demoMode = false, calibrationEditMode: calibrationEditModeEnabled = false, serverAuthorized = false }: { client: FixtureClient; demoMode?: boolean; calibrationEditMode?: boolean; serverAuthorized?: boolean }) {
   const { canEditTaxProfile, canValidateTaxProfile, isClientVisible, prototypeMode } = useWorkflow();
   const [drawer, setDrawer] = useState<DrawerMode>(null);
+  const [savedVersionId, setSavedVersionId] = useState<string | null>(null);
+  const [profileReload, setProfileReload] = useState(0);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [profile, setProfile] = useState<FixtureTaxProfile>(() => cloneProfile(client.entities[0].profile));
   const [assignment, setAssignment] = useState(client.assignment);
@@ -92,6 +94,7 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
     }
     let cancelled = false;
     async function loadSavedProfile() {
+      setSavedVersionId(null);
       try {
         const response = await fetch(`/api/clients/${client.id}/profile`, { cache: "no-store" });
         if (!response.ok) return;
@@ -99,6 +102,7 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
         if (cancelled) return;
         setPersistenceState(result.clientFound ? "available" : "unavailable");
         if (!result.data) return;
+        setSavedVersionId(result.data.id ?? null);
         const restored = applyPersistedTaxProfileSnapshot(initialProfileRef.current, initialAssignmentRef.current, result.data);
         setProfile(restored.profile);
         setAssignment(restored.assignment);
@@ -111,7 +115,32 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
     }
     void loadSavedProfile();
     return () => { cancelled = true; };
-  }, [client.id, demoMode]);
+  }, [client.id, demoMode, profileReload]);
+
+  async function validateSavedProfile(reason: string) {
+    if (!savedVersionId) {
+      setSavedMessage("Save the profile before validating it.");
+      return false;
+    }
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/clients/${client.id}/profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "validate", versionId: savedVersionId, reason }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? "The Tax Profile could not be validated.");
+      setSavedMessage("Tax Profile validated.");
+      setProfileReload((current) => current + 1);
+      return true;
+    } catch (error) {
+      setSavedMessage(error instanceof Error ? error.message : "The Tax Profile could not be validated.");
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  }
 
   const calibrationEditMode = hasCalibrationEditAccess(demoMode, calibrationEditModeEnabled);
   const canEditProfile = canEditTaxProfile;
@@ -188,8 +217,9 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
           payload: buildTaxProfilePersistencePayload(next, nextAssignment, selectedUnit, reason),
         }),
       });
-      const result = await response.json() as { error?: string; state?: string };
+      const result = await response.json() as { error?: string; state?: string; data?: { id?: string } };
       if (!response.ok) throw new Error(result.error ?? "The profile change could not be saved.");
+      if (result.data?.id) setSavedVersionId(result.data.id);
       setAssignment(nextAssignment);
       setProfile(next);
       setSavedMessage(message);
@@ -330,7 +360,7 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
       </div>
 
       {drawer === "identity" && <IdentityDrawer isSaving={isSaving} live={!demoMode} profile={profile} onClose={closeDrawer} onSave={(next, reason) => { void persistProfile(next, assignment, reason, "Registration facts saved.").then((saved) => { if (saved) closeDrawer(); }); }} />}
-      {drawer === "validate" && <ValidateDrawer gaps={setupGaps} isSaving={isSaving} onClose={closeDrawer} onValidate={(reason) => { void persistProfile(profile, assignment, reason, "Tax Profile validated.", "save-and-validate").then((saved) => { if (saved) closeDrawer(); }); }} />}
+      {drawer === "validate" && <ValidateDrawer gaps={setupGaps} isSaving={isSaving} onClose={closeDrawer} onValidate={(reason) => { void (demoMode ? persistProfile(profile, assignment, reason, "Tax Profile validated.", "save-and-validate") : validateSavedProfile(reason)).then((saved) => { if (saved) closeDrawer(); }); }} />}
       {drawer === "setup" && <SetupDrawer assignment={assignment} isSaving={isSaving} live={!demoMode} profile={profile} onClose={closeDrawer} onSave={(nextAssignment, nextProfile, reason) => { void persistProfile(nextProfile, nextAssignment, reason, "Operating setup saved.").then((saved) => { if (saved) closeDrawer(); }); }} />}
       {drawer === "authority" && <AuthorityDrawer isSaving={isSaving} onClose={closeDrawer} onSave={(authority, reason) => { const next = { ...profile, authorities: [...profile.authorities, authority] }; void persistProfile(next, assignment, reason, "Authority record saved.").then((saved) => { if (saved) closeDrawer(); }); }} />}
       {drawer === "audit" && <AuditDrawer isSaving={isSaving} onClose={closeDrawer} onSave={(audit, reason) => { const next = { ...profile, auditExposures: [...profile.auditExposures, audit] }; void persistProfile(next, assignment, reason, "Audit record saved.").then((saved) => { if (saved) closeDrawer(); }); }} />}
@@ -508,7 +538,7 @@ function IdentityDrawer({ live, profile, isSaving, onClose, onSave }: { live: bo
   return <DetailDrawer eyebrow="Profile setup" title="Edit registration facts" subtitle="Changes are saved as a dated profile version." onClose={onClose}><div className="form-stack"><Field label="Registered taxpayer name"><input value={draft.registeredTaxpayerName} onChange={(event) => setDraft({ ...draft, registeredTaxpayerName: event.target.value })} /></Field><Field label="TIN"><input inputMode="numeric" maxLength={17} value={formatTin(draft.tinDisplay)} onChange={(event) => setDraft({ ...draft, tinDisplay: normalizeTinDigits(event.target.value) })} /></Field><div className="form-grid"><Field label="RDO"><select disabled={live && birOfficesState === "loading"} value={selectedRdoCode} onChange={(event) => setDraft({ ...draft, rdoOrLts: event.target.value })}>{live && birOfficesState === "loading" && <option value={selectedRdoCode}>Loading BIR offices…</option>}{live && birOfficesState === "unavailable" && selectedRdoCode !== "Needs review" && <option value={selectedRdoCode}>{draft.rdoOrLts}</option>}{referenceBirOffices.map((option) => <option key={option.code} value={option.code}>{option.label}</option>)}<option value="Needs review">Needs review</option></select></Field><Field label="Entity type"><select value={clientEntityTypeOptions.includes(draft.entityType as typeof clientEntityTypeOptions[number]) ? draft.entityType : "Needs review"} onChange={(event) => setDraft({ ...draft, entityType: event.target.value })}>{clientEntityTypeOptions.map((option) => <option key={option}>{option}</option>)}</select></Field></div><Field label="Registered address"><textarea value={draft.registeredAddress} onChange={(event) => setDraft({ ...draft, registeredAddress: event.target.value })} /></Field><div className="form-grid"><Field label="Registration date"><input type="date" value={isIsoDate(draft.registrationEffective) ? draft.registrationEffective : ""} onChange={(event) => setDraft({ ...draft, registrationEffective: event.target.value })} /></Field><Field label="Registration status"><select value={clientRegistrationStatusOptions.includes(draft.registrationStatus as typeof clientRegistrationStatusOptions[number]) ? draft.registrationStatus : "Needs review"} onChange={(event) => setDraft({ ...draft, registrationStatus: event.target.value })}>{clientRegistrationStatusOptions.map((option) => <option key={option}>{option}</option>)}</select></Field></div><Field label="Nature / line of business"><textarea value={draft.lineOfBusiness} onChange={(event) => setDraft({ ...draft, lineOfBusiness: event.target.value })} /></Field><div className="form-grid"><Field label="Tax year basis"><select value={draft.taxYearBasis ?? ""} onChange={(event) => { const taxYearBasis = (event.target.value || undefined) as FixtureTaxProfile["taxYearBasis"]; setDraft({ ...draft, taxYearBasis, fiscalYearEnd: taxYearBasis === "Calendar year" ? "December 31" : undefined }); if (taxYearBasis === "Calendar year") { setFiscalYearEndMonth("December"); setFiscalYearEndDay("31"); } else { setFiscalYearEndMonth(""); setFiscalYearEndDay(""); } }}><option value="">Not configured</option><option>Calendar year</option><option>Fiscal year</option></select></Field><div className="form-field"><span>Fiscal year-end</span><div className="form-grid form-grid--compact"><select aria-label="Fiscal year-end month" disabled={draft.taxYearBasis !== "Fiscal year"} value={fiscalYearEndMonth} onChange={(event) => { setFiscalYearEndMonth(event.target.value); setFiscalYearEndDay(""); }}><option value="">Month</option>{profileFiscalYearMonths.map((month) => <option key={month}>{month}</option>)}</select><select aria-label="Fiscal year-end day" disabled={draft.taxYearBasis !== "Fiscal year" || !fiscalYearEndMonth} value={fiscalYearEndDay} onChange={(event) => setFiscalYearEndDay(event.target.value)}><option value="">Day</option>{profileFiscalYearDays.slice(0, profileFiscalYearDayCount[fiscalYearEndMonth] ?? 31).map((day) => <option key={day}>{day}</option>)}</select></div></div></div><ReturnTaxSelector selectedCodes={returnCodes} onChange={setReturnCodes} /><div className="form-grid"><Field label="Go-live date"><input value={draft.goLiveDate ?? ""} onChange={(event) => setDraft({ ...draft, goLiveDate: event.target.value })} type="date" /></Field><Field label="First period to file"><input min={draft.goLiveDate?.slice(0, 7)} onChange={(event) => setDraft({ ...draft, firstPeriodToFile: event.target.value })} type="month" value={draft.firstPeriodToFile ?? ""} /></Field></div><Field label="Permanent file location"><input maxLength={240} placeholder="SharePoint link or shared-drive path" value={draft.permanentFileLink ?? ""} onChange={(event) => setDraft({ ...draft, permanentFileLink: event.target.value })} type="text" /></Field><div className="form-grid"><Field label="Accounting system"><select value={clientAccountingSystemOptions.includes(draft.accountingSystem as typeof clientAccountingSystemOptions[number]) ? draft.accountingSystem : "Needs review"} onChange={(event) => setDraft({ ...draft, accountingSystem: event.target.value })}>{clientAccountingSystemOptions.map((option) => <option key={option}>{option}</option>)}</select></Field><Field label="Books"><select value={clientBooksOptions.includes(draft.booksType as typeof clientBooksOptions[number]) ? draft.booksType : "Needs review"} onChange={(event) => setDraft({ ...draft, booksType: event.target.value })}>{clientBooksOptions.map((option) => <option key={option}>{option}</option>)}</select></Field></div><div className="form-grid"><Field label="Receipts / invoicing"><select value={clientInvoicingOptions.includes(draft.invoicing as typeof clientInvoicingOptions[number]) ? draft.invoicing : "Needs review"} onChange={(event) => setDraft({ ...draft, invoicing: event.target.value })}>{clientInvoicingOptions.map((option) => <option key={option}>{option}</option>)}</select></Field><Field label="Filing channel"><select value={draft.filingChannel} onChange={(event) => { const filingChannel = event.target.value; setDraft({ ...draft, filingChannel, eFPSGroup: filingChannel === "eFPS" ? draft.eFPSGroup : "Not applicable" }); }}>{clientFilingChannelOptions.map((option) => <option key={option}>{option}</option>)}</select></Field></div><Field label="eFPS group"><select disabled={draft.filingChannel !== "eFPS"} value={draft.filingChannel === "eFPS" ? (efpsGroupOptions.includes(draft.eFPSGroup ?? "") ? draft.eFPSGroup : "Needs review") : "Not applicable"} onChange={(event) => setDraft({ ...draft, eFPSGroup: event.target.value })}><option value="">Not configured</option>{efpsGroupOptions.filter(Boolean).map((option) => <option key={option}>{option}</option>)}</select></Field><Field label="Reason for change"><input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required" /></Field><button className="button button--primary" disabled={isSaving || !reason.trim()} onClick={() => onSave({ ...draft, tinDisplay: normalizeTinDigits(draft.tinDisplay), fiscalYearEnd: draft.taxYearBasis === "Calendar year" ? "December 31" : draft.taxYearBasis === "Fiscal year" && fiscalYearEndMonth && fiscalYearEndDay ? `${fiscalYearEndMonth} ${fiscalYearEndDay}` : undefined, registeredReturnCodes: returnCodes }, reason)} type="button">{isSaving ? "Saving…" : "Save registration facts"}</button></div></DetailDrawer>;
 }
 
-type LiveAssignmentOptions = { preparers: string[]; checkers: string[]; reviewers: string[]; clusters: string[]; towers: string[]; error: string | null };
+type LiveAssignmentOptions = { preparers: string[]; checkers: string[]; reviewers: string[]; clusters: string[]; towers: Array<{ name: string; cluster: string | null }>; error: string | null };
 
 /** Live people and units for operating setup; the fixture directory is never shown for a live client. */
 function useLiveAssignmentOptions(live: boolean): LiveAssignmentOptions | null {
@@ -518,7 +548,7 @@ function useLiveAssignmentOptions(live: boolean): LiveAssignmentOptions | null {
     let cancelled = false;
     Promise.all([
       fetch("/api/team", { cache: "no-store" }).then(async (response) => { if (!response.ok) throw new Error("Unable to load the live team."); return response.json() as Promise<{ data?: Array<{ name: string; active: boolean; roleKey: string | null; operatingModel: string; effectiveTo: string | null }> }>; }),
-      fetch("/api/organization/units", { cache: "no-store" }).then(async (response) => { if (!response.ok) throw new Error("Unable to load clusters and towers."); return response.json() as Promise<{ data?: Array<{ name: string; unit_kind: string }> }>; }),
+      fetch("/api/organization/units", { cache: "no-store" }).then(async (response) => { if (!response.ok) throw new Error("Unable to load clusters and towers."); return response.json() as Promise<{ data?: Array<{ id: string; name: string; unit_kind: string; parent_id: string | null }> }>; }),
     ]).then(([team, units]) => {
       if (cancelled) return;
       const today = new Date().toISOString().slice(0, 10);
@@ -529,7 +559,7 @@ function useLiveAssignmentOptions(live: boolean): LiveAssignmentOptions | null {
         checkers: names(["team_member", "leader"]),
         reviewers: names(["leader"]),
         clusters: (units.data ?? []).filter((unit) => unit.unit_kind === "cluster").map((unit) => unit.name),
-        towers: (units.data ?? []).filter((unit) => unit.unit_kind === "tower").map((unit) => unit.name),
+        towers: (units.data ?? []).filter((unit) => unit.unit_kind === "tower").map((unit) => ({ name: unit.name, cluster: (units.data ?? []).find((parent) => parent.id === unit.parent_id && parent.unit_kind === "cluster")?.name ?? null })),
         error: null,
       });
     }).catch((error: unknown) => {
@@ -557,8 +587,11 @@ function SetupDrawer({ assignment, live, profile, isSaving, onClose, onSave }: {
     return Array.from(new Set([draftAssignment[role], ...eligible.map((member) => member.name)].filter(Boolean)));
   };
   const clusterOptions = live ? liveOptions?.clusters ?? [] : Array.from(new Set([draftAssignment.cluster, ...activeMembers.map((member) => member.cluster)].filter(Boolean)));
-  const towerOptions = live ? liveOptions?.towers ?? [] : [];
-  return <DetailDrawer eyebrow="TMF setup" title="Edit operating setup" subtitle="Changes are saved as a dated setup version." onClose={onClose}><div className="form-stack">{error && <div className="form-error" role="alert">{error}</div>}{liveOptions?.error && <div className="form-error" role="alert">{liveOptions.error}</div>}{live && !liveOptions && <p className="form-field__hint" role="status">Loading the live team…</p>}<div className="form-grid"><AssignmentSelect label="Preparer" value={draftAssignment.preparer} options={roleOptions("preparer")} onChange={(value) => setDraftAssignment({ ...draftAssignment, preparer: value })} /><AssignmentSelect label="Checker" value={draftAssignment.checker} options={roleOptions("checker")} onChange={(value) => setDraftAssignment({ ...draftAssignment, checker: value })} /><AssignmentSelect label="Reviewer" value={draftAssignment.reviewer} options={roleOptions("reviewer")} onChange={(value) => setDraftAssignment({ ...draftAssignment, reviewer: value })} /><AssignmentSelect label="Cluster" value={draftAssignment.cluster} options={clusterOptions} onChange={(value) => setDraftAssignment({ ...draftAssignment, cluster: value })} />{live && <AssignmentSelect label="Tower" value={draftAssignment.tower} options={towerOptions} onChange={(value) => setDraftAssignment({ ...draftAssignment, tower: value })} />}</div><Field label="Client Weight"><select value={draftProfile.weight} onChange={(event) => { const weight = Number(event.target.value) as FixtureTaxProfile["weight"]; setDraftProfile({ ...draftProfile, weight, weightLabel: weightLabels[weight] }); }}><option value="0">Select client weight</option><option value="1">1 · Super Light</option><option value="2">2 · Light</option><option value="3">3 · Medium</option><option value="4">4 · Heavy</option><option value="5">5 · Super Heavy</option></select></Field><Field label="eNATE Setup"><select value={draftProfile.enateSetup} onChange={(event) => setDraftProfile({ ...draftProfile, enateSetup: event.target.value as FixtureTaxProfile["enateSetup"] })}><option>Yes</option><option>No</option><option>Unknown</option></select></Field><Field label="Payment Route"><select value={draftProfile.paymentRoute} onChange={(event) => setDraftProfile({ ...draftProfile, paymentRoute: event.target.value as FixtureTaxProfile["paymentRoute"] })}><option>Client Pays</option><option>TMF Pays</option><option>Not configured</option></select></Field><Field label="Reason for change"><input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required" /></Field><button className="button button--primary" disabled={isSaving} onClick={save} type="button">{isSaving ? "Saving…" : "Save operating setup"}</button></div></DetailDrawer>;
+  // A tower always belongs to the selected cluster; scope follows the tower.
+  const towerOptions = live ? (liveOptions?.towers ?? []).filter((tower) => !draftAssignment.cluster || draftAssignment.cluster === "Unassigned" || draftAssignment.cluster === "Unresolved" || tower.cluster === draftAssignment.cluster).map((tower) => tower.name) : [];
+  const selectCluster = (cluster: string) => setDraftAssignment((current) => ({ ...current, cluster, tower: live && !(liveOptions?.towers ?? []).some((tower) => tower.name === current.tower && tower.cluster === cluster) ? "Unassigned" : current.tower }));
+  const selectTower = (tower: string) => setDraftAssignment((current) => ({ ...current, tower, cluster: (liveOptions?.towers ?? []).find((option) => option.name === tower)?.cluster ?? current.cluster }));
+  return <DetailDrawer eyebrow="TMF setup" title="Edit operating setup" subtitle="Changes are saved as a dated setup version." onClose={onClose}><div className="form-stack">{error && <div className="form-error" role="alert">{error}</div>}{liveOptions?.error && <div className="form-error" role="alert">{liveOptions.error}</div>}{live && !liveOptions && <p className="form-field__hint" role="status">Loading the live team…</p>}<div className="form-grid"><AssignmentSelect label="Preparer" value={draftAssignment.preparer} options={roleOptions("preparer")} onChange={(value) => setDraftAssignment({ ...draftAssignment, preparer: value })} /><AssignmentSelect label="Checker" value={draftAssignment.checker} options={roleOptions("checker")} onChange={(value) => setDraftAssignment({ ...draftAssignment, checker: value })} /><AssignmentSelect label="Reviewer" value={draftAssignment.reviewer} options={roleOptions("reviewer")} onChange={(value) => setDraftAssignment({ ...draftAssignment, reviewer: value })} /><AssignmentSelect label="Cluster" value={draftAssignment.cluster} options={clusterOptions} onChange={selectCluster} />{live && <AssignmentSelect label="Tower" value={draftAssignment.tower} options={towerOptions} onChange={selectTower} />}</div><Field label="Client Weight"><select value={draftProfile.weight} onChange={(event) => { const weight = Number(event.target.value) as FixtureTaxProfile["weight"]; setDraftProfile({ ...draftProfile, weight, weightLabel: weightLabels[weight] }); }}><option value="0">Select client weight</option><option value="1">1 · Super Light</option><option value="2">2 · Light</option><option value="3">3 · Medium</option><option value="4">4 · Heavy</option><option value="5">5 · Super Heavy</option></select></Field><Field label="eNATE Setup"><select value={draftProfile.enateSetup} onChange={(event) => setDraftProfile({ ...draftProfile, enateSetup: event.target.value as FixtureTaxProfile["enateSetup"] })}><option>Yes</option><option>No</option><option>Unknown</option></select></Field><Field label="Payment Route"><select value={draftProfile.paymentRoute} onChange={(event) => setDraftProfile({ ...draftProfile, paymentRoute: event.target.value as FixtureTaxProfile["paymentRoute"] })}><option>Client Pays</option><option>TMF Pays</option><option>Not configured</option></select></Field><Field label="Reason for change"><input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required" /></Field><button className="button button--primary" disabled={isSaving} onClick={save} type="button">{isSaving ? "Saving…" : "Save operating setup"}</button></div></DetailDrawer>;
 }
 
 function ValidateDrawer({ gaps, isSaving, onClose, onValidate }: { gaps: readonly string[]; isSaving: boolean; onClose: () => void; onValidate: (reason: string) => void }) {

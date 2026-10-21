@@ -73,6 +73,8 @@ export function buildTaxProfilePersistencePayload(
 }
 
 export type PersistedTaxProfileSnapshot = {
+  /** Saved version id; validation activates exactly this version. */
+  id?: string;
   state: "draft" | "ready_for_validation" | "active" | "superseded";
   effectiveFrom: string;
   profile: Record<string, unknown>;

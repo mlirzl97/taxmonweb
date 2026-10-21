@@ -23,8 +23,6 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function POST(request: Request, context: RouteContext) {
-  const denied = await requireApiCapability(["CorrectTaxProfile", "MaintainClientRepository"]);
-  if (denied) return denied;
   const originDenied = requireSameOrigin(request);
   if (originDenied) return originDenied;
 
@@ -38,6 +36,9 @@ export async function POST(request: Request, context: RouteContext) {
   const command = asRecord(body);
   if (!command) return NextResponse.json({ error: "Profile command is invalid." }, { status: 400 });
   const action = command.action;
+  // Validating an existing version is its own authority; every other action edits the profile.
+  const denied = await requireApiCapability(action === "validate" ? ["ValidateTaxProfile"] : ["CorrectTaxProfile", "MaintainClientRepository"]);
+  if (denied) return denied;
   const reason = typeof command.reason === "string" ? command.reason.trim() : "";
   if (!reason) return NextResponse.json({ error: "A reason is required for a profile change." }, { status: 400 });
 

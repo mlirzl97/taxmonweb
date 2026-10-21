@@ -7,6 +7,22 @@
 -- previous row is closed before a new assignee is recorded, and the Tower (or
 -- Cluster) chosen in operating setup becomes the unit's visibility scope when
 -- the caller may manage it. History is closed, never deleted.
+--
+-- End dates are inclusive. A row replaced on the day it started is closed the
+-- day before it began: it stays in history as superseded the same day and is
+-- never current, so one owner and one scope are current at a time.
+
+alter table public.registration_unit_team_assignments
+  drop constraint if exists registration_unit_team_assignments_check;
+alter table public.registration_unit_team_assignments
+  add constraint registration_unit_team_assignments_check
+  check (effective_to is null or effective_to >= effective_from - 1);
+
+alter table public.registration_unit_scope_assignments
+  drop constraint if exists registration_unit_scope_dates_check;
+alter table public.registration_unit_scope_assignments
+  add constraint registration_unit_scope_dates_check
+  check (effective_to is null or effective_to >= effective_from - 1);
 
 create or replace function public.sync_tax_profile_relational_context()
 returns trigger
@@ -31,6 +47,7 @@ declare
   scope_label text;
   resolved_scope_unit_id uuid;
   current_scope_unit_id uuid;
+  current_scope public.registration_unit_scope_assignments;
   audit_item jsonb;
   audit_status text;
   audit_year text;
@@ -172,7 +189,7 @@ begin
       from public.registration_unit_team_assignments existing
       where existing.registration_unit_id = new.registration_unit_id
         and existing.assignment_role = team_role
-        and (existing.effective_to is null or existing.effective_to >= new.effective_from)
+        and existing.effective_to is null
       order by existing.effective_from desc, existing.assigned_at desc
       limit 1;
 
@@ -187,11 +204,15 @@ begin
         continue;
       end if;
 
+      -- History is append-only: a change may not start before the open row.
+      if found and new.effective_from < current_assignment.effective_from then
+        raise exception using errcode = '22023', message = 'An assignment change cannot be dated before the current assignment.';
+      end if;
       update public.registration_unit_team_assignments existing
-         set effective_to = greatest(existing.effective_from, new.effective_from - 1)
+         set effective_to = new.effective_from - 1
        where existing.registration_unit_id = new.registration_unit_id
          and existing.assignment_role = team_role
-         and (existing.effective_to is null or existing.effective_to >= new.effective_from);
+         and existing.effective_to is null;
 
       if assignee_label is not null then
         insert into public.registration_unit_team_assignments (
@@ -207,39 +228,48 @@ begin
     -- The Tower (or, failing that, the Cluster) chosen in operating setup is
     -- the Registration Unit's visibility scope. Only an authorized caller may
     -- move it, and an unknown label leaves the current scope untouched.
+    -- A label resolves only when exactly one active unit carries it; an
+    -- ambiguous or unknown label never guesses and leaves the scope untouched.
     resolved_scope_unit_id := null;
     scope_label := nullif(trim(coalesce(new.assignment_data ->> 'tower', '')), '');
     if scope_label is not null then
-      select unit.id into resolved_scope_unit_id
+      select min(unit.id::text)::uuid into resolved_scope_unit_id
       from public.organization_units unit
       where unit.unit_kind = 'tower' and unit.active and lower(unit.name) = lower(scope_label)
-      limit 1;
+      having count(*) = 1;
     end if;
     if resolved_scope_unit_id is null then
       scope_label := nullif(trim(coalesce(new.assignment_data ->> 'cluster', '')), '');
       if scope_label is not null then
-        select unit.id into resolved_scope_unit_id
+        select min(unit.id::text)::uuid into resolved_scope_unit_id
         from public.organization_units unit
         where unit.unit_kind = 'cluster' and unit.active and lower(unit.name) = lower(scope_label)
-        limit 1;
+        having count(*) = 1;
       end if;
     end if;
-    if resolved_scope_unit_id is not null then
-      select scope.organization_unit_id into current_scope_unit_id
+    -- Only a signed-in caller moves scope; a direct database write never does.
+    if resolved_scope_unit_id is not null and auth.uid() is not null then
+      select scope.* into current_scope
       from public.registration_unit_scope_assignments scope
       where scope.registration_unit_id = new.registration_unit_id
-        and scope.effective_from <= new.effective_from
-        and (scope.effective_to is null or scope.effective_to >= new.effective_from)
+        and scope.effective_to is null
       order by scope.effective_from desc, scope.assigned_at desc
       limit 1;
+      current_scope_unit_id := case when found then current_scope.organization_unit_id else null end;
       if current_scope_unit_id is distinct from resolved_scope_unit_id then
-        if auth.uid() is not null and not public.can_manage_organization_unit(resolved_scope_unit_id) then
-          raise exception using errcode = '42501', message = 'The selected Cluster or Tower is outside the caller''s authority.';
+        -- Moving a client needs authority over where it is and where it goes;
+        -- saving a profile only needs read access to the unit.
+        if not public.can_manage_organization_unit(resolved_scope_unit_id)
+           or (current_scope_unit_id is not null and not public.can_manage_organization_unit(current_scope_unit_id)) then
+          raise exception using errcode = '42501', message = 'Moving this client between Clusters or Towers is outside the caller''s authority.';
+        end if;
+        if current_scope_unit_id is not null and new.effective_from < current_scope.effective_from then
+          raise exception using errcode = '22023', message = 'A scope change cannot be dated before the current scope.';
         end if;
         update public.registration_unit_scope_assignments scope
-           set effective_to = greatest(scope.effective_from, new.effective_from - 1)
+           set effective_to = new.effective_from - 1
          where scope.registration_unit_id = new.registration_unit_id
-           and (scope.effective_to is null or scope.effective_to >= new.effective_from);
+           and scope.effective_to is null;
         insert into public.registration_unit_scope_assignments (registration_unit_id, organization_unit_id, effective_from, assigned_by, reason)
         values (new.registration_unit_id, resolved_scope_unit_id, new.effective_from, new.created_by, new.change_reason);
       end if;

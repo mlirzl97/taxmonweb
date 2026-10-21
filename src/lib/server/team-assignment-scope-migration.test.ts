@@ -10,15 +10,21 @@ describe("single open team assignment migration", () => {
     expect(migration).toMatch(/current_assignment\.user_id = resolved_user_id\)[\s\S]*continue;/);
   });
 
-  it("closes the previous assignment instead of deleting history", () => {
-    expect(migration).toContain("set effective_to = greatest(existing.effective_from, new.effective_from - 1)");
+  it("closes only the open assignment, refuses back-dating, and never deletes history", () => {
+    expect(migration).toContain("set effective_to = new.effective_from - 1");
+    expect(migration).toContain("check (effective_to is null or effective_to >= effective_from - 1)");
+    expect(migration).toMatch(/and existing\.assignment_role = team_role\s+and existing\.effective_to is null;/);
+    expect(migration).toContain("An assignment change cannot be dated before the current assignment.");
     expect(migration).not.toMatch(/delete from public\.registration_unit_team_assignments/);
   });
 
-  it("moves the Registration Unit scope only within the caller's authority", () => {
+  it("moves the Registration Unit scope only for a signed-in caller with authority over both ends", () => {
     expect(migration).toContain("unit.unit_kind = 'tower'");
-    expect(migration).toContain("public.can_manage_organization_unit(resolved_scope_unit_id)");
-    expect(migration).toContain("set effective_to = greatest(scope.effective_from, new.effective_from - 1)");
+    expect(migration).toContain("having count(*) = 1");
+    expect(migration).toContain("if resolved_scope_unit_id is not null and auth.uid() is not null then");
+    expect(migration).toContain("not public.can_manage_organization_unit(resolved_scope_unit_id)");
+    expect(migration).toContain("not public.can_manage_organization_unit(current_scope_unit_id)");
+    expect(migration).toContain("A scope change cannot be dated before the current scope.");
   });
 
   it("keeps the trigger function private", () => {
