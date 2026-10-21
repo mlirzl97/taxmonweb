@@ -64,7 +64,8 @@ describe("single open team assignment migration", () => {
   });
 
   it("resolves a Tower within the Cluster submitted with it, since tower names repeat across clusters", () => {
-    expect(migration).toContain("and lower(cluster_unit.name) = lower(cluster_label)");
+    expect(migration).toContain("and (cluster_label is null or lower(cluster_unit.name) = lower(cluster_label))");
+    expect(migration).toContain("and cluster_unit.effective_from <= new.effective_from");
     expect(migration).toContain("message = 'The selected Tower does not belong to the selected Cluster.'");
   });
 

@@ -353,18 +353,22 @@ begin
       cluster_label := null;
     end if;
     -- Tower names repeat across clusters, so a tower resolves within the
-    -- cluster submitted with it.
+    -- cluster submitted with it, and only while that parent Cluster is
+    -- itself active and in effect on the change date.
     if scope_label is not null then
       select min(unit.id::text)::uuid into resolved_scope_unit_id
       from public.organization_units unit
       where unit.unit_kind = 'tower' and unit.active and lower(unit.name) = lower(scope_label)
         and unit.effective_from <= new.effective_from and (unit.effective_to is null or unit.effective_to >= new.effective_from)
-        and (cluster_label is null or exists (
+        and exists (
           select 1 from public.organization_units cluster_unit
           where cluster_unit.id = unit.parent_id
             and cluster_unit.unit_kind = 'cluster'
-            and lower(cluster_unit.name) = lower(cluster_label)
-        ))
+            and cluster_unit.active
+            and cluster_unit.effective_from <= new.effective_from
+            and (cluster_unit.effective_to is null or cluster_unit.effective_to >= new.effective_from)
+            and (cluster_label is null or lower(cluster_unit.name) = lower(cluster_label))
+        )
       having count(*) = 1;
       -- A named tower that does not resolve is refused, never widened to its cluster.
       if resolved_scope_unit_id is null then
