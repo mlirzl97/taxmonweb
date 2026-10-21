@@ -216,7 +216,8 @@ begin
       -- The submitted Team user id wins. Without one, a label links to a
       -- person only when exactly one eligible user carries it, so an ambiguous
       -- name stays unresolved instead of picking someone. Eligible means an
-      -- active account whose Team profile is in effect on the change date.
+      -- active account whose engagement Team profile is in effect on the change
+      -- date and whose role may hold this assignment (same rule as the picker).
       resolved_user_id := null;
       submitted_user_id := case
         when coalesce(new.assignment_data ->> (team_role || 'UserId'), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
@@ -230,11 +231,17 @@ begin
           and app_user.is_active
           and member.active
           and member.effective_from <= new.effective_from
-          and (member.effective_to is null or member.effective_to >= new.effective_from);
+          and (member.effective_to is null or member.effective_to >= new.effective_from)
+          and member.operating_model <> 'tax_team'
+          and member.role_key = any (case team_role
+            when 'preparer' then array['team_member']
+            when 'checker' then array['team_member', 'leader', 'reviewer']
+            else array['leader', 'reviewer'] end);
         if resolved_user_id is null then
-          raise exception using errcode = '22023', message = 'The selected ' || team_role || ' is not an active Team member on this date.';
+          raise exception using errcode = '22023', message = 'The selected ' || team_role || ' is not an active Team member eligible for this role on this date.';
         end if;
-        assignee_label := coalesce(assignee_label, (select display_name from public.app_users where id = resolved_user_id));
+        -- The recorded label is the person's own name, never the submitted text.
+        assignee_label := (select display_name from public.app_users where id = resolved_user_id);
       elsif assignee_label is not null then
         select min(app_user.id::text)::uuid into resolved_user_id
         from public.app_users app_user
@@ -244,6 +251,11 @@ begin
           and member.active
           and member.effective_from <= new.effective_from
           and (member.effective_to is null or member.effective_to >= new.effective_from)
+          and member.operating_model <> 'tax_team'
+          and member.role_key = any (case team_role
+            when 'preparer' then array['team_member']
+            when 'checker' then array['team_member', 'leader', 'reviewer']
+            else array['leader', 'reviewer'] end)
         having count(*) = 1;
       end if;
 

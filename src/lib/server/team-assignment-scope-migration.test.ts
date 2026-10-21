@@ -30,8 +30,17 @@ describe("single open team assignment migration", () => {
 
   it("prefers the submitted Team user id and only links a unique, in-effect name", () => {
     expect(migration).toContain("new.assignment_data ->> (team_role || 'UserId')");
-    expect(migration).toContain("is not an active Team member on this date.");
+    expect(migration).toContain("is not an active Team member eligible for this role on this date.");
     expect(migration).toMatch(/member\.effective_from <= new\.effective_from[\s\S]*having count\(\*\) = 1;/);
+  });
+
+  it("records the chosen person's own name and only accepts role-eligible engagement staff", () => {
+    expect(migration).toContain("assignee_label := (select display_name from public.app_users where id = resolved_user_id);");
+    expect(migration).not.toContain("assignee_label := coalesce(assignee_label, (select display_name");
+    expect(migration).toContain("member.operating_model <> 'tax_team'");
+    expect(migration).toContain("when 'preparer' then array['team_member']");
+    expect(migration).toContain("when 'checker' then array['team_member', 'leader', 'reviewer']");
+    expect(migration).toContain("else array['leader', 'reviewer'] end)");
   });
 
   it("refuses an unknown tower instead of widening scope to its cluster", () => {

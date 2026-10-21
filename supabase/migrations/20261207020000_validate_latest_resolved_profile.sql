@@ -57,7 +57,8 @@ begin
     missing_keys := array_append(missing_keys, 'distinct assignment actors');
   end if;
 
-  -- Every accountable role needs one current, uniquely resolved active person,
+  -- Every accountable role needs one current, uniquely resolved active person
+  -- whose engagement Team role may hold it,
   -- and the three people must differ; a label alone is not an owner.
   foreach required_key in array array['preparer', 'checker', 'reviewer'] loop
     select assignment.user_id into resolved_user_id
@@ -67,6 +68,11 @@ begin
       and member.active
       and member.effective_from <= current_date
       and (member.effective_to is null or member.effective_to >= current_date)
+      and member.operating_model <> 'tax_team'
+      and member.role_key = any (case required_key
+        when 'preparer' then array['team_member']
+        when 'checker' then array['team_member', 'leader', 'reviewer']
+        else array['leader', 'reviewer'] end)
     where assignment.registration_unit_id = candidate.registration_unit_id
       and assignment.assignment_role = required_key
       and assignment.effective_to is null

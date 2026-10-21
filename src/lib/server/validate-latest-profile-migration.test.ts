@@ -15,6 +15,8 @@ describe("validate latest resolved Tax Profile migration", () => {
     expect(migration).toContain("(no uniquely resolved active person)");
     expect(migration).toContain("and member.effective_from <= current_date");
     expect(migration).toContain("distinct Preparer, Checker, and Reviewer");
+    expect(migration).toContain("and member.operating_model <> 'tax_team'");
+    expect(migration).toContain("when 'checker' then array['team_member', 'leader', 'reviewer']");
   });
 
   it("keeps validation authority and the reason requirement", () => {
