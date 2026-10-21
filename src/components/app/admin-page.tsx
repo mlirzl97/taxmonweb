@@ -11,7 +11,7 @@ import { accessLevelLabel, moduleAccessMapForPersona, rbacPersonaOptions, type A
 import { fixtureCalendar, fixtureClients, fixtureOrgDirectoryMembers, fixtureSpecialistCases, fixtureWork, type FixtureClient, type FixtureTeamMember } from "@/lib/fixtures";
 import { clearPrototypeSeedData } from "@/lib/prototype-storage";
 import { loadAccountPreferences, readUserPreferences, removeAccountAvatar, saveAccountPreferences, saveUserPreferences, uploadAccountAvatar, type ThemePreference } from "@/lib/user-preferences";
-import { useWorkflow, workflowPerspectiveLabel } from "@/lib/workflow-state";
+import { useWorkflow } from "@/lib/workflow-state";
 import { StaffProvisioningForm } from "@/components/app/staff-provisioning-form";
 
 type AdminView = "overview" | "access" | "organization" | "audit" | "settings";
@@ -69,7 +69,7 @@ function AdminOverview() {
         <li><strong>Operational ownership</strong><span>Engagement accountability remains with the assigned team.</span></li>
       </ul>
     </section>
-    {prototypeMode ? <section className="panel admin-access-panel" aria-labelledby="admin-access-title"><SectionHeading detail="Role and scope setup is paused while the sanitized prototype runs under one audited operator." title="Super Admin mode" /><p id="admin-access-title">Super Admin has access to every module for this calibration period. Role-based access will be restored before live operation.</p></section> : <section className="panel admin-access-panel" aria-labelledby="admin-access-title"><SectionHeading detail="The lens changes visibility and action boundaries in this prototype." title={`Current access · ${workflowPerspectiveLabel(workPerspective)}`} /><div className="admin-access-grid" id="admin-access-title">{moduleLabels.map(([module, label]) => <div className="admin-access-row" key={module}><strong>{label}</strong><span className={`admin-access-level admin-access-level--${accessMap[module].toLowerCase()}`}>{accessLevelLabel(accessMap[module])}</span></div>)}</div><p className="admin-placeholder-note">RACI describes accountability; this access view only simulates capability and scope. Server-side authorization remains authoritative.</p></section>}
+    {prototypeMode ? <section className="panel admin-access-panel" aria-labelledby="admin-access-title"><SectionHeading detail="Role and scope setup is paused while the sanitized prototype runs under one audited operator." title="Super Admin mode" /><p id="admin-access-title">Super Admin has access to every module for this calibration period. Role-based access will be restored before live operation.</p></section> : <section className="panel admin-access-panel" aria-labelledby="admin-access-title"><SectionHeading detail="What your account can open and do, from your effective capabilities." title="Your access" /><div className="admin-access-grid" id="admin-access-title">{moduleLabels.map(([module, label]) => <div className="admin-access-row" key={module}><strong>{label}</strong><span className={`admin-access-level admin-access-level--${accessMap[module].toLowerCase()}`}>{accessLevelLabel(accessMap[module])}</span></div>)}</div><p className="admin-placeholder-note">RACI describes accountability; this summary reflects your capabilities. Server-side authorization remains authoritative.</p></section>}
     <AdminDataOverview />
   </>;
 }
@@ -273,7 +273,7 @@ function AdminDataOverview() {
     ];
 
   return <section className="panel admin-data-panel" aria-labelledby="admin-data-title">
-    <SectionHeading detail="Read-only cross-module picture for the Super Admin lens." title="All A&T data" />
+    <SectionHeading detail="Read-only cross-module picture within your access." title="All A&T data" />
     <div className="admin-data-grid" id="admin-data-title">{dataSets.map((item) => <Link className="admin-data-row" href={item.href} key={item.label}><span><strong>{item.label}</strong><small>{item.detail}</small></span><b>{item.value}</b><span aria-hidden="true">→</span></Link>)}</div>
     <p className="admin-placeholder-note">This is a consolidated view, not a second source of truth. Open a module to act on its governed records.</p>
   </section>;
