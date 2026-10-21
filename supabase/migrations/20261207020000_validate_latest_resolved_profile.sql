@@ -216,3 +216,40 @@ begin
   );
 end;
 $$;
+
+-- Separation is between people, not names: two staff may share a display
+-- name. Each role is identified by its Team user id when the profile carries
+-- one, and by its label only when it does not.
+create or replace function public.enforce_tax_profile_assignment_separation()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  preparer text;
+  checker text;
+  reviewer text;
+  preparer_key text;
+  checker_key text;
+  reviewer_key text;
+begin
+  if new.state = 'active' then
+    preparer := nullif(trim(new.assignment_data ->> 'preparer'), '');
+    checker := nullif(trim(new.assignment_data ->> 'checker'), '');
+    reviewer := nullif(trim(new.assignment_data ->> 'reviewer'), '');
+    preparer_key := coalesce('id:' || nullif(trim(new.assignment_data ->> 'preparerUserId'), ''), 'label:' || lower(preparer));
+    checker_key := coalesce('id:' || nullif(trim(new.assignment_data ->> 'checkerUserId'), ''), 'label:' || lower(checker));
+    reviewer_key := coalesce('id:' || nullif(trim(new.assignment_data ->> 'reviewerUserId'), ''), 'label:' || lower(reviewer));
+    if preparer is null or checker is null or reviewer is null
+       or lower(preparer) in ('unassigned', 'not configured')
+       or lower(checker) in ('unassigned', 'not configured')
+       or lower(reviewer) in ('unassigned', 'not configured')
+       or preparer_key = checker_key
+       or preparer_key = reviewer_key
+       or checker_key = reviewer_key then
+      raise exception using errcode = '22023', message = 'An active Tax Profile requires distinct Preparer, Checker, and Reviewer actors.';
+    end if;
+  end if;
+  return new;
+end;
+$$;

@@ -34,6 +34,12 @@ describe("validate latest resolved Tax Profile migration", () => {
     expect(migration).toContain("order by profile.version_number desc, profile.created_at desc");
   });
 
+  it("separates owners by user id so two staff who share a name can both be assigned", () => {
+    expect(migration).toContain("create or replace function public.enforce_tax_profile_assignment_separation()");
+    expect(migration).toContain("preparer_key := coalesce('id:' || nullif(trim(new.assignment_data ->> 'preparerUserId'), ''), 'label:' || lower(preparer));");
+    expect(migration).toContain("set search_path = public, pg_temp");
+  });
+
   it("treats placeholder values as missing facts", () => {
     expect(migration).toContain("in ('unassigned', 'unresolved', 'needs review', 'not configured') then");
   });
