@@ -169,7 +169,7 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
   const profileData = profileSource && typeof profileSource === "object" && !Array.isArray(profileSource)
     ? profileSource as Record<string, unknown>
     : undefined;
-  if (profileData) errors.push(...clientProfileControlErrors(profileData));
+  if (profileData) errors.push(...clientProfileControlErrors(profileData, { sourceSystem: sourceSystem as ManualClientSetupInput["sourceSystem"] | undefined }));
 
   const profileText = (key: string, maxLength: number) => {
     if (!profileData) return undefined;
@@ -203,14 +203,8 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
   if (goLiveDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(goLiveDate)) errors.push("profileData.goLiveDate must use YYYY-MM-DD.");
   const firstPeriodToFile = profileText("firstPeriodToFile", 7);
   if (firstPeriodToFile !== undefined && !/^\d{4}-\d{2}$/.test(firstPeriodToFile)) errors.push("profileData.firstPeriodToFile must use YYYY-MM.");
-  if (goLiveDate && firstPeriodToFile && /^\d{4}-\d{2}$/.test(firstPeriodToFile) && firstPeriodToFile < goLiveDate.slice(0, 7)) {
-    errors.push("profileData.firstPeriodToFile cannot be before the go-live month.");
-  }
   // A SharePoint link or a shared-drive path; it is a location reference, not a fetched URL.
   const permanentFileLink = profileText("permanentFileLink", 240);
-  if (permanentFileLink && !isPermanentFileLocation(permanentFileLink, readText(source, "sourceSystem") as ManualClientSetupInput["sourceSystem"] | undefined)) {
-    errors.push("profileData.permanentFileLink must be a SharePoint link (https://…), a network share (\\\\server\\share) or a mapped drive path (S:\\…).");
-  }
   const enateSetup = profileText("enateSetup", 32);
   if (enateSetup !== undefined && !["Yes", "No", "Unknown"].includes(enateSetup)) errors.push("profileData.enateSetup must be Yes, No, or Unknown.");
   const paymentRoute = profileText("paymentRoute", 32);

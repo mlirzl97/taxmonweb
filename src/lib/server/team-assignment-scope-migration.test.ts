@@ -47,6 +47,12 @@ describe("single open team assignment migration", () => {
     expect(migration).toContain("perform 1 from public.registration_units unit where unit.id = new.registration_unit_id for update;");
   });
 
+  it("lets an earlier correction cancel a scheduled change that has not started", () => {
+    expect(migration).toContain("while found and current_assignment.effective_from > new.effective_from\n            and current_assignment.effective_from > current_date loop");
+    expect(migration).toContain("while found and current_scope.effective_from > new.effective_from\n            and current_scope.effective_from > current_date loop");
+    expect(migration).toContain("Cancelling this scheduled move is outside the caller''s authority.");
+  });
+
   it("refuses an unknown tower instead of widening scope to its cluster", () => {
     expect(migration).toContain("The selected Tower is not a single active tower.");
     expect(migration).toContain("The selected Cluster is not a single active cluster.");

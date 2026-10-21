@@ -1,5 +1,6 @@
 import type { BirOfficeOption } from "./bir-office-reference";
 import { filingChannels } from "./tax-foundation-catalog";
+import { isPermanentFileLocation } from "./manual-client-setup";
 
 /**
  * The live client flow loads these references from the governed BIR Center
@@ -92,7 +93,7 @@ export function isIsoDate(value: string | undefined): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
 }
 
-export function clientProfileControlErrors(profile: Record<string, unknown>): string[] {
+export function clientProfileControlErrors(profile: Record<string, unknown>, options: { sourceSystem?: Parameters<typeof isPermanentFileLocation>[1] } = {}): string[] {
   const errors: string[] = [];
   const check = (key: string, options: readonly string[]) => {
     const value = profile[key];
@@ -116,6 +117,15 @@ export function clientProfileControlErrors(profile: Record<string, unknown>): st
   for (const key of dates) {
     const value = profile[key];
     if (value !== undefined && value !== null && value !== "" && (typeof value !== "string" || !isIsoDate(value.trim()))) errors.push(`profileData.${key} must use YYYY-MM-DD.`);
+  }
+  const firstPeriod = profile.firstPeriodToFile;
+  if (firstPeriod !== undefined && firstPeriod !== null && firstPeriod !== "") {
+    if (typeof firstPeriod !== "string" || !/^\d{4}-\d{2}$/.test(firstPeriod.trim())) errors.push("profileData.firstPeriodToFile must use YYYY-MM.");
+    else if (typeof profile.goLiveDate === "string" && isIsoDate(profile.goLiveDate.trim()) && firstPeriod.trim() < profile.goLiveDate.trim().slice(0, 7)) errors.push("profileData.firstPeriodToFile cannot be before the go-live month.");
+  }
+  const fileLocation = profile.permanentFileLink;
+  if (fileLocation !== undefined && fileLocation !== null && fileLocation !== "" && (typeof fileLocation !== "string" || fileLocation.length > 240 || !isPermanentFileLocation(fileLocation, options.sourceSystem))) {
+    errors.push("profileData.permanentFileLink must be a SharePoint link (https://…), a network share (\\\\server\\share) or a mapped drive path (S:\\…).");
   }
   return errors;
 }

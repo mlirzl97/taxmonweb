@@ -271,6 +271,34 @@ begin
         and existing.effective_to is null
       order by existing.effective_from desc, existing.assigned_at desc
       limit 1;
+      -- A change scheduled for a later date has not happened yet. An earlier
+      -- correction cancels it (kept as a zero-length row) and reopens the
+      -- assignment it was going to end, instead of being refused.
+      while found and current_assignment.effective_from > new.effective_from
+            and current_assignment.effective_from > current_date loop
+        update public.registration_unit_team_assignments
+           set effective_to = current_assignment.effective_from - 1
+         where id = current_assignment.id;
+        update public.registration_unit_team_assignments previous
+           set effective_to = null
+         where previous.id = (
+           select earlier.id
+           from public.registration_unit_team_assignments earlier
+           where earlier.registration_unit_id = new.registration_unit_id
+             and earlier.assignment_role = team_role
+             and earlier.effective_to = current_assignment.effective_from - 1
+             and earlier.effective_from < current_assignment.effective_from
+           order by earlier.effective_from desc, earlier.assigned_at desc
+           limit 1
+         );
+        select existing.* into current_assignment
+        from public.registration_unit_team_assignments existing
+        where existing.registration_unit_id = new.registration_unit_id
+          and existing.assignment_role = team_role
+          and existing.effective_to is null
+        order by existing.effective_from desc, existing.assigned_at desc
+        limit 1;
+      end loop;
 
       if not found and assignee_label is null then
         continue;
@@ -360,6 +388,34 @@ begin
         and scope.effective_to is null
       order by scope.effective_from desc, scope.assigned_at desc
       limit 1;
+      -- Likewise, an earlier correction cancels a scheduled move that has not
+      -- started, if the caller has authority over the unit it was moving to.
+      while found and current_scope.effective_from > new.effective_from
+            and current_scope.effective_from > current_date loop
+        if not public.can_manage_organization_unit(current_scope.organization_unit_id) then
+          raise exception using errcode = '42501', message = 'Cancelling this scheduled move is outside the caller''s authority.';
+        end if;
+        update public.registration_unit_scope_assignments
+           set effective_to = current_scope.effective_from - 1
+         where id = current_scope.id;
+        update public.registration_unit_scope_assignments previous
+           set effective_to = null
+         where previous.id = (
+           select earlier.id
+           from public.registration_unit_scope_assignments earlier
+           where earlier.registration_unit_id = new.registration_unit_id
+             and earlier.effective_to = current_scope.effective_from - 1
+             and earlier.effective_from < current_scope.effective_from
+           order by earlier.effective_from desc, earlier.assigned_at desc
+           limit 1
+         );
+        select scope.* into current_scope
+        from public.registration_unit_scope_assignments scope
+        where scope.registration_unit_id = new.registration_unit_id
+          and scope.effective_to is null
+        order by scope.effective_from desc, scope.assigned_at desc
+        limit 1;
+      end loop;
       current_scope_unit_id := case when found then current_scope.organization_unit_id else null end;
       if current_scope_unit_id is distinct from resolved_scope_unit_id then
         -- Moving a client needs authority over where it is and where it goes;
