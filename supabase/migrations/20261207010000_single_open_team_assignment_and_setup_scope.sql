@@ -24,6 +24,42 @@ alter table public.registration_unit_scope_assignments
   add constraint registration_unit_scope_dates_check
   check (effective_to is null or effective_to >= effective_from - 1);
 
+-- One-time repair of rows the old trigger piled up. Placeholder
+-- "Unassigned" rows are closed as superseded, then every older open row for a
+-- unit and role is closed the day before the newest open row began. Rows are
+-- closed, never deleted, so the history stays inspectable.
+update public.registration_unit_team_assignments placeholder
+   set effective_to = placeholder.effective_from - 1
+ where placeholder.effective_to is null
+   and placeholder.user_id is null
+   and lower(coalesce(placeholder.assignee_label, '')) in ('', 'unassigned', 'unresolved');
+
+with ranked as (
+  select id, effective_from,
+         first_value(effective_from) over (partition by registration_unit_id, assignment_role order by effective_from desc, assigned_at desc) as newest_from,
+         row_number() over (partition by registration_unit_id, assignment_role order by effective_from desc, assigned_at desc) as position
+    from public.registration_unit_team_assignments
+   where effective_to is null
+)
+update public.registration_unit_team_assignments assignment
+   set effective_to = ranked.newest_from - 1
+  from ranked
+ where assignment.id = ranked.id
+   and ranked.position > 1;
+
+with ranked as (
+  select id,
+         first_value(effective_from) over (partition by registration_unit_id order by effective_from desc, assigned_at desc) as newest_from,
+         row_number() over (partition by registration_unit_id order by effective_from desc, assigned_at desc) as position
+    from public.registration_unit_scope_assignments
+   where effective_to is null
+)
+update public.registration_unit_scope_assignments scope
+   set effective_to = ranked.newest_from - 1
+  from ranked
+ where scope.id = ranked.id
+   and ranked.position > 1;
+
 create or replace function public.sync_tax_profile_relational_context()
 returns trigger
 language plpgsql
@@ -176,13 +212,15 @@ begin
       if lower(coalesce(assignee_label, '')) in ('unassigned', 'unresolved') then
         assignee_label := null;
       end if;
+      -- A label links to a person only when exactly one active user carries
+      -- it; an ambiguous name stays unresolved instead of picking someone.
       resolved_user_id := null;
       if assignee_label is not null then
-        select app_user.id into resolved_user_id
+        select min(app_user.id::text)::uuid into resolved_user_id
         from public.app_users app_user
         where lower(app_user.display_name) = lower(assignee_label)
-        order by app_user.is_active desc
-        limit 1;
+          and app_user.is_active
+        having count(*) = 1;
       end if;
 
       select existing.* into current_assignment
@@ -237,6 +275,12 @@ begin
       from public.organization_units unit
       where unit.unit_kind = 'tower' and unit.active and lower(unit.name) = lower(scope_label)
       having count(*) = 1;
+    end if;
+    -- A named tower that does not resolve is refused, never widened to its cluster.
+    if resolved_scope_unit_id is null
+       and nullif(trim(coalesce(new.assignment_data ->> 'tower', '')), '') is not null
+       and lower(trim(new.assignment_data ->> 'tower')) not in ('unassigned', 'unresolved') then
+      raise exception using errcode = '22023', message = 'The selected Tower is not a single active tower.';
     end if;
     -- A tower must belong to the cluster submitted with it.
     if resolved_scope_unit_id is not null

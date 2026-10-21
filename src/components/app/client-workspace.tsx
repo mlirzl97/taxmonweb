@@ -556,8 +556,8 @@ function useLiveAssignmentOptions(live: boolean): LiveAssignmentOptions | null {
       const names = (keys: readonly string[]) => engagementStaff.filter((member) => member.roleKey && keys.includes(member.roleKey)).map((member) => member.name).sort((left, right) => left.localeCompare(right));
       setOptions({
         preparers: names(["team_member"]),
-        checkers: names(["team_member", "leader"]),
-        reviewers: names(["leader"]),
+        checkers: names(["team_member", "leader", "reviewer"]),
+        reviewers: names(["leader", "reviewer"]),
         clusters: (units.data ?? []).filter((unit) => unit.unit_kind === "cluster").map((unit) => unit.name),
         towers: (units.data ?? []).filter((unit) => unit.unit_kind === "tower").map((unit) => ({ name: unit.name, cluster: (units.data ?? []).find((parent) => parent.id === unit.parent_id && parent.unit_kind === "cluster")?.name ?? null })),
         error: null,

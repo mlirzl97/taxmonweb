@@ -55,6 +55,16 @@ function liveClient(overrides: Record<string, unknown> = {}) {
 }
 
 describe("live client adapter", () => {
+  it("derives the cluster from a tower scope's parent", () => {
+    const base = liveClient();
+    const entity = base.taxpayer_entities[0];
+    const unit = entity.registration_units[0];
+    const client = { ...base, taxpayer_entities: [{ ...entity, registration_units: [{ ...unit, registration_unit_scope_assignments: [{ organization_units: { code: "CL-BEATO-T1", name: "Brgy. Beato · Tower 1", unit_kind: "tower", parent: { name: "Brgy. Beato", unit_kind: "cluster" } } }] }] }] };
+    const projected = portfolioClientToFixtureClient(client as unknown as Parameters<typeof portfolioClientToFixtureClient>[0]);
+    expect(projected.assignment.tower).toBe("Brgy. Beato · Tower 1");
+    expect(projected.assignment.cluster).toBe("Brgy. Beato");
+  });
+
   it("projects normalized additional engagements without inventing ownership", () => {
     const client = liveClient({
       contract_repositories: [{

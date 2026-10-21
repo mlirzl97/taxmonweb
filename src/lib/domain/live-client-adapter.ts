@@ -14,9 +14,12 @@ function scopeForClient(client: PortfolioClient): { tower: FixtureScope; cluster
     .flatMap((unit) => unit.registration_unit_scope_assignments)
     .filter((assignment) => (!assignment.effective_from || assignment.effective_from <= today) && (!assignment.effective_to || assignment.effective_to >= today))
     .flatMap((assignment) => Array.isArray(assignment.organization_units) ? assignment.organization_units : [assignment.organization_units])
-    .filter((candidate): candidate is { code: string; name: string; unit_kind: string } => Boolean(candidate?.code || candidate?.name));
+    .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate?.code || candidate?.name));
   const resolved = organizationUnits.find((candidate) => candidate.unit_kind === "tower" && !/review|required|unresolved|unknown/i.test(candidate.name));
-  const resolvedCluster = organizationUnits.find((candidate) => candidate.unit_kind === "cluster" && !/review|required|unresolved|unknown/i.test(candidate.name));
+  const towerParent = resolved ? (Array.isArray(resolved.parent) ? resolved.parent[0] : resolved.parent) : null;
+  // A tower scope implies its parent cluster; an explicit cluster scope still wins.
+  const resolvedCluster = organizationUnits.find((candidate) => candidate.unit_kind === "cluster" && !/review|required|unresolved|unknown/i.test(candidate.name))
+    ?? (towerParent?.unit_kind === "cluster" ? towerParent : undefined);
   return {
     // The adapter keeps the legacy UI type for compatibility, but the runtime
     // sentinel intentionally does not match any selectable tower filter.

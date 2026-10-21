@@ -1,6 +1,13 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ManualClientSetupInput } from "@/lib/domain/manual-client-setup";
 
+type ScopeOrganizationUnit = {
+  code: string;
+  name: string;
+  unit_kind: string;
+  parent?: { name: string; unit_kind: string } | Array<{ name: string; unit_kind: string }> | null;
+};
+
 export type PortfolioClient = {
   id: string;
   reference_code: string;
@@ -122,7 +129,7 @@ export type PortfolioClient = {
         registration_unit_scope_assignments: Array<{
           effective_from?: string;
           effective_to?: string | null;
-          organization_units: { code: string; name: string; unit_kind: string } | Array<{ code: string; name: string; unit_kind: string }> | null;
+          organization_units: ScopeOrganizationUnit | ScopeOrganizationUnit[] | null;
         }>;
         registration_unit_team_assignments: Array<{
           id: string;
@@ -327,7 +334,7 @@ export async function listPortfolioClients(options: { detail?: "registry" | "ful
         ,registration_unit_scope_assignments (
           effective_from,
           effective_to,
-          organization_units (code, name, unit_kind)
+          organization_units (code, name, unit_kind, parent:parent_id (name, unit_kind))
         )
         ,registration_unit_team_assignments (
           id,

@@ -28,6 +28,20 @@ describe("single open team assignment migration", () => {
     expect(migration).toContain("The selected Tower does not belong to the selected Cluster.");
   });
 
+  it("links a label to a person only when exactly one active user carries it", () => {
+    expect(migration).toMatch(/lower\(app_user\.display_name\) = lower\(assignee_label\)\s+and app_user\.is_active\s+having count\(\*\) = 1;/);
+  });
+
+  it("refuses an unknown tower instead of widening scope to its cluster", () => {
+    expect(migration).toContain("The selected Tower is not a single active tower.");
+  });
+
+  it("repairs piled-up open rows once by closing them, never deleting", () => {
+    expect(migration).toContain("set effective_to = placeholder.effective_from - 1");
+    expect(migration).toContain("set effective_to = ranked.newest_from - 1");
+    expect(migration).not.toMatch(/delete from public\.registration_unit_(team|scope)_assignments/);
+  });
+
   it("keeps the trigger function private", () => {
     expect(migration).toContain("revoke execute on function public.sync_tax_profile_relational_context() from public, anon, authenticated;");
   });
