@@ -60,7 +60,12 @@ describe("single open team assignment migration", () => {
   });
 
   it("resolves a Tower or Cluster only when it is in effect on the change date", () => {
-    expect(migration.match(/and unit\.effective_from <= new\.effective_from and \(unit\.effective_to is null or unit\.effective_to >= new\.effective_from\)/g)?.length).toBe(2);
+    expect(migration.match(/and unit\.effective_from <= new\.effective_from and \(unit\.effective_to is null or unit\.effective_to >= new\.effective_from\)/g)?.length).toBe(3);
+  });
+
+  it("resolves a Tower within the Cluster submitted with it, since tower names repeat across clusters", () => {
+    expect(migration).toContain("and lower(cluster_unit.name) = lower(cluster_label)");
+    expect(migration).toContain("message = 'The selected Tower does not belong to the selected Cluster.'");
   });
 
   it("assigns only staff within the signed-in caller's Team scope", () => {
@@ -74,7 +79,9 @@ describe("single open team assignment migration", () => {
 
   it("repairs piled-up open rows once by closing them, never deleting", () => {
     expect(migration).toContain("set effective_to = placeholder.effective_from - 1");
-    expect(migration).toContain("set effective_to = ranked.newest_from - 1");
+    expect(migration).toContain("set effective_to = ranked.next_from - 1");
+    expect(migration).toContain("lag(effective_from) over (partition by registration_unit_id, assignment_role order by effective_from desc, assigned_at desc) as next_from");
+    expect(migration).not.toContain("first_value(effective_from)");
     expect(migration).not.toMatch(/delete from public\.registration_unit_(team|scope)_assignments/);
   });
 

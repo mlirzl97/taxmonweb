@@ -26,7 +26,8 @@ alter table public.registration_unit_scope_assignments
 
 -- One-time repair of rows the old trigger piled up. Placeholder
 -- "Unassigned" rows are closed as superseded, then every older open row for a
--- unit and role is closed the day before the newest open row began. Rows are
+-- unit and role is closed the day before the next newer open row began, so
+-- repaired intervals never overlap. Rows are
 -- closed, never deleted, so the history stays inspectable.
 update public.registration_unit_team_assignments placeholder
    set effective_to = placeholder.effective_from - 1
@@ -36,26 +37,26 @@ update public.registration_unit_team_assignments placeholder
 
 with ranked as (
   select id, effective_from,
-         first_value(effective_from) over (partition by registration_unit_id, assignment_role order by effective_from desc, assigned_at desc) as newest_from,
+         lag(effective_from) over (partition by registration_unit_id, assignment_role order by effective_from desc, assigned_at desc) as next_from,
          row_number() over (partition by registration_unit_id, assignment_role order by effective_from desc, assigned_at desc) as position
     from public.registration_unit_team_assignments
    where effective_to is null
 )
 update public.registration_unit_team_assignments assignment
-   set effective_to = ranked.newest_from - 1
+   set effective_to = ranked.next_from - 1
   from ranked
  where assignment.id = ranked.id
    and ranked.position > 1;
 
 with ranked as (
   select id,
-         first_value(effective_from) over (partition by registration_unit_id order by effective_from desc, assigned_at desc) as newest_from,
+         lag(effective_from) over (partition by registration_unit_id order by effective_from desc, assigned_at desc) as next_from,
          row_number() over (partition by registration_unit_id order by effective_from desc, assigned_at desc) as position
     from public.registration_unit_scope_assignments
    where effective_to is null
 )
 update public.registration_unit_scope_assignments scope
-   set effective_to = ranked.newest_from - 1
+   set effective_to = ranked.next_from - 1
   from ranked
  where scope.id = ranked.id
    and ranked.position > 1;
@@ -82,6 +83,7 @@ declare
   team_role text;
   submitted_user_id uuid;
   scope_label text;
+  cluster_label text;
   resolved_scope_unit_id uuid;
   current_scope_unit_id uuid;
   current_scope public.registration_unit_scope_assignments;
@@ -343,32 +345,38 @@ begin
     -- ambiguous or unknown label never guesses and leaves the scope untouched.
     resolved_scope_unit_id := null;
     scope_label := nullif(trim(coalesce(new.assignment_data ->> 'tower', '')), '');
+    if lower(coalesce(scope_label, '')) in ('unassigned', 'unresolved') then
+      scope_label := null;
+    end if;
+    cluster_label := nullif(trim(coalesce(new.assignment_data ->> 'cluster', '')), '');
+    if lower(coalesce(cluster_label, '')) in ('unassigned', 'unresolved') then
+      cluster_label := null;
+    end if;
+    -- Tower names repeat across clusters, so a tower resolves within the
+    -- cluster submitted with it.
     if scope_label is not null then
       select min(unit.id::text)::uuid into resolved_scope_unit_id
       from public.organization_units unit
       where unit.unit_kind = 'tower' and unit.active and lower(unit.name) = lower(scope_label)
         and unit.effective_from <= new.effective_from and (unit.effective_to is null or unit.effective_to >= new.effective_from)
+        and (cluster_label is null or exists (
+          select 1 from public.organization_units cluster_unit
+          where cluster_unit.id = unit.parent_id
+            and cluster_unit.unit_kind = 'cluster'
+            and lower(cluster_unit.name) = lower(cluster_label)
+        ))
       having count(*) = 1;
-    end if;
-    -- A named tower that does not resolve is refused, never widened to its cluster.
-    if resolved_scope_unit_id is null
-       and nullif(trim(coalesce(new.assignment_data ->> 'tower', '')), '') is not null
-       and lower(trim(new.assignment_data ->> 'tower')) not in ('unassigned', 'unresolved') then
-      raise exception using errcode = '22023', message = 'The selected Tower is not a single active tower.';
-    end if;
-    -- A tower must belong to the cluster submitted with it.
-    if resolved_scope_unit_id is not null
-       and nullif(trim(coalesce(new.assignment_data ->> 'cluster', '')), '') is not null
-       and lower(trim(new.assignment_data ->> 'cluster')) not in ('unassigned', 'unresolved')
-       and not exists (
-         select 1
-         from public.organization_units tower_unit
-         join public.organization_units cluster_unit on cluster_unit.id = tower_unit.parent_id
-         where tower_unit.id = resolved_scope_unit_id
-           and cluster_unit.unit_kind = 'cluster'
-           and lower(cluster_unit.name) = lower(trim(new.assignment_data ->> 'cluster'))
-       ) then
-      raise exception using errcode = '22023', message = 'The selected Tower does not belong to the selected Cluster.';
+      -- A named tower that does not resolve is refused, never widened to its cluster.
+      if resolved_scope_unit_id is null then
+        if cluster_label is not null and exists (
+          select 1 from public.organization_units unit
+          where unit.unit_kind = 'tower' and unit.active and lower(unit.name) = lower(scope_label)
+            and unit.effective_from <= new.effective_from and (unit.effective_to is null or unit.effective_to >= new.effective_from)
+        ) then
+          raise exception using errcode = '22023', message = 'The selected Tower does not belong to the selected Cluster.';
+        end if;
+        raise exception using errcode = '22023', message = 'The selected Tower is not a single active tower.';
+      end if;
     end if;
     if resolved_scope_unit_id is null then
       scope_label := nullif(trim(coalesce(new.assignment_data ->> 'cluster', '')), '');
