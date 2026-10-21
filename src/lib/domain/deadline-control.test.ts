@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixtureClients } from "@/lib/fixtures";
-import { buildDeadlineControlRows, deadlineControlSummary, earliestApplicableDeadline, getClientServiceCalendarRows } from "./deadline-control";
+import { buildDeadlineControlRows, compliancePeriodStartFromLabel, deadlineControlSummary, earliestApplicableDeadline, getClientServiceCalendarRows } from "./deadline-control";
 
 describe("deadline control projection", () => {
   it("generates a deterministic annual set with separate statutory and TMF dates", () => {
@@ -170,8 +170,34 @@ describe("deadline control projection", () => {
     expect(projection.rows[0]?.publishedOperationalDeadline).toBe("2026-04-25");
   });
 
+  it("applies the first period to file to the compliance period, not the due month", () => {
+    const client = fixtureClients.find((item) => item.id === "fixture-client-03");
+    const template = buildDeadlineControlRows(2026).find((row) => row.formNumber === "2550Q" && row.activityPeriod === "Q1 2026");
+    expect(client).toBeDefined();
+    expect(template).toBeDefined();
+    const julyStart = { ...client!, entities: [{ ...client!.entities[0], profile: { ...client!.entities[0].profile, goLiveDate: "2026-01-01", firstPeriodToFile: "2026-07" } }] };
+    const released = (id: string, periodStartDate: string, deadline: string) => ({ ...template!, id, periodStartDate, publicationStatus: "published" as const, publishedOperationalDeadline: deadline, adjustedStatutoryDeadline: deadline });
+    const projection = getClientServiceCalendarRows(julyStart, 2026, {}, [
+      released("june-period-due-july", "2026-06-01", "2026-07-10"),
+      released("july-period", "2026-07-01", "2026-08-10"),
+      released("unknown-period", "", "2026-08-15"),
+    ]);
+    expect(projection.rows.map((row) => row.id)).toEqual(["july-period", "unknown-period"]);
+  });
+
   it("uses the earliest applicable component deadline as the master default", () => {
     expect(earliestApplicableDeadline(["2026-10-25", "2026-10-15", null])).toBe("2026-10-15");
     expect(earliestApplicableDeadline([null, undefined])).toBeNull();
+  });
+
+  it("reads the compliance period from the BIR calendar wording, never the due month", () => {
+    expect(compliancePeriodStartFromLabel("BIR Form 1601-C (Monthly Remittance Return of Income Taxes Withheld on Compensation) - Non-eFPS Filers. Month of December 2025")).toBe("2025-12-01");
+    expect(compliancePeriodStartFromLabel("BIR Form 1601-FQ (Quarterly Remittance Return of Final Income Taxes Withheld) and Quarterly Alphalist of Payees (QAP) - eFPS & Non-eFPS Filers. For the Quarter ending September 30, 2026")).toBe("2026-07-01");
+    expect(compliancePeriodStartFromLabel("BIR Form 2550Q (Quarterly Value-Added Tax Return) - eFPS & Non-eFPS Filers. Fiscal Quarter ending July 31, 2026")).toBe("2026-05-01");
+    expect(compliancePeriodStartFromLabel("BIR Form 2551Q (Quarterly Percentage Tax Return) - eFPS & Non-eFPS Filers - For the Quarter ending March 31, 2026")).toBe("2026-01-01");
+    expect(compliancePeriodStartFromLabel("Proof of eFiled BIR Form 1702-RT/1702-EX/1702-MX with Audited Financial Statements (AFS) - Fiscal Year ending May 31, 2026")).toBe("2025-06-01");
+    expect(compliancePeriodStartFromLabel("Sworn Declaration of Motels & Other Similar Establishments. Taxable Year 2025")).toBe("2025-01-01");
+    expect(compliancePeriodStartFromLabel("eFILING & PAYMENT (Online/Manual)")).toBeNull();
+    expect(compliancePeriodStartFromLabel(null)).toBeNull();
   });
 });
