@@ -306,8 +306,9 @@ function monthStart(year: number, monthIndex: number) {
 /**
  * Reads the compliance period a calendar row covers from the BIR calendar's own
  * wording ("Month of June 2026", "Quarter ending September 30, 2026", "Fiscal
- * Year ending May 31, 2026", "Taxable Year 2025"). Returns null when the text
- * does not state a period; the due month is never used as a stand-in.
+ * Year ending May 31, 2026", "Calendar Year 2025", "1st Semester of 2026",
+ * "October 1-15, 2026"). Returns null when the text does not state a period;
+ * the due month is never used as a stand-in.
  */
 export function compliancePeriodStartFromLabel(label: string | null | undefined): string | null {
   if (!label) return null;
@@ -319,8 +320,14 @@ export function compliancePeriodStartFromLabel(label: string | null | undefined)
   if (quarter) return monthStart(Number(quarter[2]), calendarMonthNames.indexOf(quarter[1].toLowerCase()) - 2);
   const fiscalYear = new RegExp(`Year ending (${monthPattern}) \\d{1,2}, (\\d{4})`, "i").exec(text);
   if (fiscalYear) return monthStart(Number(fiscalYear[2]), calendarMonthNames.indexOf(fiscalYear[1].toLowerCase()) - 11);
-  const taxableYear = /Taxable Year (\d{4})/i.exec(text);
-  if (taxableYear) return `${taxableYear[1]}-01-01`;
+  const fiscalYearStart = new RegExp(`Fiscal Year beginning (${monthPattern}) \\d{1,2}, (\\d{4})`, "i").exec(text);
+  if (fiscalYearStart) return monthStart(Number(fiscalYearStart[2]), calendarMonthNames.indexOf(fiscalYearStart[1].toLowerCase()));
+  const wholeYear = /(?:Taxable|Calendar) Year (\d{4})/i.exec(text);
+  if (wholeYear) return `${wholeYear[1]}-01-01`;
+  const semester = /\b([12]) ?(?:st|nd) Semester of (\d{4})/i.exec(text);
+  if (semester) return monthStart(Number(semester[2]), semester[1] === "1" ? 0 : 6);
+  const dayRange = new RegExp(`(${monthPattern}) \\d{1,2} ?- ?\\d{1,2}, (\\d{4})`, "i").exec(text);
+  if (dayRange) return monthStart(Number(dayRange[2]), calendarMonthNames.indexOf(dayRange[1].toLowerCase()));
   return null;
 }
 

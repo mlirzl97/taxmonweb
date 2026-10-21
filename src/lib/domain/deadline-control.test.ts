@@ -197,6 +197,12 @@ describe("deadline control projection", () => {
     expect(compliancePeriodStartFromLabel("BIR Form 2551Q (Quarterly Percentage Tax Return) - eFPS & Non-eFPS Filers - For the Quarter ending March 31, 2026")).toBe("2026-01-01");
     expect(compliancePeriodStartFromLabel("Proof of eFiled BIR Form 1702-RT/1702-EX/1702-MX with Audited Financial Statements (AFS) - Fiscal Year ending May 31, 2026")).toBe("2025-06-01");
     expect(compliancePeriodStartFromLabel("Sworn Declaration of Motels & Other Similar Establishments. Taxable Year 2025")).toBe("2025-01-01");
+    expect(compliancePeriodStartFromLabel("BIR Form 1604-C (Annual Information Return of Income Taxes Withheld on Compensation) and/or BIR Form 1604-F (Annual Information Return of Income Payments Subjected to Final Withholding Taxes) and Related Alphalist. Calendar Year 2025")).toBe("2025-01-01");
+    expect(compliancePeriodStartFromLabel("Engagement Letters and Renewals or Subsequent Agreements for Financial Audit by Independent CPAs. Fiscal Year beginning April 1, 2026")).toBe("2026-04-01");
+    expect(compliancePeriodStartFromLabel("Contract of Lease and Lessee Information Statement and Other Attachments by Lessors/Sub-Lessors of Commercial Establishments, Buildings or Spaces for Tenants. 2nd Semester of 2025")).toBe("2025-07-01");
+    expect(compliancePeriodStartFromLabel("Sworn Statement by every Lessee/Concessionaire/Owner or Operator of Mines & Quarry - 1 st Semester of 2026")).toBe("2026-01-01");
+    expect(compliancePeriodStartFromLabel("Consolidated Return of All Transactions based on the Reconciled Data of Stockbrokers. March 16 - 31, 2026")).toBe("2026-03-01");
+    expect(compliancePeriodStartFromLabel("Consolidated Return of All Transactions based on the Reconciled Data of Stockbrokers. December 16-31, 2025")).toBe("2025-12-01");
     expect(compliancePeriodStartFromLabel("eFILING & PAYMENT (Online/Manual)")).toBeNull();
     expect(compliancePeriodStartFromLabel(null)).toBeNull();
   });
