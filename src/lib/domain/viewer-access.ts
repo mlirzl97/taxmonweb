@@ -49,6 +49,11 @@ function hasAny(viewer: ViewerAccess, capabilities: readonly string[]) {
   return capabilities.some((capability) => viewer.capabilities.has(capability));
 }
 
+/** True when the viewer can execute work at all, whether assigned or by override. */
+export function canViewerExecuteWork(viewer: ViewerAccess): boolean {
+  return viewer.capabilities.has("ExecuteGeneratedComplianceWork");
+}
+
 export function canViewerOverride(viewer: ViewerAccess): boolean {
   return hasAny(viewer, elevatedCapabilities);
 }
@@ -90,8 +95,9 @@ export function canViewerPerformTeamAction(viewer: ViewerAccess, action: TeamAct
 }
 
 /**
- * The actual actor must be the person assigned to the role, unless they hold
- * elevated authority (which the command still requires a reason for).
+ * Work commands require ExecuteGeneratedComplianceWork at the API boundary.
+ * Within that, the actual actor must be the person assigned to the role, unless
+ * they also hold elevated authority (which the command still requires a reason for).
  */
 export function canViewerActOnWorkRole(
   viewer: ViewerAccess,
@@ -99,6 +105,6 @@ export function canViewerActOnWorkRole(
   role: WorkRoleOwner,
 ): boolean {
   if (role === "TAX_CONTROL") return hasAny(viewer, ["ManageWorkPeriodLock", "PerformElevatedOverride"]);
-  if (canViewerOverride(viewer)) return true;
-  return viewer.capabilities.has("ExecuteGeneratedComplianceWork") && assignedUserIds?.[role] === viewer.userId;
+  if (!viewer.capabilities.has("ExecuteGeneratedComplianceWork")) return false;
+  return assignedUserIds?.[role] === viewer.userId || canViewerOverride(viewer);
 }

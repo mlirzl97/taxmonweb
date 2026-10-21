@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { canAccessModule, canManageModuleRecords, canPerformTeamAction, cloneAccessMatrix, isAccessMatrix, moduleAccessForPersona, rbacPersonaDescription, rbacPersonaLabel, type AccessLevel, type AccessMatrix, type ModuleKey, type RbacPersona, type TeamAction } from "@/lib/domain/access";
-import { canViewerActOnWorkRole, canViewerManageModule, canViewerOverride, canViewerPerformTeamAction, isViewerLeader, viewerModuleLevel, type ViewerAccess } from "@/lib/domain/viewer-access";
+import { canViewerActOnWorkRole, canViewerExecuteWork, canViewerManageModule, canViewerOverride, canViewerPerformTeamAction, isViewerLeader, viewerModuleLevel, type ViewerAccess } from "@/lib/domain/viewer-access";
 import { fixtureClients, fixtureClock, fixtureOrgDirectoryMembers, fixtureWork, type FixtureClient, type FixtureDataReadiness, type FixturePaymentApplicability, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
 import { applySavedCalibrationToClient, prototypeClientProfileUpdatedEvent } from "@/lib/domain/client-profile-persistence";
 import { clientIsAssignedForRole, clientMatchesPerspective, staffMemberIdForPerspective } from "@/lib/domain/team";
@@ -697,13 +697,13 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     return Boolean(client && member && (role === "PREPARER" || role === "CHECKER" || role === "REVIEWER") && clientIsAssignedForRole(client, member, role));
   }, [prototypeMode, viewer, workPerspective]);
   const canActOnWorkflow = useCallback((role: WorkflowRole, work?: FixtureWorkItem) => {
-    if (!work && !prototypeMode) return Boolean(viewer && (canViewerOverride(viewer) || viewer.capabilities.has("ExecuteGeneratedComplianceWork")));
+    if (!work && !prototypeMode) return Boolean(viewer && canViewerExecuteWork(viewer));
     if (!work) return workPerspective === "MASTER_ADMIN" || workPerspective === "SUPER_ADMIN" || workPerspective === role;
     return canOperateWorkForRole(work, role);
   }, [canOperateWorkForRole, prototypeMode, viewer, workPerspective]);
   const canActOnProcessStep = useCallback((stepId: string, work?: FixtureWorkItem) => {
     const owner = workflowProcessRole(stepId);
-    if (!work && !prototypeMode) return Boolean(viewer && (canViewerOverride(viewer) || viewer.capabilities.has("ExecuteGeneratedComplianceWork")));
+    if (!work && !prototypeMode) return Boolean(viewer && canViewerExecuteWork(viewer));
     if (!work) return workPerspective === "MASTER_ADMIN" || workPerspective === "SUPER_ADMIN" || (owner === "TAX_CONTROL" ? workPerspective === "TAX_CONTROL" : workPerspective === owner);
     return canOperateWorkForRole(work, owner);
   }, [canOperateWorkForRole, prototypeMode, viewer, workPerspective]);

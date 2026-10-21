@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canViewerActOnWorkRole,
+  canViewerExecuteWork,
   canViewerManageModule,
   canViewerOverride,
   canViewerPerformTeamAction,
@@ -90,6 +91,14 @@ describe("viewer work actions", () => {
     expect(canViewerOverride(hod)).toBe(true);
     expect(canViewerOverride(teamLead)).toBe(false);
     expect(canViewerActOnWorkRole(hod, assigned, "CHECKER")).toBe(true);
+  });
+
+  it("never offers work controls without execute authority, even with elevated capabilities", () => {
+    const maintainOnly = viewer("maint-1", ["ViewScopedPortfolio", "MaintainGeneratedComplianceWork", "PerformElevatedOverride"]);
+    expect(canViewerOverride(maintainOnly)).toBe(true);
+    expect(canViewerExecuteWork(maintainOnly)).toBe(false);
+    expect(canViewerActOnWorkRole(maintainOnly, assigned, "PREPARER")).toBe(false);
+    expect(canViewerActOnWorkRole(maintainOnly, { PREPARER: "maint-1" }, "PREPARER")).toBe(false);
   });
 
   it("limits Tax Control steps to period-lock or override authority", () => {
