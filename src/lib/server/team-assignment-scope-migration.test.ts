@@ -30,7 +30,7 @@ describe("single open team assignment migration", () => {
 
   it("prefers the submitted Team user id and only links a unique, in-effect name", () => {
     expect(migration).toContain("new.assignment_data ->> (team_role || 'UserId')");
-    expect(migration).toContain("is not an active Team member eligible for this role on this date.");
+    expect(migration).toContain("is not an active Team member eligible for this role, within your Team scope, on this date.");
     expect(migration).toMatch(/member\.effective_from <= new\.effective_from[\s\S]*having count\(\*\) = 1;/);
   });
 
@@ -61,6 +61,10 @@ describe("single open team assignment migration", () => {
 
   it("resolves a Tower or Cluster only when it is in effect on the change date", () => {
     expect(migration.match(/and unit\.effective_from <= new\.effective_from and \(unit\.effective_to is null or unit\.effective_to >= new\.effective_from\)/g)?.length).toBe(2);
+  });
+
+  it("assigns only staff within the signed-in caller's Team scope", () => {
+    expect(migration.match(/and \(auth\.uid\(\) is null or public\.can_view_team_member\(app_user\.id\)\)/g)?.length).toBe(2);
   });
 
   it("refuses an unknown tower instead of widening scope to its cluster", () => {

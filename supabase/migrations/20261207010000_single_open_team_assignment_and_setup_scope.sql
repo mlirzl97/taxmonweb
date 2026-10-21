@@ -238,12 +238,14 @@ begin
           and member.effective_from <= new.effective_from
           and (member.effective_to is null or member.effective_to >= new.effective_from)
           and member.operating_model <> 'tax_team'
+          -- A signed-in caller may assign only staff within their own Team scope.
+          and (auth.uid() is null or public.can_view_team_member(app_user.id))
           and member.role_key = any (case team_role
             when 'preparer' then array['team_member']
             when 'checker' then array['team_member', 'leader', 'reviewer']
             else array['leader', 'reviewer'] end);
         if resolved_user_id is null then
-          raise exception using errcode = '22023', message = 'The selected ' || team_role || ' is not an active Team member eligible for this role on this date.';
+          raise exception using errcode = '22023', message = 'The selected ' || team_role || ' is not an active Team member eligible for this role, within your Team scope, on this date.';
         end if;
         -- The recorded label is the person's own name, never the submitted text.
         assignee_label := (select display_name from public.app_users where id = resolved_user_id);
@@ -257,6 +259,8 @@ begin
           and member.effective_from <= new.effective_from
           and (member.effective_to is null or member.effective_to >= new.effective_from)
           and member.operating_model <> 'tax_team'
+          -- A signed-in caller may assign only staff within their own Team scope.
+          and (auth.uid() is null or public.can_view_team_member(app_user.id))
           and member.role_key = any (case team_role
             when 'preparer' then array['team_member']
             when 'checker' then array['team_member', 'leader', 'reviewer']

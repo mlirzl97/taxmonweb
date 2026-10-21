@@ -180,8 +180,10 @@ begin
 end;
 $$;
 
--- The editor and the validate route read "latest" the same way validation
--- does: the highest version number, not the latest effective date.
+-- The editor and the validate route read the newest version already in
+-- effect (by version number, as validation does). A future-dated version only
+-- appears when none is in effect, so scheduled facts never replace the
+-- profile in force today.
 create or replace function public.get_latest_tax_profile_version(
   p_client_reference_code text
 )
@@ -217,7 +219,7 @@ begin
   where entity.client_id = target_client_id
     and registration_unit.active = true
     and public.can_view_registration_unit(registration_unit.id)
-  order by profile.version_number desc, profile.created_at desc
+  order by (profile.effective_from <= current_date) desc, profile.version_number desc, profile.created_at desc
   limit 1;
 
   if latest_profile.id is null then

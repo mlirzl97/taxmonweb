@@ -31,7 +31,7 @@ describe("validate latest resolved Tax Profile migration", () => {
 
   it("reads the latest version by version number, as validation does", () => {
     expect(migration).toContain("create or replace function public.get_latest_tax_profile_version(");
-    expect(migration).toContain("order by profile.version_number desc, profile.created_at desc");
+    expect(migration).toContain("order by (profile.effective_from <= current_date) desc, profile.version_number desc, profile.created_at desc");
   });
 
   it("separates owners by user id so two staff who share a name can both be assigned", () => {
