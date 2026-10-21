@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   canViewerActOnWorkRole,
+  canViewerEditTaxProfile,
   canViewerExecuteWork,
   canViewerManageModule,
   canViewerOverride,
   canViewerPerformTeamAction,
+  canViewerSetDataReadiness,
   canViewerViewModule,
   isViewerLeader,
   viewerModuleLevel,
@@ -104,5 +106,21 @@ describe("viewer work actions", () => {
   it("limits Tax Control steps to period-lock or override authority", () => {
     expect(canViewerActOnWorkRole(staff, assigned, "TAX_CONTROL")).toBe(false);
     expect(canViewerActOnWorkRole(hod, assigned, "TAX_CONTROL")).toBe(true);
+  });
+});
+
+describe("viewer action-specific controls", () => {
+  it("lets work maintenance record Data Readiness without execute authority, as the command allows", () => {
+    const maintainer = viewer("maint-2", ["ViewScopedPortfolio", "MaintainGeneratedComplianceWork"]);
+    expect(canViewerSetDataReadiness(maintainer, assigned)).toBe(true);
+    expect(canViewerSetDataReadiness(staff, assigned)).toBe(true);
+    expect(canViewerSetDataReadiness(viewer("staff-2", ["ExecuteGeneratedComplianceWork"]), assigned)).toBe(false);
+    expect(canViewerSetDataReadiness(viewerOnly, { PREPARER: "viewer-1" })).toBe(false);
+  });
+
+  it("lets Tax Profile correction authority edit the profile without repository maintenance", () => {
+    expect(canViewerEditTaxProfile(viewer("corrector", ["ReviewTaxProfile", "CorrectTaxProfile"]))).toBe(true);
+    expect(canViewerEditTaxProfile(viewer("reviewer", ["ReviewTaxProfile"]))).toBe(false);
+    expect(canViewerEditTaxProfile(hod)).toBe(true);
   });
 });

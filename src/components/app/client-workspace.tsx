@@ -52,7 +52,7 @@ function clientTabFromHash(hash: string): ClientWorkspaceTab {
 }
 
 export function ClientWorkspace({ client, demoMode = false, calibrationEditMode: calibrationEditModeEnabled = false, serverAuthorized = false }: { client: FixtureClient; demoMode?: boolean; calibrationEditMode?: boolean; serverAuthorized?: boolean }) {
-  const { canManageModule, isClientVisible, prototypeMode } = useWorkflow();
+  const { canEditTaxProfile, isClientVisible, prototypeMode } = useWorkflow();
   const [drawer, setDrawer] = useState<DrawerMode>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [profile, setProfile] = useState<FixtureTaxProfile>(() => cloneProfile(client.entities[0].profile));
@@ -113,7 +113,7 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
   }, [client.id, demoMode]);
 
   const calibrationEditMode = hasCalibrationEditAccess(demoMode, calibrationEditModeEnabled);
-  const canEditProfile = canManageModule("clients");
+  const canEditProfile = canEditTaxProfile;
   const editDisabled = !canEditProfile || (!calibrationEditMode && persistenceState !== "available");
   const editTitle = !canEditProfile ? "This access view is read-only for taxpayer setup" : persistenceState === "checking" ? "Checking the saved profile" : persistenceState === "unavailable" ? "This profile is read-only until it is linked to the client repository" : undefined;
 

@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { canAccessModule, canManageModuleRecords, canPerformTeamAction, cloneAccessMatrix, isAccessMatrix, moduleAccessForPersona, rbacPersonaDescription, rbacPersonaLabel, type AccessLevel, type AccessMatrix, type ModuleKey, type RbacPersona, type TeamAction } from "@/lib/domain/access";
-import { canViewerActOnWorkRole, canViewerExecuteWork, canViewerManageModule, canViewerOverride, canViewerPerformTeamAction, isViewerLeader, viewerModuleLevel, type ViewerAccess } from "@/lib/domain/viewer-access";
+import { canViewerActOnWorkRole, canViewerEditTaxProfile, canViewerExecuteWork, canViewerSetDataReadiness, canViewerManageModule, canViewerOverride, canViewerPerformTeamAction, isViewerLeader, viewerModuleLevel, type ViewerAccess } from "@/lib/domain/viewer-access";
 import { fixtureClients, fixtureClock, fixtureOrgDirectoryMembers, fixtureWork, type FixtureClient, type FixtureDataReadiness, type FixturePaymentApplicability, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
 import { applySavedCalibrationToClient, prototypeClientProfileUpdatedEvent } from "@/lib/domain/client-profile-persistence";
 import { clientIsAssignedForRole, clientMatchesPerspective, staffMemberIdForPerspective } from "@/lib/domain/team";
@@ -16,6 +16,11 @@ import { actionForProcessStep, applyWorkflowStepState, autoStartProcessStep, cur
 
 export type WorkflowRole = "PREPARER" | "CHECKER" | "REVIEWER";
 export type WorkflowProcessOwner = WorkflowRole | "TAX_CONTROL";
+
+function assignedUserIdsForWork(work: FixtureWorkItem): Partial<Record<WorkflowRole, string>> {
+  return Object.fromEntries(Object.entries(work.assignedUsers ?? {}).map(([role, user]) => [role, user?.id]));
+}
+
 export type WorkflowPerspective = RbacPersona;
 
 function prototypeClientRegistry() {
@@ -222,6 +227,8 @@ type WorkflowContextValue = {
   /** Tower, Cluster, Tax Control or All A&T scope (live) or a leadership persona (prototype). */
   isLeader: boolean;
   canManagePeriodLocks: boolean;
+  canEditTaxProfile: boolean;
+  canSetDataReadiness: (work: FixtureWorkItem) => boolean;
   getModuleAccess: (module: ModuleKey) => AccessLevel;
   canAccessModule: (module: ModuleKey, allowed?: readonly AccessLevel[]) => boolean;
   getRecord: (work: FixtureWorkItem) => WorkflowRecord;
@@ -686,7 +693,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     return clientMatchesPerspective(client, workPerspective, fixtureOrgDirectoryMembers);
   }, [workPerspective]);
   const canOperateWorkForRole = useCallback((work: FixtureWorkItem, role: WorkflowRole | "TAX_CONTROL") => {
-    if (!prototypeMode) return viewer ? canViewerActOnWorkRole(viewer, Object.fromEntries(Object.entries(work.assignedUsers ?? {}).map(([assignedRole, user]) => [assignedRole, user?.id])), role) : false;
+    if (!prototypeMode) return viewer ? canViewerActOnWorkRole(viewer, assignedUserIdsForWork(work), role) : false;
     if (!workMatchesPerspective(work, workPerspective)) return false;
     if (workPerspective === "MASTER_ADMIN" || workPerspective === "SUPER_ADMIN") return true;
     if (role === "TAX_CONTROL") return workPerspective === "TAX_CONTROL";
@@ -941,7 +948,12 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   const canOverride = prototypeMode ? canUseElevatedOverride(workPerspective) : Boolean(viewer && canViewerOverride(viewer));
   const isLeader = prototypeMode ? ["TOWER_LEADER", "CLUSTER_LEADER", "TAX_CONTROL", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective) : Boolean(viewer && isViewerLeader(viewer));
   const canManagePeriodLocks = prototypeMode ? ["TAX_CONTROL", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective) : Boolean(viewer && canViewerActOnWorkRole(viewer, undefined, "TAX_CONTROL"));
-  const value = useMemo<WorkflowContextValue>(() => ({ prototypeMode, clientRegistry, clientRegistryState, refreshClientRegistry, currentRole, setCurrentRole, workPerspective, setWorkPerspective, applyAccessPerspective, accessMatrix, accessPolicyHistory, commitAccessMatrix, canManageAccess, viewer, viewerStatus, canManageModule, canPerformTeam, canOverride, isLeader, canManagePeriodLocks, getModuleAccess, canAccessModule: canAccess, getRecord, getEffectiveWork, getWorkItems, getOperationalRecords, operationalToday: prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10), createWorkItem, createLiveWorkItem, updateWorkItem, deleteWorkItem, isWorkVisible, isClientVisible, canActOnWorkflow, canActOnProcessStep, getProcessStatus, getLatestProcessUpdate, setDataReadiness, setPaymentApplicability, setPaymentAmount, getPeriodLock, setPeriodLock, setProcessStatus, getChecklistAnswers, setChecklistAnswer, getQuestions: (role: WorkflowRole) => roleQuestions[role], submitDecision, recordFinalCertification }), [accessMatrix, accessPolicyHistory, applyAccessPerspective, canAccess, canManageModule, canManagePeriodLocks, canOverride, canPerformTeam, isLeader, viewer, viewerStatus, canActOnProcessStep, canActOnWorkflow, canManageAccess, clientRegistry, clientRegistryState, commitAccessMatrix, createLiveWorkItem, createWorkItem, currentRole, deleteWorkItem, getChecklistAnswers, getEffectiveWork, getLatestProcessUpdate, getModuleAccess, getOperationalRecords, getPeriodLock, getProcessStatus, getRecord, getWorkItems, isClientVisible, isWorkVisible, prototypeMode, recordFinalCertification, refreshClientRegistry, setDataReadiness, setChecklistAnswer, setPaymentApplicability, setPaymentAmount, setPeriodLock, setProcessStatus, submitDecision, updateWorkItem, workPerspective]);
+  const canEditTaxProfile = prototypeMode ? canManageModule("clients") : Boolean(viewer && canViewerEditTaxProfile(viewer));
+  const canSetDataReadiness = useCallback((work: FixtureWorkItem) => {
+    if (prototypeMode) return canActOnProcessStep("prepare", work);
+    return Boolean(viewer && canViewerSetDataReadiness(viewer, assignedUserIdsForWork(work)));
+  }, [canActOnProcessStep, prototypeMode, viewer]);
+  const value = useMemo<WorkflowContextValue>(() => ({ prototypeMode, clientRegistry, clientRegistryState, refreshClientRegistry, currentRole, setCurrentRole, workPerspective, setWorkPerspective, applyAccessPerspective, accessMatrix, accessPolicyHistory, commitAccessMatrix, canManageAccess, viewer, viewerStatus, canManageModule, canPerformTeam, canOverride, isLeader, canManagePeriodLocks, canEditTaxProfile, canSetDataReadiness, getModuleAccess, canAccessModule: canAccess, getRecord, getEffectiveWork, getWorkItems, getOperationalRecords, operationalToday: prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10), createWorkItem, createLiveWorkItem, updateWorkItem, deleteWorkItem, isWorkVisible, isClientVisible, canActOnWorkflow, canActOnProcessStep, getProcessStatus, getLatestProcessUpdate, setDataReadiness, setPaymentApplicability, setPaymentAmount, getPeriodLock, setPeriodLock, setProcessStatus, getChecklistAnswers, setChecklistAnswer, getQuestions: (role: WorkflowRole) => roleQuestions[role], submitDecision, recordFinalCertification }), [accessMatrix, accessPolicyHistory, applyAccessPerspective, canAccess, canEditTaxProfile, canManageModule, canManagePeriodLocks, canSetDataReadiness, canOverride, canPerformTeam, isLeader, viewer, viewerStatus, canActOnProcessStep, canActOnWorkflow, canManageAccess, clientRegistry, clientRegistryState, commitAccessMatrix, createLiveWorkItem, createWorkItem, currentRole, deleteWorkItem, getChecklistAnswers, getEffectiveWork, getLatestProcessUpdate, getModuleAccess, getOperationalRecords, getPeriodLock, getProcessStatus, getRecord, getWorkItems, isClientVisible, isWorkVisible, prototypeMode, recordFinalCertification, refreshClientRegistry, setDataReadiness, setChecklistAnswer, setPaymentApplicability, setPaymentAmount, setPeriodLock, setProcessStatus, submitDecision, updateWorkItem, workPerspective]);
   return <WorkflowContext.Provider value={value}>{children}</WorkflowContext.Provider>;
 }
 

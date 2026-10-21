@@ -49,6 +49,11 @@ function hasAny(viewer: ViewerAccess, capabilities: readonly string[]) {
   return capabilities.some((capability) => viewer.capabilities.has(capability));
 }
 
+/** Tax Profile corrections: the profile API accepts either capability. */
+export function canViewerEditTaxProfile(viewer: ViewerAccess): boolean {
+  return hasAny(viewer, ["CorrectTaxProfile", "MaintainClientRepository"]);
+}
+
 /** True when the viewer can execute work at all, whether assigned or by override. */
 export function canViewerExecuteWork(viewer: ViewerAccess): boolean {
   return viewer.capabilities.has("ExecuteGeneratedComplianceWork");
@@ -107,4 +112,15 @@ export function canViewerActOnWorkRole(
   if (role === "TAX_CONTROL") return hasAny(viewer, ["ManageWorkPeriodLock", "PerformElevatedOverride"]);
   if (!viewer.capabilities.has("ExecuteGeneratedComplianceWork")) return false;
   return assignedUserIds?.[role] === viewer.userId || canViewerOverride(viewer);
+}
+
+/**
+ * Data Readiness is a prerequisite control, not preparation itself: the
+ * command also accepts work maintenance authority without execute authority.
+ */
+export function canViewerSetDataReadiness(
+  viewer: ViewerAccess,
+  assignedUserIds: Partial<Record<"PREPARER" | "CHECKER" | "REVIEWER", string>> | undefined,
+): boolean {
+  return canViewerActOnWorkRole(viewer, assignedUserIds, "PREPARER") || viewer.capabilities.has("MaintainGeneratedComplianceWork");
 }
