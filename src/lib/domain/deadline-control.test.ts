@@ -9,7 +9,7 @@ describe("deadline control projection", () => {
     const second = buildDeadlineControlRows(2026);
 
     expect(first).toEqual(second);
-    expect(first).toHaveLength(91);
+    expect(first).toHaveLength(108);
     const cit = first.find((row) => row.formNumber === "1702-RT");
     const vatQ1 = first.find((row) => row.formNumber === "2550Q" && row.activityPeriod === "Q1 2026");
     expect(cit?.baseStatutoryDeadline).toBe("2027-04-15");
@@ -23,10 +23,10 @@ describe("deadline control projection", () => {
 
   it("keeps source verification and publication status distinct", () => {
     const summary = deadlineControlSummary(buildDeadlineControlRows(2026));
-    expect(summary).toEqual({ total: 91, published: 5, requiringReview: 4, unresolved: 82 });
+    expect(summary).toEqual({ total: 108, published: 5, requiringReview: 4, unresolved: 99 });
     expect(buildDeadlineControlRows(2026).filter((row) => row.publicationStatus === "unresolved").every((row) => row.publishedOperationalDeadline === null)).toBe(true);
     expect(buildDeadlineControlRows(2026).filter((row) => row.publicationStatus === "needs_review").every((row) => row.adjustedStatutoryDeadline !== null)).toBe(true);
-    expect(deadlineControlSummary(buildDeadlineControlRows(2027))).toEqual({ total: 91, published: 0, requiringReview: 9, unresolved: 82 });
+    expect(deadlineControlSummary(buildDeadlineControlRows(2027))).toEqual({ total: 108, published: 0, requiringReview: 9, unresolved: 99 });
   });
 
   it("shows the official BIR calendar as evidence without making it operational", () => {
@@ -39,7 +39,13 @@ describe("deadline control projection", () => {
 
   it("exposes every governed return to global Tax Team control", () => {
     const formNumbers = new Set(buildDeadlineControlRows(2026).map((row) => row.formNumber));
-    expect(formNumbers).toEqual(new Set(["0619-E", "0619-F", "1600", "1600WP", "1601-C", "1601-EQ", "1604-C", "1604-E", "1702Q", "1702-RT", "2550Q", "2551M", "2551Q"]));
+    expect(formNumbers).toEqual(new Set(["0619-E", "0619-F", "1600", "1600WP", "1601-C", "1601-EQ", "1601-FQ", "1604-C", "1604-E", "1604-F", "1702Q", "1702-RT", "2550M", "2550Q", "2551M", "2551Q"]));
+  });
+
+  it("keeps forms added without a governed deadline unresolved instead of inventing dates", () => {
+    const added = buildDeadlineControlRows(2026).filter((row) => ["1601-FQ", "1604-F", "2550M"].includes(row.formNumber));
+    expect(added).toHaveLength(17);
+    expect(added.every((row) => row.publicationStatus === "unresolved" && row.baseStatutoryDeadline === null && row.earliestApplicableDeadline === null && row.publishedOperationalDeadline === null)).toBe(true);
   });
 
   it("derives a client's calendar from registered tax types and published rows", () => {

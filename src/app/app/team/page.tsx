@@ -345,14 +345,14 @@ export default function TeamPage() {
         </div>
         <div className="team-digest-grid">
           <DigestItem label="Assigned work" value={String(perspectiveWork.length)} detail="Client ownership and workflow action stay in the assigned work surface." action={<Link className="button button--quiet button--small" href="/app/work">Open My Work</Link>} />
-          <DigestItem label="Roster changes" value="—" detail="People and structure are read-only for this access view." action={<span className="team-note">View only</span>} />
+          <DigestItem label="Roster changes" value="—" detail="People and structure are read-only for you." action={<span className="team-note">View only</span>} />
           <DigestItem label="Leadership signals" value="Restricted" detail="Cluster and cross-portfolio workload roll-ups are reserved for leaders." action={<span className="team-note">Leader view</span>} />
         </div>
         </> : !canViewLeadershipRollups ? <>
         <div className="team-signal-grid">
           <Signal label="People in scope" value={String(scopedMembers.filter((member) => member.active).length)} detail="Canonical organization view" />
           <Signal label="Team access" value={accessLevelLabel(teamAccessLevel)} detail="Operational detail is governed separately" />
-          <Signal label="Tax ad hocs" value={String(visibleSpecialistCases.length)} detail={canViewSpecialistCases ? "Tax team signal" : "Not in this access view"} />
+          <Signal label="Tax ad hocs" value={String(visibleSpecialistCases.length)} detail={canViewSpecialistCases ? "Tax team signal" : "Not in your access"} />
         </div>
         <div className="team-digest-grid">
           <DigestItem label="Engagement workload" value="Restricted" detail="Agile and dedicated engagement load remains in the appropriate delivery-leader view." action={<span className="team-note">Restricted</span>} />

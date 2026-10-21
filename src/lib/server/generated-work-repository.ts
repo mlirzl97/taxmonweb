@@ -316,9 +316,11 @@ export async function listLiveClientCalendarEntries(requirementIds: readonly str
       publication_status,
       monthly_calendar_versions!inner(calendar_month, status),
       bir_requirements!inner(requirement_code, requirement_name, operating_category, frequency_label),
-      requirement_version_forms(
-        relationship_type,
-        bir_forms(form_number)
+      bir_requirement_versions(
+        requirement_version_forms(
+          relationship_type,
+          bir_forms(form_number)
+        )
       )
     `)
     .in("requirement_id", [...requirementIds])
@@ -334,7 +336,10 @@ export async function listLiveClientCalendarEntries(requirementIds: readonly str
     const row = value as unknown as Record<string, unknown>;
     const calendarVersion = Array.isArray(row.monthly_calendar_versions) ? row.monthly_calendar_versions[0] : row.monthly_calendar_versions;
     const requirement = Array.isArray(row.bir_requirements) ? row.bir_requirements[0] : row.bir_requirements;
-    const forms = Array.isArray(row.requirement_version_forms) ? row.requirement_version_forms : [];
+    // Forms hang off the requirement version; there is no direct calendar-entry link.
+    const requirementVersion = Array.isArray(row.bir_requirement_versions) ? row.bir_requirement_versions[0] : row.bir_requirement_versions;
+    const versionForms = requirementVersion && typeof requirementVersion === "object" ? (requirementVersion as { requirement_version_forms?: unknown }).requirement_version_forms : undefined;
+    const forms = Array.isArray(versionForms) ? versionForms : [];
     const formNumbers = forms.flatMap((relation) => {
       if (!relation || typeof relation !== "object") return [];
       const form = (relation as { bir_forms?: unknown }).bir_forms;

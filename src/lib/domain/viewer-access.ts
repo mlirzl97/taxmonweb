@@ -52,6 +52,11 @@ export function canViewerEditTaxProfile(viewer: ViewerAccess): boolean {
   return hasAny(viewer, ["CorrectTaxProfile", "MaintainClientRepository"]);
 }
 
+/** Human Tax Profile validation (activation) is its own capability. */
+export function canViewerValidateTaxProfile(viewer: ViewerAccess): boolean {
+  return viewer.capabilities.has("ValidateTaxProfile");
+}
+
 /** True when the viewer can execute work at all, whether assigned or by override. */
 export function canViewerExecuteWork(viewer: ViewerAccess): boolean {
   return viewer.capabilities.has("ExecuteGeneratedComplianceWork");

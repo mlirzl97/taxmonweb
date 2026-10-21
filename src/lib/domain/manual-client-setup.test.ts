@@ -29,6 +29,27 @@ describe("manual client setup contract", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("accepts a shared-drive path or a SharePoint link as the permanent file location", () => {
+    const base = {
+      clientReferenceCode: "FIXTURE-CLIENT-05",
+      clientDisplayName: "Brightwater Trading (synthetic)",
+      entityReferenceCode: "FIXTURE-ENTITY-05",
+      entityDisplayName: "Brightwater Trading (synthetic)",
+      unitReferenceCode: "FIXTURE-RU-05",
+      unitDisplayName: "Head Office",
+      unitKind: "head_office",
+      organizationUnitId: "00000000-0000-4000-8000-000000000001",
+      sourceReference: "synthetic-2303-05",
+      sourceSystem: "synthetic_fixture",
+    };
+    for (const location of ["\\\\fileserver\\A&T\\Clients\\Brightwater", "S:/A&T/Clients/Brightwater", "https://tenant.sharepoint.invalid/sites/AT/Brightwater"]) {
+      const result = parseManualClientSetupInput({ ...base, profileData: { permanentFileLink: location } });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.profileData?.permanentFileLink).toBe(location);
+    }
+    expect(parseManualClientSetupInput({ ...base, profileData: { permanentFileLink: "x".repeat(241) } }).ok).toBe(false);
+  });
+
   it("generates the internal entity reference and normalizes a source-formatted TIN", () => {
     const result = parseManualClientSetupInput({
       clientReferenceCode: "CLIENT-TIN-001",
