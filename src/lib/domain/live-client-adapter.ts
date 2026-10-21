@@ -15,10 +15,16 @@ function scopeForClient(client: PortfolioClient): { tower: FixtureScope; cluster
     .filter((assignment) => (!assignment.effective_from || assignment.effective_from <= today) && (!assignment.effective_to || assignment.effective_to >= today))
     .flatMap((assignment) => Array.isArray(assignment.organization_units) ? assignment.organization_units : [assignment.organization_units])
     .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate?.code || candidate?.name));
-  const resolved = organizationUnits.find((candidate) => candidate.unit_kind === "tower" && !/review|required|unresolved|unknown/i.test(candidate.name));
-  const towerParent = resolved ? (Array.isArray(resolved.parent) ? resolved.parent[0] : resolved.parent) : null;
+  // A unit counts only while it is active and in effect today; a closed
+  // Cluster or Tower leaves the scope unresolved rather than silently valid.
+  const inEffect = (unit: { active?: boolean; effective_from?: string | null; effective_to?: string | null } | null | undefined) =>
+    Boolean(unit) && unit!.active !== false && (!unit!.effective_from || unit!.effective_from <= today) && (!unit!.effective_to || unit!.effective_to >= today);
+  const parentOf = (unit: (typeof organizationUnits)[number]) => (Array.isArray(unit.parent) ? unit.parent[0] : unit.parent) ?? null;
+  const resolved = organizationUnits.find((candidate) => candidate.unit_kind === "tower" && !/review|required|unresolved|unknown/i.test(candidate.name)
+    && inEffect(candidate) && (!parentOf(candidate) || inEffect(parentOf(candidate))));
+  const towerParent = resolved ? parentOf(resolved) : null;
   // A tower scope implies its parent cluster; an explicit cluster scope still wins.
-  const resolvedCluster = organizationUnits.find((candidate) => candidate.unit_kind === "cluster" && !/review|required|unresolved|unknown/i.test(candidate.name))
+  const resolvedCluster = organizationUnits.find((candidate) => candidate.unit_kind === "cluster" && !/review|required|unresolved|unknown/i.test(candidate.name) && inEffect(candidate))
     ?? (towerParent?.unit_kind === "cluster" ? towerParent : undefined);
   return {
     // The adapter keeps the legacy UI type for compatibility, but the runtime

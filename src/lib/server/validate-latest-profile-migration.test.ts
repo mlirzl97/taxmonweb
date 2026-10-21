@@ -63,6 +63,11 @@ describe("validate latest resolved Tax Profile migration", () => {
     expect(migration).toContain("where profile.registration_unit_id = target_unit.id");
   });
 
+  it("refuses a scope whose Cluster or Tower is no longer active and in effect", () => {
+    expect(migration).toContain("'cluster (an active Cluster or Tower in effect today)'");
+    expect(migration).toContain("join public.organization_units unit on unit.id = scope.organization_unit_id");
+  });
+
   it("keeps validation authority and the reason requirement", () => {
     expect(migration).toContain("has_active_capability('ValidateTaxProfile')");
     expect(migration).toContain("A reason is required for validation.");

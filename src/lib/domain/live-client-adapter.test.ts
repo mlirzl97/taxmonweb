@@ -350,6 +350,21 @@ describe("live client adapter", () => {
     expect(projected.entities[0].profile.attention).not.toContain("Organizational scope requires validation");
   });
 
+  it("leaves the scope unresolved when its Cluster is closed or its Tower's parent Cluster is closed", () => {
+    const base = liveClient({});
+    const head = base.taxpayer_entities[0].registration_units[0];
+    const withScope = (organization_units: object) => portfolioClientToFixtureClient({
+      ...base,
+      taxpayer_entities: [{ ...base.taxpayer_entities[0], registration_units: [{ ...head, registration_unit_scope_assignments: [{ organization_units } as never] }] }],
+    });
+    const closedCluster = withScope({ code: "FIXTURE-CLUSTER-A", name: "Cluster A", unit_kind: "cluster", active: true, effective_from: "2020-01-01", effective_to: "2021-12-31" });
+    expect(closedCluster.assignment.cluster).toBe("Unresolved");
+    expect(closedCluster.entities[0].profile.attention).toContain("Organizational scope requires validation");
+    const towerUnderClosedCluster = withScope({ code: "FIXTURE-TOWER-A", name: "Tower A", unit_kind: "tower", active: true, parent: { name: "Cluster A", unit_kind: "cluster", active: false } });
+    expect(towerUnderClosedCluster.scope).not.toBe("Tower A");
+    expect(towerUnderClosedCluster.entities[0].profile.attention).toContain("Organizational scope requires validation");
+  });
+
   it("projects effective-dated registration-unit team history without inventing staff identities", () => {
     const projected = portfolioClientToFixtureClient(liveClient({
       taxpayer_entities: [{

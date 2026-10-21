@@ -82,6 +82,28 @@ begin
     end if;
   end loop;
 
+  -- The unit's current scope must be a Cluster, or a Tower under a Cluster,
+  -- that is still active and in effect; a closed team is not a placement.
+  if not exists (
+    select 1
+    from public.registration_unit_scope_assignments scope
+    join public.organization_units unit on unit.id = scope.organization_unit_id
+    left join public.organization_units parent_unit on parent_unit.id = unit.parent_id
+    where scope.registration_unit_id = candidate.registration_unit_id
+      and scope.effective_from <= current_date
+      and (scope.effective_to is null or scope.effective_to >= current_date)
+      and unit.active
+      and unit.effective_from <= current_date and (unit.effective_to is null or unit.effective_to >= current_date)
+      and (
+        unit.unit_kind = 'cluster'
+        or (unit.unit_kind = 'tower' and parent_unit.unit_kind = 'cluster' and parent_unit.active
+            and parent_unit.effective_from <= current_date
+            and (parent_unit.effective_to is null or parent_unit.effective_to >= current_date))
+      )
+  ) then
+    missing_keys := array_append(missing_keys, 'cluster (an active Cluster or Tower in effect today)');
+  end if;
+
   -- The first period to file must be a real calendar month (YYYY-MM, 01-12).
   if nullif(trim(coalesce(candidate.profile_data ->> 'firstPeriodToFile', '')), '') is not null
      and candidate.profile_data ->> 'firstPeriodToFile' !~ '^\d{4}-(0[1-9]|1[0-2])$' then
