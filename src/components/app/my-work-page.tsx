@@ -117,10 +117,11 @@ function AddWorkDrawer({ onClose }: { onClose: () => void }) {
 }
 
 export default function MyWorkPage({ initialDate, initialDue, initialQueue, initialView }: MyWorkPageProps) {
-  const { getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode, workPerspective } = useWorkflow();
+  const { getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode, viewer, workPerspective } = useWorkflow();
   const [addWorkOpen, setAddWorkOpen] = useState(false);
   const queueDue: DuePreset = initialDue !== "all" ? initialDue : initialQueue === "today" ? "today" : initialQueue === "waiting" ? "blocked" : initialQueue === "attention" ? "attention" : "all";
-  const personalWork = useMemo(() => getWorkItems().map(getEffectiveWork).filter((work) => prototypeMode ? isWorkVisible(work) : true), [getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode]);
+  // Live: My run is the signed-in person's own assigned returns, in any control role.
+  const personalWork = useMemo(() => getWorkItems().map(getEffectiveWork).filter((work) => prototypeMode ? isWorkVisible(work) : Object.values(work.assignedUsers ?? {}).some((user) => user?.id === viewer?.userId)), [getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode, viewer]);
   return (
     <FixturePageFrame>
       <PageHeader action={<button className="button button--primary button--small" onClick={() => setAddWorkOpen(true)} type="button">Add work</button>} title="Work" />
@@ -128,7 +129,7 @@ export default function MyWorkPage({ initialDate, initialDue, initialQueue, init
         <nav aria-label="Work views" className="tower-tabs module-tabs my-work-tabs">
           {myWorkViews.map((view) => <Link aria-current={initialView === view.id ? "page" : undefined} className={initialView === view.id ? "tower-tab tower-tab--active" : "tower-tab"} href={`/app/work?view=${view.id}`} key={view.id}>{view.label}</Link>)}
         </nav>
-        {initialView === "calendar" ? <section aria-labelledby="work-calendar-title" className="my-work-page"><div className="my-work-page__subheader"><div><p className="eyebrow">Targets and milestones</p><h2 id="work-calendar-title">Calendar</h2><p>Due dates remain linked to the same return package used by the Work queue.</p></div><Link className="text-link" href="/app/work?view=queue">Open work queue</Link></div><DueRegisterWorkspace initialDate={initialDate} initialDue={queueDue} scope="all" /></section> : initialView === "run" ? <MyRunView perspective={workPerspective} work={personalWork} /> : <WorkRegisterView initialDue={queueDue} initialQueue={initialQueue} scope="all" />}
+        {initialView === "calendar" ? <section aria-labelledby="work-calendar-title" className="my-work-page"><div className="my-work-page__subheader"><div><p className="eyebrow">Targets and milestones</p><h2 id="work-calendar-title">Calendar</h2><p>Due dates remain linked to the same return package used by the Work queue.</p></div><Link className="text-link" href="/app/work?view=queue">Open work queue</Link></div><DueRegisterWorkspace initialDate={initialDate} initialDue={queueDue} scope="all" /></section> : initialView === "run" ? <MyRunView perspective={prototypeMode ? workPerspective : "SELF"} work={personalWork} /> : <WorkRegisterView initialDue={queueDue} initialQueue={initialQueue} scope="all" />}
       </>
       {addWorkOpen && <AddWorkDrawer onClose={() => setAddWorkOpen(false)} />}
     </FixturePageFrame>

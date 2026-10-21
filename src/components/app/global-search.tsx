@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@/components/ui/icon";
 import { prototypeClientSetupUpdatedEvent, readSubmittedClientSetups } from "@/lib/domain/submitted-client-projection";
 import { primaryNavigation, restrictedNavigation } from "@/lib/navigation";
-import { useWorkflow, type WorkflowPerspective } from "@/lib/workflow-state";
+import { moduleForRoute } from "@/lib/domain/access";
+import { useWorkflow } from "@/lib/workflow-state";
 
 type SearchResult = {
   id: string;
@@ -27,13 +28,10 @@ function includesQuery(query: string, ...values: string[]) {
   return values.some((value) => normalized(value).includes(query));
 }
 
-function perspectiveCanSeeWorkspace(item: (typeof allNavigation)[number], perspective: WorkflowPerspective) {
-  return item.href !== "/app/tax-team" || ["TAX_CONTROL", "MASTER_ADMIN", "SUPER_ADMIN"].includes(perspective);
-}
 
 export function GlobalSearch() {
   const router = useRouter();
-  const { clientRegistry, getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode, workPerspective } = useWorkflow();
+  const { canAccessModule, clientRegistry, getEffectiveWork, getWorkItems, isWorkVisible, prototypeMode } = useWorkflow();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [submittedClients, setSubmittedClients] = useState<ReturnType<typeof readSubmittedClientSetups>>([]);
@@ -85,7 +83,7 @@ export function GlobalSearch() {
       }));
 
     const workspaces: SearchResult[] = allNavigation
-      .filter((item) => perspectiveCanSeeWorkspace(item, workPerspective))
+      .filter((item) => { const itemModule = moduleForRoute(item.href); return !itemModule || canAccessModule(itemModule); })
       .filter((item) => includesQuery(search, item.label, item.href))
       .map((item) => ({
         id: `workspace-${item.href}`,
@@ -97,7 +95,7 @@ export function GlobalSearch() {
       }));
 
     return { clients, work, workspaces };
-  }, [clientRegistry, getEffectiveWork, getWorkItems, isWorkVisible, query, submittedClients, workPerspective]);
+  }, [clientRegistry, getEffectiveWork, getWorkItems, isWorkVisible, query, submittedClients, canAccessModule]);
 
   const firstResult = results.clients[0] ?? results.work[0] ?? results.workspaces[0];
   const hasResults = results.clients.length + results.work.length + results.workspaces.length > 0;
@@ -177,7 +175,7 @@ export function GlobalSearch() {
         </div>
         <label className="global-search-input"><Icon name="search" size={16} /><span className="sr-only">Search clients and work</span><input onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") close(); }} placeholder="Search clients, returns, periods…" ref={inputRef} type="search" value={query} /><kbd>Esc</kbd></label>
         <div className="global-search-results">
-          {!query.trim() ? <div className="global-search-empty"><strong>Start with a client or return</strong><span>Use the keyboard shortcut anywhere in the app, then type what you need.</span><div className="global-search-quick-links">{allNavigation.filter((item) => perspectiveCanSeeWorkspace(item, workPerspective)).map((item) => <button key={item.href} onClick={() => openResult({ id: item.href, kind: "Workspace", title: item.label, subtitle: "Open workspace", meta: "Navigation", href: item.href })} type="button"><Icon name={item.icon} size={15} />{item.label}</button>)}</div></div> : !hasResults ? <div className="global-search-empty"><strong>No matches</strong><span>Try a client name, return code, period, or next action.</span></div> : <>
+          {!query.trim() ? <div className="global-search-empty"><strong>Start with a client or return</strong><span>Use the keyboard shortcut anywhere in the app, then type what you need.</span><div className="global-search-quick-links">{allNavigation.filter((item) => { const itemModule = moduleForRoute(item.href); return !itemModule || canAccessModule(itemModule); }).map((item) => <button key={item.href} onClick={() => openResult({ id: item.href, kind: "Workspace", title: item.label, subtitle: "Open workspace", meta: "Navigation", href: item.href })} type="button"><Icon name={item.icon} size={15} />{item.label}</button>)}</div></div> : !hasResults ? <div className="global-search-empty"><strong>No matches</strong><span>Try a client name, return code, period, or next action.</span></div> : <>
             {results.clients.length > 0 && <SearchGroup label="Clients" results={results.clients} onSelect={openResult} />}
             {results.work.length > 0 && <SearchGroup label="Work" results={results.work} onSelect={openResult} />}
             {results.workspaces.length > 0 && <SearchGroup label="Workspaces" results={results.workspaces} onSelect={openResult} />}

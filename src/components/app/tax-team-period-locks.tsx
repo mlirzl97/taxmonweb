@@ -65,12 +65,12 @@ function calendarPeriodFor(work: FixtureWorkItem) {
 }
 
 export function PeriodLocksView() {
-  const { getEffectiveWork, getPeriodLock, getRecord, getWorkItems, isWorkVisible, operationalToday, setPeriodLock, workPerspective } = useWorkflow();
+  const { canManagePeriodLocks, getEffectiveWork, getPeriodLock, getRecord, getWorkItems, isWorkVisible, operationalToday, setPeriodLock } = useWorkflow();
   const [pendingLock, setPendingLock] = useState<PendingLock | null>(null);
   const [reasonDraft, setReasonDraft] = useState("");
   const [feedback, setFeedback] = useState<Record<string, string>>({});
   useDialogFocus(Boolean(pendingLock), () => setPendingLock(null));
-  const canManage = workPerspective === "TAX_CONTROL" || workPerspective === "MASTER_ADMIN" || workPerspective === "SUPER_ADMIN";
+  const canManage = canManagePeriodLocks;
   const periods = useMemo<PeriodGroup[]>(() => {
     const groups = new Map<string, { key: string; year: string; month: string; label: string; returns: Map<string, ReturnGroup> }>();
     for (const item of getWorkItems().map(getEffectiveWork).filter(isWorkVisible)) {

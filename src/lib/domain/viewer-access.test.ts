@@ -6,6 +6,7 @@ import {
   canViewerOverride,
   canViewerPerformTeamAction,
   canViewerViewModule,
+  isViewerLeader,
   viewerModuleLevel,
   type ViewerAccess,
 } from "./viewer-access";
@@ -57,6 +58,15 @@ describe("viewer team actions", () => {
     expect(canViewerPerformTeamAction(staff, "VIEW_PERSON")).toBe(true);
     expect(canViewerPerformTeamAction(staff, "EDIT_STRUCTURE")).toBe(false);
     expect(canViewerPerformTeamAction(teamLead, "EDIT_STRUCTURE")).toBe(true);
+  });
+});
+
+describe("viewer leadership", () => {
+  it("treats tower, cluster, and wider scopes as leadership", () => {
+    expect(isViewerLeader({ ...staff, scopeKinds: new Set(["own_assigned_work"]) })).toBe(false);
+    expect(isViewerLeader({ ...teamLead, scopeKinds: new Set(["cluster"]) })).toBe(true);
+    expect(isViewerLeader({ ...hod, scopeKinds: new Set(["all_a_and_t"]) })).toBe(true);
+    expect(isViewerLeader(staff)).toBe(false);
   });
 });
 

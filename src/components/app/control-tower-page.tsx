@@ -39,7 +39,7 @@ function ControlTowerGreeting({ displayName }: { displayName: string }) {
 function ScopedControlTowerPage({ initialScope }: { initialScope: ScopeFilter }) {
   const [selectedWorkId, setSelectedWorkId] = useState<string | null>(null);
   const [pulseFilter, setPulseFilter] = useState<PulseFilter>("ALL");
-  const { getEffectiveWork, getOperationalRecords, getWorkItems, isWorkVisible, operationalToday, prototypeMode, workPerspective } = useWorkflow();
+  const { getEffectiveWork, getOperationalRecords, getWorkItems, isLeader, isWorkVisible, operationalToday, prototypeMode } = useWorkflow();
   const workItems = getWorkItems();
   const today = operationalToday;
 
@@ -75,7 +75,7 @@ function ScopedControlTowerPage({ initialScope }: { initialScope: ScopeFilter })
     : controlViewState === "warning"
       ? `${missingWorkMessage} · ${unmatchedDueMessage}`
       : "This is not an All Clear result.";
-  const canViewTeamProgress = ["TOWER_LEADER", "CLUSTER_LEADER", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective);
+  const canViewTeamProgress = isLeader;
   const visibleClients = useMemo(() => prototypeMode ? fixtureClients.filter((client) => isInScope(client.scope, initialScope)) : [], [initialScope, prototypeMode]);
   const teamProgress = useMemo(() => {
     if (!canViewTeamProgress || !prototypeMode) return [];

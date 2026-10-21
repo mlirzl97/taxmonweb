@@ -37,7 +37,7 @@ function isTeamView(value: string | null): value is TeamView {
 }
 
 export default function TeamPage() {
-  const { canAccessModule, canPerformTeam, getModuleAccess, isClientVisible, isWorkVisible, prototypeMode, workPerspective } = useWorkflow();
+  const { canAccessModule, canPerformTeam, getModuleAccess, isClientVisible, isLeader, isWorkVisible, prototypeMode, workPerspective } = useWorkflow();
   const canViewClients = canAccessModule("clients");
   const teamAccessLevel = getModuleAccess("team");
   const canAddPerson = prototypeMode && canPerformTeam("ADD_PERSON");
@@ -61,9 +61,9 @@ export default function TeamPage() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [deactivationIntent, setDeactivationIntent] = useState(false);
   const [rosterHydrated, setRosterHydrated] = useState(() => !prototypeMode);
-  const roleScopedPerspective = workPerspective === "PREPARER" || workPerspective === "CHECKER" || workPerspective === "REVIEWER";
-  const canViewLeadershipRollups = ["TOWER_LEADER", "CLUSTER_LEADER", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective) && accessLevelRank(teamAccessLevel) >= accessLevelRank("ACT");
-  const canViewSpecialistCases = ["TAX_CONTROL", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective) && canAccessModule("tax_team");
+  const roleScopedPerspective = prototypeMode ? workPerspective === "PREPARER" || workPerspective === "CHECKER" || workPerspective === "REVIEWER" : !isLeader;
+  const canViewLeadershipRollups = (prototypeMode ? ["TOWER_LEADER", "CLUSTER_LEADER", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective) : isLeader) && accessLevelRank(teamAccessLevel) >= accessLevelRank("ACT");
+  const canViewSpecialistCases = (prototypeMode ? ["TAX_CONTROL", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective) : true) && canAccessModule("tax_team");
   const canViewChangeHistory = canPerformTeam("EDIT_STRUCTURE");
   const canManageStaffAccounts = !prototypeMode && liveCapabilities.includes("AdministerUsers");
 
@@ -178,7 +178,8 @@ export default function TeamPage() {
     // who have not completed Team setup yet.
     return buildEditableOrgChartNodes(teamMembers.filter((member) => Boolean(member.careerServiceLevel)), []);
   }, [prototypeMode, teamMembers]);
-  const perspectiveMemberIds = useMemo(() => teamMemberIdsForPerspective(teamMembers, perspectiveClients, workPerspective), [perspectiveClients, teamMembers, workPerspective]);
+  // Live: the server already scopes the Team list to the signed-in person.
+  const perspectiveMemberIds = useMemo(() => prototypeMode ? teamMemberIdsForPerspective(teamMembers, perspectiveClients, workPerspective) : new Set(teamMembers.map((member) => member.id)), [perspectiveClients, prototypeMode, teamMembers, workPerspective]);
   const orgChartNodes = useMemo(() => {
     const scopedNodes = overlayOrgChartLoad(orgChartSourceNodes, load, workloadGuide).filter((node) => perspectiveMemberIds.has(node.id));
     if (canViewLeadershipRollups && canViewSpecialistCases) return scopedNodes;

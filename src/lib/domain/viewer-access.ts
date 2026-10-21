@@ -9,7 +9,16 @@ import type { AccessLevel, ModuleKey, TeamAction } from "@/lib/domain/access";
 export type ViewerAccess = {
   userId: string;
   capabilities: ReadonlySet<string>;
+  /** Effective organizational scope kinds, e.g. own_assigned_work, team_tower, cluster. */
+  scopeKinds?: ReadonlySet<string>;
 };
+
+const leadershipScopes = ["team_tower", "cluster", "cross_portfolio_tax_control", "all_a_and_t"] as const;
+
+/** Leaders hold a unit-wide or wider scope; everyone else works their own assigned returns. */
+export function isViewerLeader(viewer: ViewerAccess): boolean {
+  return leadershipScopes.some((scope) => viewer.scopeKinds?.has(scope));
+}
 
 export type WorkRoleOwner = "PREPARER" | "CHECKER" | "REVIEWER" | "TAX_CONTROL";
 

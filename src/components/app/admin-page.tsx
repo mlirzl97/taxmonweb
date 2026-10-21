@@ -52,8 +52,8 @@ export default function AdminPage() {
 }
 
 function AdminOverview() {
-  const { accessMatrix, prototypeMode, workPerspective } = useWorkflow();
-  const accessMap = moduleAccessMapForPersona(workPerspective, accessMatrix);
+  const { accessMatrix, getModuleAccess, prototypeMode, workPerspective } = useWorkflow();
+  const accessMap = prototypeMode ? moduleAccessMapForPersona(workPerspective, accessMatrix) : Object.fromEntries((Object.keys(moduleAccessMapForPersona(workPerspective, accessMatrix)) as ModuleKey[]).map((module) => [module, getModuleAccess(module)])) as Record<ModuleKey, AccessLevel>;
 
   return <>
     <section className="admin-summary-grid" aria-label="Administration summary">
