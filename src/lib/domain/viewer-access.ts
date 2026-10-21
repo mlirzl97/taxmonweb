@@ -22,8 +22,6 @@ export function isViewerLeader(viewer: ViewerAccess): boolean {
 
 export type WorkRoleOwner = "PREPARER" | "CHECKER" | "REVIEWER" | "TAX_CONTROL";
 
-/** Matches the database: either capability lets a caller act outside the assigned role. */
-const elevatedCapabilities = ["PerformElevatedOverride", "MaintainGeneratedComplianceWork"] as const;
 
 /** Same alternatives as the server-side module guard in src/lib/server/module-access.ts. */
 export const moduleViewCapabilities: Readonly<Record<Exclude<ModuleKey, "bir_center">, readonly string[]>> = {
@@ -59,8 +57,9 @@ export function canViewerExecuteWork(viewer: ViewerAccess): boolean {
   return viewer.capabilities.has("ExecuteGeneratedComplianceWork");
 }
 
+/** HOD decision 1: Elevated Override is its own capability; work maintenance never implies it. */
 export function canViewerOverride(viewer: ViewerAccess): boolean {
-  return hasAny(viewer, elevatedCapabilities);
+  return viewer.capabilities.has("PerformElevatedOverride");
 }
 
 export function canViewerViewModule(viewer: ViewerAccess, module: ModuleKey): boolean {
@@ -100,9 +99,9 @@ export function canViewerPerformTeamAction(viewer: ViewerAccess, action: TeamAct
 }
 
 /**
- * Work commands require ExecuteGeneratedComplianceWork at the API boundary.
- * Within that, the actual actor must be the person assigned to the role, unless
- * they also hold elevated authority (which the command still requires a reason for).
+ * Work commands require ExecuteGeneratedComplianceWork at the API boundary, and
+ * the actual actor must be the person assigned to the role. The UI does not yet
+ * capture an Elevated Override reason, so it offers no role bypass at all.
  */
 export function canViewerActOnWorkRole(
   viewer: ViewerAccess,
@@ -111,7 +110,7 @@ export function canViewerActOnWorkRole(
 ): boolean {
   if (role === "TAX_CONTROL") return hasAny(viewer, ["ManageWorkPeriodLock", "PerformElevatedOverride"]);
   if (!viewer.capabilities.has("ExecuteGeneratedComplianceWork")) return false;
-  return assignedUserIds?.[role] === viewer.userId || canViewerOverride(viewer);
+  return assignedUserIds?.[role] === viewer.userId;
 }
 
 /**

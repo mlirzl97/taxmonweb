@@ -89,10 +89,19 @@ describe("viewer work actions", () => {
     expect(canViewerActOnWorkRole(viewerOnly, { PREPARER: "viewer-1" }, "PREPARER")).toBe(false);
   });
 
-  it("treats elevated authority as able to act on any role, matching the database", () => {
-    expect(canViewerOverride(hod)).toBe(true);
+  it("reserves override for PerformElevatedOverride, never work maintenance (HOD decision 1)", () => {
+    expect(canViewerOverride(hod)).toBe(false);
+    expect(canViewerOverride(viewer("override-1", ["PerformElevatedOverride"]))).toBe(true);
     expect(canViewerOverride(teamLead)).toBe(false);
-    expect(canViewerActOnWorkRole(hod, assigned, "CHECKER")).toBe(true);
+  });
+
+  it("offers no role bypass, so the HOD cannot self-check or self-review", () => {
+    const hodAsPreparer = { PREPARER: "hod-1", CHECKER: "staff-2", REVIEWER: "lead-1" };
+    expect(canViewerActOnWorkRole(hod, hodAsPreparer, "PREPARER")).toBe(true);
+    expect(canViewerActOnWorkRole(hod, hodAsPreparer, "CHECKER")).toBe(false);
+    expect(canViewerActOnWorkRole(hod, hodAsPreparer, "REVIEWER")).toBe(false);
+    const overrider = viewer("override-2", ["ExecuteGeneratedComplianceWork", "PerformElevatedOverride"]);
+    expect(canViewerActOnWorkRole(overrider, assigned, "CHECKER")).toBe(false);
   });
 
   it("never offers work controls without execute authority, even with elevated capabilities", () => {
