@@ -222,7 +222,10 @@ export function ClientWorkspace({ client, demoMode = false, calibrationEditMode:
       if (!response.ok) throw new Error(result.error ?? "The profile change could not be saved.");
       if (result.data?.id) setSavedVersionId(result.data.id);
       setAssignment(nextAssignment);
-      setProfile(next);
+      // A save creates a new version that needs validation; never carry the
+      // previous version's validation forward. Then reload the saved snapshot.
+      setProfile(result.state === "active" ? next : { ...next, profileState: "Ready for validation", lastValidated: undefined, validator: undefined });
+      setProfileReload((current) => current + 1);
       setSavedMessage(message);
       setIsSaving(false);
       return true;

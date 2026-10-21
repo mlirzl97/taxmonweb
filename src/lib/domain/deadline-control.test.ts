@@ -175,7 +175,7 @@ describe("deadline control projection", () => {
     const template = buildDeadlineControlRows(2026).find((row) => row.formNumber === "2550Q" && row.activityPeriod === "Q1 2026");
     expect(client).toBeDefined();
     expect(template).toBeDefined();
-    const julyStart = { ...client!, entities: [{ ...client!.entities[0], profile: { ...client!.entities[0].profile, goLiveDate: "2026-01-01", firstPeriodToFile: "2026-07" } }] };
+    const julyStart = { ...client!, entities: [{ ...client!.entities[0], profile: { ...client!.entities[0].profile, goLiveDate: "2026-01-01", firstPeriodToFile: " 2026-07 " } }] };
     const released = (id: string, periodStartDate: string, deadline: string) => ({ ...template!, id, periodStartDate, publicationStatus: "published" as const, publishedOperationalDeadline: deadline, adjustedStatutoryDeadline: deadline });
     const projection = getClientServiceCalendarRows(julyStart, 2026, {}, [
       released("june-period-due-july", "2026-06-01", "2026-07-10"),

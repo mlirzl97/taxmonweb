@@ -335,7 +335,7 @@ export function getClientServiceCalendarRows(client: FixtureClient, year: number
   const candidateForms = clientCandidateFormNumbers(client);
   const clientDeadlinePolicy = normalizeClientDeadlinePolicy(client.entities[0]?.profile.deadlinePolicy);
   const goLiveDate = client.entities[0]?.profile.goLiveDate;
-  const firstPeriodToFile = client.entities[0]?.profile.firstPeriodToFile;
+  const firstPeriodToFile = client.entities[0]?.profile.firstPeriodToFile?.trim();
   const firstPeriodStart = firstPeriodToFile && /^\d{4}-(0[1-9]|1[0-2])$/.test(firstPeriodToFile) ? `${firstPeriodToFile}-01` : undefined;
   const goLiveYear = goLiveDate ? Number(goLiveDate.slice(0, 4)) : undefined;
   const candidateRows = (governedRows ? [...governedRows] : buildDeadlineControlRows(year, candidateForms))

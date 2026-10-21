@@ -473,3 +473,40 @@ end;
 $$;
 
 revoke execute on function public.sync_tax_profile_relational_context() from public, anon, authenticated;
+
+-- The saved profile names the same people as the relational assignment: when
+-- a role carries a Team user id, its label is that person's own display name,
+-- never the text the caller submitted.
+create or replace function public.canonicalize_tax_profile_assignment_labels()
+returns trigger
+language plpgsql
+security definer set search_path = public, pg_temp
+as $$
+declare
+  role_key text;
+  submitted_id text;
+  canonical_name text;
+begin
+  if new.assignment_data is null or jsonb_typeof(new.assignment_data) <> 'object' then
+    return new;
+  end if;
+  foreach role_key in array array['preparer', 'checker', 'reviewer'] loop
+    submitted_id := new.assignment_data ->> (role_key || 'UserId');
+    canonical_name := null;
+    if coalesce(submitted_id, '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+      select app_user.display_name into canonical_name from public.app_users app_user where app_user.id = submitted_id::uuid;
+    end if;
+    if canonical_name is not null then
+      new.assignment_data := jsonb_set(new.assignment_data, array[role_key], to_jsonb(canonical_name));
+    end if;
+  end loop;
+  return new;
+end;
+$$;
+
+drop trigger if exists tax_profile_assignment_labels_before_write on public.tax_profile_versions;
+create trigger tax_profile_assignment_labels_before_write
+  before insert or update of assignment_data on public.tax_profile_versions
+  for each row execute procedure public.canonicalize_tax_profile_assignment_labels();
+
+revoke execute on function public.canonicalize_tax_profile_assignment_labels() from public, anon, authenticated;

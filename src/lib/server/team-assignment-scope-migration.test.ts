@@ -53,6 +53,12 @@ describe("single open team assignment migration", () => {
     expect(migration).toContain("Cancelling this scheduled move is outside the caller''s authority.");
   });
 
+  it("stores each id-linked owner under that person's own name in the profile snapshot", () => {
+    expect(migration).toContain("create or replace function public.canonicalize_tax_profile_assignment_labels()");
+    expect(migration).toContain("before insert or update of assignment_data on public.tax_profile_versions");
+    expect(migration).toContain("new.assignment_data := jsonb_set(new.assignment_data, array[role_key], to_jsonb(canonical_name));");
+  });
+
   it("refuses an unknown tower instead of widening scope to its cluster", () => {
     expect(migration).toContain("The selected Tower is not a single active tower.");
     expect(migration).toContain("The selected Cluster is not a single active cluster.");

@@ -120,8 +120,9 @@ export function clientProfileControlErrors(profile: Record<string, unknown>, opt
   }
   const firstPeriod = profile.firstPeriodToFile;
   if (firstPeriod !== undefined && firstPeriod !== null && firstPeriod !== "") {
-    if (typeof firstPeriod !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(firstPeriod.trim())) errors.push("profileData.firstPeriodToFile must use YYYY-MM.");
-    else if (typeof profile.goLiveDate === "string" && isIsoDate(profile.goLiveDate.trim()) && firstPeriod.trim() < profile.goLiveDate.trim().slice(0, 7)) errors.push("profileData.firstPeriodToFile cannot be before the go-live month.");
+    // Checked as stored: surrounding spaces would defeat the calendar boundary.
+    if (typeof firstPeriod !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(firstPeriod)) errors.push("profileData.firstPeriodToFile must use YYYY-MM.");
+    else if (typeof profile.goLiveDate === "string" && isIsoDate(profile.goLiveDate.trim()) && firstPeriod < profile.goLiveDate.trim().slice(0, 7)) errors.push("profileData.firstPeriodToFile cannot be before the go-live month.");
   }
   const fileLocation = profile.permanentFileLink;
   if (fileLocation !== undefined && fileLocation !== null && fileLocation !== "" && (typeof fileLocation !== "string" || fileLocation.length > 240 || !isPermanentFileLocation(fileLocation, options.sourceSystem))) {
