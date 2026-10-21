@@ -323,6 +323,33 @@ describe("live client adapter", () => {
     expect(projected.assignment.preparerUserId).toBeUndefined();
   });
 
+  it("takes owners only from the Registration Unit the dossier shows, never from another branch", () => {
+    const base = liveClient({});
+    const head = base.taxpayer_entities[0].registration_units[0];
+    const branch = { ...head, id: "ru-branch", reference_code: "RU-BRANCH", display_name: "Branch", unit_kind: "branch" as const, registration_unit_team_assignments: [
+      { id: "branch-owner", user_id: "user-branch", assignment_role: "preparer" as const, assignee_label: "Branch Preparer", effective_from: "2026-01-01", effective_to: null, app_users: { display_name: "Branch Preparer" } },
+    ] };
+    const projected = portfolioClientToFixtureClient({
+      ...base,
+      taxpayer_entities: [{ ...base.taxpayer_entities[0], registration_units: [branch, { ...head, registration_unit_team_assignments: [] }] }],
+    });
+
+    expect(projected.assignment.preparer).toBe("Unassigned");
+    expect(projected.assignment.preparerUserId).toBeUndefined();
+  });
+
+  it("treats a Cluster-only scope as resolved", () => {
+    const base = liveClient({});
+    const head = base.taxpayer_entities[0].registration_units[0];
+    const projected = portfolioClientToFixtureClient({
+      ...base,
+      taxpayer_entities: [{ ...base.taxpayer_entities[0], registration_units: [{ ...head, registration_unit_scope_assignments: [{ organization_units: { code: "FIXTURE-CLUSTER-A", name: "Cluster A", unit_kind: "cluster" } }] }] }],
+    });
+
+    expect(projected.assignment.cluster).toBe("Cluster A");
+    expect(projected.entities[0].profile.attention).not.toContain("Organizational scope requires validation");
+  });
+
   it("projects effective-dated registration-unit team history without inventing staff identities", () => {
     const projected = portfolioClientToFixtureClient(liveClient({
       taxpayer_entities: [{

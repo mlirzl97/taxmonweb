@@ -25,7 +25,8 @@ function scopeForClient(client: PortfolioClient): { tower: FixtureScope; cluster
     // sentinel intentionally does not match any selectable tower filter.
     tower: (resolved?.name ?? "Unresolved") as FixtureScope,
     cluster: resolvedCluster?.name ?? "Unresolved",
-    resolved: Boolean(resolved),
+    // Onboarding may place a client directly in a Cluster; that scope is resolved too.
+    resolved: Boolean(resolved || resolvedCluster),
   };
 }
 
@@ -94,10 +95,12 @@ export function additionalEngagementToFixtureChangeRequestForm(
   };
 }
 
-function currentAssignment(client: PortfolioClient): Pick<FixtureClient["assignment"], "preparer" | "checker" | "reviewer" | "preparerUserId" | "checkerUserId" | "reviewerUserId" | "effectiveFrom"> {
+function currentAssignment(client: PortfolioClient, selectedUnit?: PortfolioClient["taxpayer_entities"][number]["registration_units"][number]): Pick<FixtureClient["assignment"], "preparer" | "checker" | "reviewer" | "preparerUserId" | "checkerUserId" | "reviewerUserId" | "effectiveFrom"> {
   const today = new Date().toISOString().slice(0, 10);
   const clientAssignments = client.client_team_assignments.map((assignment) => ({ ...assignment, source: "client" as const }));
-  const unitAssignments = client.taxpayer_entities.flatMap((entity) => entity.registration_units.flatMap((unit) => unit.registration_unit_team_assignments.map((assignment) => ({ ...assignment, source: "registration_unit" as const }))));
+  // Only the Registration Unit the dossier shows and saves supplies owners;
+  // another unit's owners never stand in for it.
+  const unitAssignments = (selectedUnit?.registration_unit_team_assignments ?? []).map((assignment) => ({ ...assignment, source: "registration_unit" as const }));
   // Registration-unit owners are authoritative; client-level rows are a legacy fallback.
   const current = [...unitAssignments, ...clientAssignments].filter((assignment) => assignment.effective_from <= today && (!assignment.effective_to || assignment.effective_to >= today));
   const displayName = (assignment: (typeof current)[number]) => Array.isArray(assignment.app_users) ? assignment.app_users[0]?.display_name ?? assignment.assignee_label : assignment.app_users?.display_name ?? assignment.assignee_label;
@@ -334,7 +337,7 @@ export function portfolioClientToFixtureClient(client: PortfolioClient): Fixture
   const profile = buildProfile(client, entity, unit);
   if (!scope.resolved) profile.attention = [...profile.attention, "Organizational scope requires validation"];
   const tower = scope.tower;
-  const assignment = { ...currentAssignment(client), tower, cluster: scope.cluster } satisfies FixtureClient["assignment"];
+  const assignment = { ...currentAssignment(client, unit), tower, cluster: scope.cluster } satisfies FixtureClient["assignment"];
   const teamHistory = client.taxpayer_entities
     .flatMap((candidate) => candidate.registration_units.flatMap((registrationUnit) => teamHistoryForUnit(registrationUnit)))
     .map((history) => ({ ...history, clientId: client.reference_code }))
