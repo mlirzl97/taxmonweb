@@ -110,12 +110,11 @@ describe("viewer work actions", () => {
 });
 
 describe("viewer action-specific controls", () => {
-  it("lets work maintenance record Data Readiness without execute authority, as the command allows", () => {
-    const maintainer = viewer("maint-2", ["ViewScopedPortfolio", "MaintainGeneratedComplianceWork"]);
-    expect(canViewerSetDataReadiness(maintainer, assigned)).toBe(true);
-    expect(canViewerSetDataReadiness(staff, assigned)).toBe(true);
-    expect(canViewerSetDataReadiness(viewer("staff-2", ["ExecuteGeneratedComplianceWork"]), assigned)).toBe(false);
-    expect(canViewerSetDataReadiness(viewerOnly, { PREPARER: "viewer-1" })).toBe(false);
+  it("lets execute or maintenance authority record Data Readiness without a Preparer assignment, as the command allows", () => {
+    expect(canViewerSetDataReadiness(viewer("maint-2", ["ViewScopedPortfolio", "MaintainGeneratedComplianceWork"]))).toBe(true);
+    expect(canViewerSetDataReadiness(teamLead)).toBe(true);
+    expect(canViewerSetDataReadiness(staff)).toBe(true);
+    expect(canViewerSetDataReadiness(viewerOnly)).toBe(false);
   });
 
   it("lets Tax Profile correction authority edit the profile without repository maintenance", () => {

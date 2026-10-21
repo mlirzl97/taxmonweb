@@ -115,12 +115,10 @@ export function canViewerActOnWorkRole(
 }
 
 /**
- * Data Readiness is a prerequisite control, not preparation itself: the
- * command also accepts work maintenance authority without execute authority.
+ * Data Readiness is a prerequisite control, not preparation itself. Like the
+ * data_readiness command, it needs execute or maintenance authority on work the
+ * viewer can see, without a Preparer assignment, so leaders can record it too.
  */
-export function canViewerSetDataReadiness(
-  viewer: ViewerAccess,
-  assignedUserIds: Partial<Record<"PREPARER" | "CHECKER" | "REVIEWER", string>> | undefined,
-): boolean {
-  return canViewerActOnWorkRole(viewer, assignedUserIds, "PREPARER") || viewer.capabilities.has("MaintainGeneratedComplianceWork");
+export function canViewerSetDataReadiness(viewer: ViewerAccess): boolean {
+  return hasAny(viewer, ["ExecuteGeneratedComplianceWork", "MaintainGeneratedComplianceWork"]);
 }
