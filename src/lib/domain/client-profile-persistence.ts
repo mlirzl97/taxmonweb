@@ -152,6 +152,14 @@ function weightLabel(weight: number): string {
 }
 
 /** Use the assigned operating weight when a source reconciliation weight is unavailable. */
+// A saved id wins. A label-only save inherits the current owner's id only when
+// it names that same person, so a stale label never borrows someone's id.
+function restoredUserId(savedUserId: unknown, savedLabel: unknown, baseLabel: string, baseUserId: string | undefined): string | undefined {
+  if (typeof savedUserId === "string" && savedUserId) return savedUserId;
+  if (typeof savedLabel === "string" && savedLabel.trim() && savedLabel.trim().toLowerCase() !== baseLabel.toLowerCase()) return undefined;
+  return baseUserId;
+}
+
 export function getClientDisplayWeight(profile: Pick<FixtureTaxProfile, "sourceFinalWeight" | "weight">): number | null {
   if (profile.sourceFinalWeight !== null) return profile.sourceFinalWeight;
   return profile.weight >= 1 && profile.weight <= 5 ? profile.weight : null;
@@ -219,9 +227,9 @@ export function applyPersistedTaxProfileSnapshot(
     preparer: text(savedAssignment.preparer, baseAssignment.preparer),
     checker: text(savedAssignment.checker, baseAssignment.checker),
     reviewer: text(savedAssignment.reviewer, baseAssignment.reviewer),
-    preparerUserId: typeof savedAssignment.preparerUserId === "string" ? savedAssignment.preparerUserId : baseAssignment.preparerUserId,
-    checkerUserId: typeof savedAssignment.checkerUserId === "string" ? savedAssignment.checkerUserId : baseAssignment.checkerUserId,
-    reviewerUserId: typeof savedAssignment.reviewerUserId === "string" ? savedAssignment.reviewerUserId : baseAssignment.reviewerUserId,
+    preparerUserId: restoredUserId(savedAssignment.preparerUserId, savedAssignment.preparer, baseAssignment.preparer, baseAssignment.preparerUserId),
+    checkerUserId: restoredUserId(savedAssignment.checkerUserId, savedAssignment.checker, baseAssignment.checker, baseAssignment.checkerUserId),
+    reviewerUserId: restoredUserId(savedAssignment.reviewerUserId, savedAssignment.reviewer, baseAssignment.reviewer, baseAssignment.reviewerUserId),
     tower: text(savedAssignment.tower, baseAssignment.tower),
     cluster: text(savedAssignment.cluster, baseAssignment.cluster),
     effectiveFrom: text(savedAssignment.effectiveFrom, snapshot.effectiveFrom),

@@ -154,3 +154,65 @@ begin
   return activated_profile;
 end;
 $$;
+
+-- The editor and the validate route read "latest" the same way validation
+-- does: the highest version number, not the latest effective date.
+create or replace function public.get_latest_tax_profile_version(
+  p_client_reference_code text
+)
+returns jsonb
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  target_client_id uuid;
+  latest_profile public.tax_profile_versions;
+begin
+  if auth.uid() is null then
+    raise exception using errcode = '42501', message = 'Authentication is required to read a Tax Profile.';
+  end if;
+
+  select client.id into target_client_id
+  from public.clients client
+  join public.taxpayer_entities entity on entity.client_id = client.id
+  join public.registration_units registration_unit on registration_unit.taxpayer_entity_id = entity.id
+  where client.reference_code = p_client_reference_code
+    and registration_unit.active = true
+    and public.can_view_registration_unit(registration_unit.id)
+  limit 1;
+
+  if target_client_id is null then
+    return jsonb_build_object('clientFound', false, 'data', null);
+  end if;
+
+  select profile.* into latest_profile
+  from public.tax_profile_versions profile
+  join public.registration_units registration_unit on registration_unit.id = profile.registration_unit_id
+  join public.taxpayer_entities entity on entity.id = registration_unit.taxpayer_entity_id
+  where entity.client_id = target_client_id
+    and registration_unit.active = true
+    and public.can_view_registration_unit(registration_unit.id)
+  order by profile.version_number desc, profile.created_at desc
+  limit 1;
+
+  if latest_profile.id is null then
+    return jsonb_build_object('clientFound', true, 'data', null);
+  end if;
+
+  return jsonb_build_object(
+    'clientFound', true,
+    'data', jsonb_build_object(
+      'id', latest_profile.id,
+      'state', latest_profile.state,
+      'effectiveFrom', latest_profile.effective_from,
+      'versionNumber', latest_profile.version_number,
+      'profile', latest_profile.profile_data,
+      'assignment', latest_profile.assignment_data,
+      'createdAt', latest_profile.created_at,
+      'validatedAt', latest_profile.validated_at,
+      'validatedBy', latest_profile.validated_by,
+      'changeReason', latest_profile.change_reason
+    )
+  );
+end;
+$$;

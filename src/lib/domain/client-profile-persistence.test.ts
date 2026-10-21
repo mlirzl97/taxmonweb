@@ -72,6 +72,24 @@ describe("Tax Profile validation indicator", () => {
     expect(client.entities[0]?.profile.enateSetup).not.toBe("Yes");
   });
 
+  it("keeps the current owner's id for a label-only save of that same person", () => {
+    const client = fixtureClients.find((item) => item.id === "fixture-client-04");
+    expect(client).toBeTruthy();
+    if (!client) return;
+    const base = { ...client, assignment: { ...client.assignment, preparer: "Totoy Bibo", preparerUserId: "user-totoy-2", checker: "Marites Chismosa", checkerUserId: "user-marites" } };
+
+    const restored = applyPersistedClientSnapshot(base, {
+      state: "ready_for_validation",
+      effectiveFrom: "2026-10-11",
+      profile: {},
+      assignment: { preparer: "Totoy Bibo", checker: "Unassigned" },
+    });
+
+    expect(restored.assignment.preparerUserId).toBe("user-totoy-2");
+    expect(restored.assignment.checker).toBe("Unassigned");
+    expect(restored.assignment.checkerUserId).toBeUndefined();
+  });
+
   it("removes resolved setup and assignment issues from the attention projection", () => {
     const client = fixtureClients.find((item) => item.id === "fixture-client-06");
     const profile = client?.entities[0]?.profile;

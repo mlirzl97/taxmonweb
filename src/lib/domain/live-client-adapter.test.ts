@@ -283,7 +283,8 @@ describe("live client adapter", () => {
     }));
 
     expect(projected.assignment.preparer).toBe("Current Preparer");
-    expect(projected.assignment.checker).toBe("Unassigned");
+    expect(projected.assignment.checker).toBe("Unassigned");    expect(projected.assignment.preparerUserId).toBe("user-preparer");
+    expect(projected.assignment.checkerUserId).toBeUndefined();
   });
 
   it("projects effective-dated registration-unit team history without inventing staff identities", () => {

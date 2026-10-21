@@ -29,6 +29,11 @@ describe("validate latest resolved Tax Profile migration", () => {
     expect(migration).toContain("if candidate.effective_from > current_date then");
   });
 
+  it("reads the latest version by version number, as validation does", () => {
+    expect(migration).toContain("create or replace function public.get_latest_tax_profile_version(");
+    expect(migration).toContain("order by profile.version_number desc, profile.created_at desc");
+  });
+
   it("treats placeholder values as missing facts", () => {
     expect(migration).toContain("in ('unassigned', 'unresolved', 'needs review', 'not configured') then");
   });

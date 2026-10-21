@@ -94,7 +94,7 @@ export function additionalEngagementToFixtureChangeRequestForm(
   };
 }
 
-function currentAssignment(client: PortfolioClient): Pick<FixtureClient["assignment"], "preparer" | "checker" | "reviewer" | "effectiveFrom"> {
+function currentAssignment(client: PortfolioClient): Pick<FixtureClient["assignment"], "preparer" | "checker" | "reviewer" | "preparerUserId" | "checkerUserId" | "reviewerUserId" | "effectiveFrom"> {
   const today = new Date().toISOString().slice(0, 10);
   const clientAssignments = client.client_team_assignments.map((assignment) => ({ ...assignment, source: "client" as const }));
   const unitAssignments = client.taxpayer_entities.flatMap((entity) => entity.registration_units.flatMap((unit) => unit.registration_unit_team_assignments.map((assignment) => ({ ...assignment, source: "registration_unit" as const }))));
@@ -104,10 +104,17 @@ function currentAssignment(client: PortfolioClient): Pick<FixtureClient["assignm
     .map((assignment) => Array.isArray(assignment.app_users) ? assignment.app_users[0]?.display_name ?? assignment.assignee_label : assignment.app_users?.display_name ?? assignment.assignee_label)
     .filter((name): name is string => Boolean(name));
   const first = (names: string[]) => names[0] ?? "Unassigned";
+  // The relational row's user id is the authoritative owner, so a resave of
+  // a label-only profile keeps the same person.
+  const userIdFor = (role: PortfolioClient["client_team_assignments"][number]["assignment_role"]) => current
+    .find((assignment) => assignment.assignment_role === role && assignment.user_id)?.user_id ?? undefined;
   return {
     preparer: first(namesFor("preparer")),
     checker: first(namesFor("checker")),
     reviewer: first(namesFor("reviewer")),
+    preparerUserId: userIdFor("preparer"),
+    checkerUserId: userIdFor("checker"),
+    reviewerUserId: userIdFor("reviewer"),
     effectiveFrom: current.map((assignment) => assignment.effective_from).sort()[0] ?? "Current repository state",
   };
 }
