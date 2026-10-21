@@ -77,6 +77,12 @@ begin
     end if;
   end loop;
 
+  -- The first period to file must be a real calendar month (YYYY-MM, 01-12).
+  if nullif(trim(coalesce(candidate.profile_data ->> 'firstPeriodToFile', '')), '') is not null
+     and trim(candidate.profile_data ->> 'firstPeriodToFile') !~ '^\d{4}-(0[1-9]|1[0-2])$' then
+    missing_keys := array_append(missing_keys, 'firstPeriodToFile (a calendar month, YYYY-MM)');
+  end if;
+
   if jsonb_typeof(candidate.profile_data -> 'assignmentActors') = 'array'
      and jsonb_array_length(candidate.profile_data -> 'assignmentActors') <> 3 then
     missing_keys := array_append(missing_keys, 'distinct assignment actors');

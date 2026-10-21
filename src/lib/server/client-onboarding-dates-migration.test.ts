@@ -19,4 +19,8 @@ describe("client onboarding dates migration", () => {
     expect(migration).toContain("'ready_for_validation'");
     expect(migration).toContain("has_active_capability('MaintainClientRepository')");
   });
+  it("accepts only an active Cluster or Tower as the new client's scope", () => {
+    expect(migration).toContain("unit.unit_kind in ('cluster', 'tower')");
+    expect(migration).toContain("A client must be placed in an active Cluster or Tower.");
+  });
 });

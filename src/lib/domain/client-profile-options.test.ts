@@ -31,5 +31,7 @@ describe("client profile controlled references", () => {
     expect(clientProfileControlErrors({ permanentFileLink: "\\\\fileserver\\AT\\Voltline" })).toEqual([]);
     expect(clientProfileControlErrors({ goLiveDate: "2026-03-01", firstPeriodToFile: "2026-02" })).toEqual(["profileData.firstPeriodToFile cannot be before the go-live month."]);
     expect(clientProfileControlErrors({ goLiveDate: "2026-03-01", firstPeriodToFile: "2026-03" })).toEqual([]);
+    expect(clientProfileControlErrors({ goLiveDate: "2026-03-01", firstPeriodToFile: "2026-13" })).toEqual(["profileData.firstPeriodToFile must use YYYY-MM."]);
+    expect(clientProfileControlErrors({ firstPeriodToFile: "2026-00" })).toEqual(["profileData.firstPeriodToFile must use YYYY-MM."]);
   });
 });

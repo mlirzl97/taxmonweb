@@ -202,7 +202,7 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
   const goLiveDate = profileText("goLiveDate", 10);
   if (goLiveDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(goLiveDate)) errors.push("profileData.goLiveDate must use YYYY-MM-DD.");
   const firstPeriodToFile = profileText("firstPeriodToFile", 7);
-  if (firstPeriodToFile !== undefined && !/^\d{4}-\d{2}$/.test(firstPeriodToFile)) errors.push("profileData.firstPeriodToFile must use YYYY-MM.");
+  if (firstPeriodToFile !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(firstPeriodToFile)) errors.push("profileData.firstPeriodToFile must use YYYY-MM.");
   // A SharePoint link or a shared-drive path; it is a location reference, not a fetched URL.
   const permanentFileLink = profileText("permanentFileLink", 240);
   const enateSetup = profileText("enateSetup", 32);

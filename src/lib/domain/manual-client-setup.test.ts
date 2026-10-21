@@ -319,6 +319,7 @@ describe("manual client setup contract", () => {
     const unit = client.entities[0].units[0];
     expect(profileActivationGaps({ ...client.entities[0].profile, firstPeriodToFile: undefined }, client.assignment, unit)).toContain("first period to file");
     expect(profileActivationGaps({ ...client.entities[0].profile, firstPeriodToFile: "2026-03" }, client.assignment, unit)).not.toContain("first period to file");
+    expect(profileActivationGaps({ ...client.entities[0].profile, firstPeriodToFile: "2026-13" }, client.assignment, unit)).toContain("first period to file");
   });
 
   it("treats two staff who share a name as distinct owners when their ids differ", () => {

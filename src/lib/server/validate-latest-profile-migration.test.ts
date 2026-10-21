@@ -42,6 +42,7 @@ describe("validate latest resolved Tax Profile migration", () => {
 
   it("requires the first period to file before activation", () => {
     expect(migration).toContain("'firstPeriodToFile', 'cluster', 'tower', 'preparer', 'checker', 'reviewer'");
+    expect(migration).toContain("!~ '^\\d{4}-(0[1-9]|1[0-2])$' then");
   });
 
   it("treats placeholder values as missing facts", () => {

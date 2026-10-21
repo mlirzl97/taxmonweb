@@ -48,6 +48,14 @@ begin
   if not public.can_manage_organization_unit(p_organization_unit_id) then
     raise exception using errcode = '42501', message = 'The selected organizational scope is outside the caller''s authority.';
   end if;
+  -- A client's operating scope is a Cluster or a Tower; other unit kinds
+  -- cannot be resolved as client scope.
+  if not exists (
+    select 1 from public.organization_units unit
+    where unit.id = p_organization_unit_id and unit.active and unit.unit_kind in ('cluster', 'tower')
+  ) then
+    raise exception using errcode = '22023', message = 'A client must be placed in an active Cluster or Tower.';
+  end if;
 
   if jsonb_typeof(coalesce(p_source_pack, '[]'::jsonb)) <> 'array' then
     raise exception using errcode = '22023', message = 'Source pack must be an array of source-control items.';
