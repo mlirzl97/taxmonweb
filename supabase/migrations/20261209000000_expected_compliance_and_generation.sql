@@ -722,6 +722,17 @@ begin
 
     key := 'generated:' || p_registration_unit_id::text || ':' || form_code || ':' || item_kind || ':' || to_char(item_period_start, 'YYYY-MM');
     if exists (select 1 from public.generated_compliance_work where generation_key = key) then
+      -- Work already generated for this period under another requirement
+      -- version is not an idempotent match: it needs a governed keep, rebase
+      -- or supersede decision, which is surfaced rather than made here.
+      if exists (
+        select 1 from public.generated_compliance_work work
+         where work.generation_key = key
+           and (work.requirement_id, work.requirement_version_id) is distinct from (governed_requirement_id, governed_version_id)
+      ) then
+        skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'Work for this period already exists under an earlier requirement version; it needs a keep, rebase or supersede decision.'));
+        continue;
+      end if;
       existing := existing + 1;
       continue;
     end if;

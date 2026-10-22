@@ -111,10 +111,19 @@ export async function POST(request: Request, context: RouteContext) {
     if (action === "approve") {
       const reason = typeof command?.reason === "string" ? command.reason.trim() : "";
       if (!reason) return NextResponse.json({ error: "A reason is required to approve Expected Compliance." }, { status: 400 });
-      const approved = await approveExpectedCompliance(loaded.unitId, reason, command?.elevatedOverride === true);
+      let approved = 0;
+      let alreadyApproved = false;
+      try {
+        approved = await approveExpectedCompliance(loaded.unitId, reason, command?.elevatedOverride === true);
+      } catch (error) {
+        // A retry after an approval whose generation failed records no second
+        // approval, but still finishes generating.
+        if (!(error instanceof Error && /Nothing is waiting for approval/.test(error.message))) throw error;
+        alreadyApproved = true;
+      }
       // Approval is what makes work generate: set up once, generate automatically.
       const generation = await generate(loaded.portfolioClient, loaded.unitId);
-      return NextResponse.json({ approved, generation });
+      return NextResponse.json({ approved, alreadyApproved, generation });
     }
     if (action === "generate") {
       return NextResponse.json({ generation: await generate(loaded.portfolioClient, loaded.unitId) });
@@ -127,9 +136,6 @@ export async function POST(request: Request, context: RouteContext) {
     }
     if (error instanceof Error && /The Tax Profile changed since Expected Compliance was proposed/.test(error.message)) {
       return NextResponse.json({ error: "The Tax Profile changed since Expected Compliance was proposed. Use Propose from profile, review, then approve." }, { status: 409 });
-    }
-    if (error instanceof Error && /Nothing is waiting for approval/.test(error.message)) {
-      return NextResponse.json({ error: "Already approved; nothing is waiting for approval. Use Generate work to generate again." }, { status: 409 });
     }
     return apiErrorResponse(error, "Unable to apply the Expected Compliance command.", { status: inferredApiErrorStatus(error), logContext: "apply expected compliance command" });
   }

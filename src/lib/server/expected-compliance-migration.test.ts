@@ -87,6 +87,10 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toContain("snapshot, elevated, (public.active_tax_profile_for_unit(p_registration_unit_id)).id);");
   });
 
+  it("surfaces work already generated under another requirement version instead of counting it as existing", () => {
+    expect(migration).toContain("'Work for this period already exists under an earlier requirement version; it needs a keep, rebase or supersede decision.'");
+  });
+
   it("turns an unresolved return into a candidate once a governed requirement is active", () => {
     expect(migration).toMatch(/and item\.selection_status = 'unresolved'\s+and item\.requirement_id is null/);
   });

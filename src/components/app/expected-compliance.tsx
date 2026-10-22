@@ -98,7 +98,7 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId }: { cl
   async function approve() {
     const reason = window.prompt("Approval note (required):", "Expected Compliance reviewed against the validated Tax Profile")?.trim();
     if (!reason) return;
-    const outcome = await command({ action: "approve", reason }, (payload) => `Approved. ${generationSummary(payload.generation as Generation)}.`);
+    const outcome = await command({ action: "approve", reason }, (payload) => `${payload.alreadyApproved ? "Already approved" : "Approved"}. ${generationSummary(payload.generation as Generation)}.`);
     // Approving one's own decisions needs another approver, or a marked, audited Elevated Override.
     if (outcome.error?.includes("another approver") && window.confirm(`${outcome.error}\n\nApprove anyway as an Elevated Override? It is recorded and marked in the audit trail.`)) {
       await command({ action: "approve", reason, elevatedOverride: true }, (payload) => `Approved by Elevated Override. ${generationSummary(payload.generation as Generation)}.`);
