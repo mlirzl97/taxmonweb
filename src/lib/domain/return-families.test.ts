@@ -95,14 +95,15 @@ describe("return families", () => {
     expect(calendar.rows.map((candidate) => candidate.id)).toEqual(["c:1702Q"]);
   });
 
-  it("adds elected 2550M and 2551M for months 1 and 2 with the TMF due date on the 20th", () => {
+  it("proposes elected 2550M and 2551M for months 1 and 2 on the 20th, held until the Tax Team releases them", () => {
     const { rows } = projectReturnFamilyCalendar(client(), ["2550M", "2551M"], [], 2026);
     const vat = rows.filter((candidate) => candidate.formNumber === "2550M");
     expect(vat.map((candidate) => candidate.periodStartDate)).toEqual(["2026-01-01", "2026-02-01", "2026-04-01", "2026-05-01", "2026-07-01", "2026-08-01", "2026-10-01", "2026-11-01"]);
-    expect(vat[0].publishedOperationalDeadline).toBe("2026-02-20");
+    expect(vat[0].earliestApplicableDeadline).toBe("2026-02-20");
     expect(vat[0].tmfPackageTarget).toBe("2026-02-19");
-    expect(vat[7].publishedOperationalDeadline).toBe("2026-12-20");
-    expect(vat[0].sourceLabel).toBe("TMF due date (no BIR deadline)");
+    expect(vat[7].earliestApplicableDeadline).toBe("2026-12-20");
+    // Never published by projection: no operational date until release.
+    expect(vat.every((candidate) => candidate.publicationStatus === "needs_review" && candidate.publishedOperationalDeadline === null)).toBe(true);
     expect(rows.filter((candidate) => candidate.formNumber === "2551M")).toHaveLength(8);
     // Not elected: no optional rows.
     expect(projectReturnFamilyCalendar(client(), ["2550Q"], [], 2026).rows).toHaveLength(0);

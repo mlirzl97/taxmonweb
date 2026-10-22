@@ -14,18 +14,27 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toContain("insert into public.expected_compliance_approvals");
   });
 
+  it("keeps every decision a proposal until the Registration Unit is approved", () => {
+    expect(migration).toMatch(/set pending_decision = decision,\s+pending_reason = reason/);
+    expect(migration).toContain("'A superseded Expected Compliance item cannot be decided.'");
+    expect(migration).toContain("-- Proposed decisions take effect now, with their reasons.");
+  });
+
   it("generates only for approved In TMF Scope returns, from governed facts, idempotently", () => {
     expect(migration).toMatch(/candidate\.selection_status = 'approved'\s+and candidate\.service_scope = 'in_scope'/);
     expect(migration).toContain("calendar_version.status = 'released'");
     expect(migration).toContain("calendar_entry.published_operational_deadline = due_date");
+    // The cited row must cover the period, kind and (for a supporting form) name the return.
+    expect(migration).toContain("public.compliance_period_start_from_label(calendar_entry.period_or_event)) = item_period_start");
+    expect(migration).toContain("= (item_kind = 'proof')");
+    expect(migration).toContain("position(form_code in upper(coalesce(calendar_entry.period_or_event, ''))) > 0");
     expect(migration).toContain("'The period is before the first period to file.'");
     expect(migration).toContain("on conflict (generation_key) do nothing");
   });
 
-  it("limits TMF-only dates to elected optional monthly returns in months 1–2, due on the 20th", () => {
-    expect(migration).toContain("form_code not in ('2550M', '2551M')");
-    expect(migration).toContain("(extract(month from period_start)::integer - 1) % 3 = 2");
-    expect(migration).toContain("due_date <> (period_start + interval '1 month')::date + 19");
+  it("takes every date, an optional return's TMF date included, from a released calendar row", () => {
+    expect(migration).toContain("'This return needs a published calendar row.'");
+    expect(migration).not.toContain("form_code not in ('2550M', '2551M')");
   });
 
   it("keeps the helper functions out of reach of API callers", () => {

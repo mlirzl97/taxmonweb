@@ -10,6 +10,8 @@ type Item = {
   status: "candidate" | "approved" | "excluded" | "unresolved" | "superseded";
   serviceScope: "in_scope" | "out_of_scope" | null;
   reason: string | null;
+  pendingDecision: "in_scope" | "out_of_scope" | "not_applicable" | "unresolved" | null;
+  pendingReason: string | null;
 };
 
 type Permissions = { canPropose: boolean; canApprove: boolean; canGenerate: boolean };
@@ -95,7 +97,7 @@ export function ExpectedComplianceSection({ clientId }: { clientId: string }) {
     void command({ action: "approve", reason }, (payload) => `Approved. ${generationSummary(payload.generation as Generation)}.`);
   }
 
-  const proposed = items.filter((item) => item.status === "candidate").length;
+  const proposed = items.filter((item) => item.status === "candidate" || item.pendingDecision).length;
   const approvedInScope = items.filter((item) => item.status === "approved" && item.serviceScope === "in_scope").length;
 
   return <section className="dossier-section" id="client-expected-compliance">
@@ -108,14 +110,14 @@ export function ExpectedComplianceSection({ clientId }: { clientId: string }) {
           const label = itemLabel(item);
           const draft = drafts[item.id];
           return <div className="expected-compliance-row" key={item.id}>
-            <div><strong>{item.formNumber}</strong> <span className={`status-pill status-pill--${label.tone}`}>{label.text}</span>{item.reason && <small className="status-label__detail"> · {item.reason}</small>}</div>
+            <div><strong>{item.formNumber}</strong> <span className={`status-pill status-pill--${label.tone}`}>{label.text}</span>{item.reason && <small className="status-label__detail"> · {item.reason}</small>}{item.pendingDecision && <small className="status-label__detail"> · Proposed change: {decisions.find((decision) => decision.value === item.pendingDecision)?.label}{item.pendingReason ? ` (${item.pendingReason})` : ""} — applies on approval</small>}</div>
             {permissions.canPropose && <div className="expected-compliance-row__decision">
               <select aria-label={`${item.formNumber} decision`} disabled={busy} onChange={(event) => setDrafts({ ...drafts, [item.id]: { decision: event.target.value, reason: draft?.reason ?? "" } })} value={draft?.decision ?? ""}>
                 <option value="">Change decision…</option>
                 {decisions.map((decision) => <option key={decision.value} value={decision.value}>{decision.label}</option>)}
               </select>
               {draft?.decision && (draft.decision === "out_of_scope" || draft.decision === "not_applicable") && <input aria-label={`${item.formNumber} reason`} onChange={(event) => setDrafts({ ...drafts, [item.id]: { ...draft, reason: event.target.value } })} placeholder="Reason (required)" value={draft.reason} />}
-              {draft?.decision && <button className="text-button" disabled={busy} onClick={() => void command({ action: "decide", itemId: item.id, decision: draft.decision, reason: draft.reason }, () => `${item.formNumber} updated. Approve again to apply it.`).then(() => setDrafts((current) => {
+              {draft?.decision && <button className="text-button" disabled={busy} onClick={() => void command({ action: "decide", itemId: item.id, decision: draft.decision, reason: draft.reason }, () => `${item.formNumber}: change proposed. It applies when Expected Compliance is approved.`).then(() => setDrafts((current) => {
                 const next = { ...current };
                 delete next[item.id];
                 return next;

@@ -11,14 +11,15 @@
 --    selected returns; decide_expected_compliance_item records a decision;
 --    approve_expected_compliance records the per-Registration-Unit approval.
 -- 3. record_generated_compliance_work creates work for approved, in-scope
---    returns. The server computes the periods from the published calendar;
+--    returns, only from released calendar rows. The server computes the periods from the published calendar;
 --    this command re-checks every item against the governed facts it cites
 --    (published calendar row and date, approved item, active profile, first
 --    period to file) and is idempotent through generation_key.
 --
 -- 2550M and 2551M are optional, client-elected returns with a TMF due date
 -- and no BIR deadline (HOD decisions H-005, H-006). They get governed master
--- records so their work has a requirement like every other return.
+-- records so the Tax Team can release their dates like any other deadline
+-- (H-010); until then they generate no work.
 
 insert into public.capabilities (key, description) values
   ('ProposeComplianceUniverse', 'Propose Expected Compliance for a validated Tax Profile.'),
@@ -60,7 +61,12 @@ alter table public.client_compliance_universe_items
   add column if not exists form_number text,
   add column if not exists service_scope text,
   add column if not exists proposed_by uuid references public.app_users(id),
-  add column if not exists proposed_at timestamptz;
+  add column if not exists proposed_at timestamptz,
+  -- A decision is a proposal until the Registration Unit is approved.
+  add column if not exists pending_decision text check (pending_decision in ('in_scope', 'out_of_scope', 'not_applicable', 'unresolved')),
+  add column if not exists pending_reason text,
+  add column if not exists pending_by uuid references public.app_users(id),
+  add column if not exists pending_at timestamptz;
 alter table public.client_compliance_universe_items alter column requirement_id drop not null;
 alter table public.client_compliance_universe_items
   drop constraint if exists client_compliance_universe_it_registration_unit_id_requirem_key;
@@ -237,13 +243,16 @@ begin
   if decision in ('in_scope', 'out_of_scope') and item.requirement_id is null then
     raise exception using errcode = '22023', message = 'This return has no governed BIR requirement yet; it stays unresolved.';
   end if;
-  -- A decision is a proposal until the Registration Unit is approved again.
+  if item.selection_status = 'superseded' then
+    raise exception using errcode = '22023', message = 'A superseded Expected Compliance item cannot be decided.';
+  end if;
+  -- A decision is only a proposal: what is approved keeps governing work
+  -- until approve_expected_compliance applies it.
   update public.client_compliance_universe_items
-     set selection_status = case decision when 'not_applicable' then 'excluded' when 'unresolved' then 'unresolved' else 'candidate' end,
-         service_scope = case when decision in ('in_scope', 'out_of_scope') then decision else null end,
-         decision_reason = reason,
-         decided_by = auth.uid(),
-         decided_at = now()
+     set pending_decision = decision,
+         pending_reason = reason,
+         pending_by = auth.uid(),
+         pending_at = now()
    where id = item.id;
   perform public.append_audit_event(
     'expected_compliance_item_decided', 'client_compliance_universe_item', item.id::text,
@@ -262,6 +271,7 @@ security definer set search_path = public
 as $$
 declare
   approved_count integer;
+  candidate_count integer;
   snapshot jsonb;
 begin
   if auth.uid() is null or not public.is_active_app_user() then
@@ -281,17 +291,31 @@ begin
     raise exception using errcode = '22023', message = 'Expected Compliance needs a validated, active Tax Profile.';
   end if;
 
-  -- A candidate without an explicit scope is the ordinary case: In TMF Scope.
+  -- Proposed decisions take effect now, with their reasons.
+  update public.client_compliance_universe_items item
+     set selection_status = case item.pending_decision when 'not_applicable' then 'excluded' when 'unresolved' then 'unresolved' else 'approved' end,
+         service_scope = case when item.pending_decision in ('in_scope', 'out_of_scope') then item.pending_decision else null end,
+         decision_reason = item.pending_reason,
+         decided_by = item.pending_by,
+         decided_at = item.pending_at,
+         pending_decision = null, pending_reason = null, pending_by = null, pending_at = null
+   where item.registration_unit_id = p_registration_unit_id
+     and item.pending_decision is not null
+     and item.selection_status <> 'superseded'
+     and (item.requirement_id is not null or item.pending_decision in ('not_applicable', 'unresolved'));
+  get diagnostics approved_count = row_count;
+  -- A candidate without a proposed decision is the ordinary case: In TMF Scope.
   update public.client_compliance_universe_items item
      set selection_status = 'approved',
-         service_scope = coalesce(item.service_scope, 'in_scope'),
-         decided_by = coalesce(item.decided_by, auth.uid()),
-         decided_at = coalesce(item.decided_at, now())
+         service_scope = 'in_scope',
+         decided_by = auth.uid(),
+         decided_at = now()
    where item.registration_unit_id = p_registration_unit_id
      and item.selection_status = 'candidate'
+     and item.pending_decision is null
      and item.requirement_id is not null;
-  get diagnostics approved_count = row_count;
-
+  get diagnostics candidate_count = row_count;
+  approved_count := approved_count + candidate_count;
   select coalesce(jsonb_agg(jsonb_build_object(
            'itemId', item.id, 'form', item.form_number, 'status', item.selection_status,
            'scope', item.service_scope, 'reason', item.decision_reason) order by item.form_number), '[]'::jsonb)
@@ -311,9 +335,43 @@ $$;
 revoke execute on function public.approve_expected_compliance(uuid, text) from public, anon;
 grant execute on function public.approve_expected_compliance(uuid, text) to authenticated;
 
+-- The first month a BIR calendar row's own wording says it covers, mirroring
+-- compliancePeriodStartFromLabel in the app: "Month of June 2026",
+-- "(Fiscal) Quarter ending September 30, 2026", "Fiscal Year ending May 31,
+-- 2026", "Calendar Year 2025". Null when the wording states no period.
+create or replace function public.compliance_period_start_from_label(p_label text)
+returns date
+language plpgsql
+immutable
+set search_path = public, pg_temp
+as $$
+declare
+  text_value text := regexp_replace(coalesce(p_label, ''), '\s+', ' ', 'g');
+  parts text[];
+begin
+  parts := regexp_match(text_value, 'Month of (January|February|March|April|May|June|July|August|September|October|November|December) (\d{4})', 'i');
+  if parts is not null then
+    return to_date(parts[1] || ' ' || parts[2], 'FMMonth YYYY');
+  end if;
+  parts := regexp_match(text_value, 'Quarter ending (January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, (\d{4})', 'i');
+  if parts is not null then
+    return (to_date(parts[1] || ' ' || parts[2], 'FMMonth YYYY') - interval '2 months')::date;
+  end if;
+  parts := regexp_match(text_value, 'Year ending (January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, (\d{4})', 'i');
+  if parts is not null then
+    return (to_date(parts[1] || ' ' || parts[2], 'FMMonth YYYY') - interval '11 months')::date;
+  end if;
+  parts := regexp_match(text_value, '(?:Taxable|Calendar) Year (\d{4})', 'i');
+  if parts is not null then
+    return to_date(parts[1] || '-01-01', 'YYYY-MM-DD');
+  end if;
+  return null;
+end;
+$$;
+
 -- Creates Compliance Work for approved, in-scope returns. Each item is
 -- {form, kind ('return'|'proof'), periodStart (YYYY-MM-01), periodLabel,
--- dueDate, calendarEntryId (null only for an elected optional monthly return)}.
+-- dueDate, calendarEntryId}.
 -- Every item is checked against the governed facts it cites; an item that
 -- does not hold is skipped and reported, never invented.
 create or replace function public.record_generated_compliance_work(p_registration_unit_id uuid, p_items jsonb)
@@ -328,7 +386,7 @@ declare
   item jsonb;
   form_code text;
   item_kind text;
-  period_start date;
+  item_period_start date;
   due_date date;
   entry_id uuid;
   entry record;
@@ -387,7 +445,7 @@ begin
     form_code := upper(trim(coalesce(item ->> 'form', '')));
     item_kind := coalesce(nullif(item ->> 'kind', ''), 'return');
     begin
-      period_start := (item ->> 'periodStart')::date;
+      item_period_start := (item ->> 'periodStart')::date;
       due_date := (item ->> 'dueDate')::date;
     exception when others then
       skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'Period or due date is not a date.'));
@@ -399,11 +457,11 @@ begin
     governed_version_id := null;
     entry_id := case when coalesce(item ->> 'calendarEntryId', '') ~* '^[0-9a-f-]{36}$' then (item ->> 'calendarEntryId')::uuid else null end;
 
-    if item_kind not in ('return', 'proof') or period_start is null or due_date is null or extract(day from period_start) <> 1 then
+    if item_kind not in ('return', 'proof') or item_period_start is null or due_date is null or extract(day from item_period_start) <> 1 then
       skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The item is incomplete.'));
       continue;
     end if;
-    if first_period is not null and period_start < first_period then
+    if first_period is not null and item_period_start < first_period then
       skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The period is before the first period to file.'));
       continue;
     end if;
@@ -424,6 +482,9 @@ begin
     if entry_id is not null then
       -- A BIR deadline must be a published row in a released calendar, on the
       -- date cited, for a requirement that carries this return.
+      -- The row must also cover the period being generated, by its own
+      -- wording, and a supporting form (e.g. 0619-E on a 1601-C row) must be
+      -- named on that row.
       select calendar_entry.id, calendar_entry.requirement_id, calendar_entry.requirement_version_id,
              calendar_entry.published_operational_deadline, calendar_entry.period_or_event
         into entry
@@ -433,35 +494,28 @@ begin
          and calendar_entry.publication_status = 'published'
          and calendar_version.status = 'released'
          and calendar_entry.published_operational_deadline = due_date
+         and coalesce(date_trunc('month', calendar_entry.period_start)::date, public.compliance_period_start_from_label(calendar_entry.period_or_event)) = item_period_start
+         and (calendar_entry.period_or_event ~* '^\s*proof of e-?filed') = (item_kind = 'proof')
          and exists (
            select 1 from public.requirement_version_forms relation
            join public.bir_forms form on form.id = relation.form_id
            join public.bir_requirement_versions version on version.id = relation.requirement_version_id
            where version.requirement_id = calendar_entry.requirement_id
              and upper(form.form_number) = form_code
+             and (relation.relationship_type = 'primary_form'
+                  or position(form_code in upper(coalesce(calendar_entry.period_or_event, ''))) > 0)
          );
       if entry.id is null then
-        skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'No published calendar row supports this date.'));
+        skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'No published calendar row supports this return, period and date.'));
         continue;
       end if;
       governed_requirement_id := entry.requirement_id;
       governed_version_id := entry.requirement_version_id;
     else
-      -- Only an elected optional monthly return has a TMF date without a BIR
-      -- row: months 1–2 of a quarter, due on the 20th of the next month.
-      if form_code not in ('2550M', '2551M')
-         or (extract(month from period_start)::integer - 1) % 3 = 2
-         or due_date <> (period_start + interval '1 month')::date + 19 then
-        skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'This return needs a published calendar row.'));
-        continue;
-      end if;
-      select * into governed from public.requirement_for_form(form_code);
-      governed_requirement_id := governed.requirement_id;
-      governed_version_id := governed.requirement_version_id;
-      if governed_requirement_id is null then
-        skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'No governed requirement carries this return.'));
-        continue;
-      end if;
+      -- Every date, including an elected optional return's TMF due date, comes
+      -- from a row the Tax Team has released; none is computed here.
+      skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'This return needs a published calendar row.'));
+      continue;
     end if;
     if governed_version_id is null then
       select version.id into governed_version_id from public.bir_requirement_versions version
@@ -469,7 +523,7 @@ begin
        order by version.effective_from desc limit 1;
     end if;
 
-    key := 'generated:' || p_registration_unit_id::text || ':' || form_code || ':' || item_kind || ':' || to_char(period_start, 'YYYY-MM');
+    key := 'generated:' || p_registration_unit_id::text || ':' || form_code || ':' || item_kind || ':' || to_char(item_period_start, 'YYYY-MM');
     if exists (select 1 from public.generated_compliance_work where generation_key = key) then
       existing := existing + 1;
       continue;
@@ -483,7 +537,11 @@ begin
       current_gate, source_context, created_by, updated_by
     ) values (
       p_registration_unit_id, governed_requirement_id, governed_version_id, key,
-      left(coalesce(nullif(trim(item ->> 'periodLabel'), ''), form_code || ' · ' || to_char(period_start, 'FMMonth YYYY')), 240),
+      -- The label comes from the governed row's own period wording.
+      left(form_code || case when item_kind = 'proof' then ' proof of filing and attachments' else '' end || ' · '
+        || coalesce((regexp_match(regexp_replace(coalesce(entry.period_or_event, ''), '\s+', ' ', 'g'),
+             '(Month of [A-Za-z]+ \d{4}|(?:Fiscal )?Quarter ending [A-Za-z]+ \d{1,2}, \d{4}|(?:Fiscal |Taxable |Calendar )?Year ending [A-Za-z]+ \d{1,2}, \d{4}|(?:Calendar|Taxable) Year \d{4})', 'i'))[1],
+             to_char(item_period_start, 'FMMonth YYYY')), 240),
       'recurring_period', 'not_ready', 'preparation', 'open', 'unresolved',
       case when entry_id is null then null else due_date end,
       (due_date - 1),
@@ -494,7 +552,7 @@ begin
         'creationMode', 'generated',
         'formNumber', form_code,
         'kind', item_kind,
-        'periodStart', period_start,
+        'periodStart', item_period_start,
         'dueDate', due_date,
         'dueDateBasis', case when entry_id is null then 'TMF due date (no BIR deadline)' else 'Published BIR calendar' end,
         'calendarEntryId', entry_id,

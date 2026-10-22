@@ -266,6 +266,33 @@ begin
         when coalesce(new.assignment_data ->> (team_role || 'UserId'), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           then (new.assignment_data ->> (team_role || 'UserId'))::uuid
         else null end;
+      -- A save names no one, or the person already in the role on the
+      -- version's date: nothing changes, and a change scheduled for a later
+      -- date stays scheduled. This is decided before eligibility, so an
+      -- unrelated edit never fails because the current owner has since
+      -- changed role or left the caller's view. Only a different person is a
+      -- change, and only a change is checked for eligibility.
+      if assignee_label is null and submitted_user_id is null then
+        continue;
+      end if;
+      select existing.* into in_force_assignment
+      from public.registration_unit_team_assignments existing
+      where existing.registration_unit_id = new.registration_unit_id
+        and existing.assignment_role = team_role
+        and existing.effective_from <= new.effective_from
+        and (existing.effective_to is null or existing.effective_to >= new.effective_from)
+      order by existing.effective_from desc, existing.assigned_at desc
+      limit 1;
+      if found and (
+        (submitted_user_id is not null and in_force_assignment.user_id = submitted_user_id)
+        or (submitted_user_id is null and in_force_assignment.user_id is null
+            and lower(in_force_assignment.assignee_label) = lower(assignee_label))
+        or (submitted_user_id is null and in_force_assignment.user_id is not null
+            and lower(assignee_label) = lower((select app_user.display_name from public.app_users app_user where app_user.id = in_force_assignment.user_id)))
+      ) then
+        continue;
+      end if;
+
       if submitted_user_id is not null then
         select app_user.id into resolved_user_id
         from public.app_users app_user
@@ -306,25 +333,7 @@ begin
         having count(*) = 1;
       end if;
 
-      -- A save names no one, or the person already in the role on the
-      -- version's date: nothing changes, and a change scheduled for a later
-      -- date stays scheduled. Only a different person is a change.
       if assignee_label is null then
-        continue;
-      end if;
-      select existing.* into in_force_assignment
-      from public.registration_unit_team_assignments existing
-      where existing.registration_unit_id = new.registration_unit_id
-        and existing.assignment_role = team_role
-        and existing.effective_from <= new.effective_from
-        and (existing.effective_to is null or existing.effective_to >= new.effective_from)
-      order by existing.effective_from desc, existing.assigned_at desc
-      limit 1;
-      if found and (
-        (in_force_assignment.user_id is not null and in_force_assignment.user_id = resolved_user_id)
-        or (in_force_assignment.user_id is null and resolved_user_id is null
-            and lower(in_force_assignment.assignee_label) = lower(assignee_label))
-      ) then
         continue;
       end if;
 

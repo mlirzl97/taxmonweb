@@ -38,8 +38,7 @@ function serviceCalendarRow(item: ClientServiceCalendarRow): ServiceCalendarRow 
     clientApprovalDate: formatCalendarDate(item.clientApprovalDate),
     estimatedFilingDate: formatCalendarDate(item.estimatedFilingDate),
     estimatedPaymentDate: formatCalendarDate(item.estimatedPaymentDate),
-    // An optional return the client elected has a TMF due date, not a BIR deadline.
-    dueDate: `${formatCalendarDate(item.publishedOperationalDeadline ?? "Not configured")}${item.sourceCode === "hod-policy" ? " · TMF due date (no BIR deadline)" : ""}`,
+    dueDate: formatCalendarDate(item.publishedOperationalDeadline ?? "Not configured"),
   };
 }
 

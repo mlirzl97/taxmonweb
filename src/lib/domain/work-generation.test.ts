@@ -47,9 +47,8 @@ describe("work generation items", () => {
     expect(workGenerationItems([row({ publishedOperationalDeadline: null })], ["1601-C"])).toEqual([]);
   });
 
-  it("gives a TMF-only optional return no calendar entry, and keeps proof of filing as its own item", () => {
-    const optional = workGenerationItems([row({ id: "tmf-2550M-2026-04", formNumber: "2550M", activityPeriod: "2550M · Month of April 2026", publishedOperationalDeadline: "2026-05-20" })], ["2550M"]);
-    expect(optional[0].calendarEntryId).toBeNull();
+  it("leaves out an optional return's proposed date until it is released, and keeps proof of filing as its own item", () => {
+    expect(workGenerationItems([row({ id: "tmf-2550M-2026-04", formNumber: "2550M", publicationStatus: "needs_review", publishedOperationalDeadline: null })], ["2550M"])).toEqual([]);
     const proof = workGenerationItems([
       row({ formNumber: "1702-RT", activityPeriod: "1702-RT · Calendar Year 2026", periodStartDate: "2026-01-01" }),
       row({ formNumber: "1702-RT", activityPeriod: "1702-RT proof of filing and attachments · Calendar Year 2026", periodStartDate: "2026-01-01", publishedOperationalDeadline: "2027-04-30" }),

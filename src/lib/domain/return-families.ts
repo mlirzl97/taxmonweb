@@ -95,7 +95,8 @@ export type ReturnFamilyProjection = { rows: DeadlineControlRow[]; notices: stri
  * - payment forms appear only in months 1–2 of a quarter;
  * - calendar-basis families ignore fiscal-quarter rows;
  * - corporate income tax follows the client's fiscal year;
- * - elected 2550M/2551M get the TMF due date.
+ * - elected 2550M/2551M get a proposed TMF due date, held until the Tax Team
+ *   releases it like any other deadline.
  *
  * Rows that name no family form pass through unchanged.
  */
@@ -195,16 +196,19 @@ function optionalMonthlyRows(family: ReturnFamily, year: number): DeadlineContro
       adjustedStatutoryDeadline: null,
       officialPublishedDeadline: null,
       officialCalendarReference: null,
+      // A proposal under HOD policy H-006. It reaches clients and generates
+      // work only after the Tax Team confirms and releases it (H-010).
       earliestApplicableDeadline: due,
-      publishedOperationalDeadline: due,
+      publishedOperationalDeadline: null,
       tmfPackageTarget: calculateInternalTarget(due),
-      publicationStatus: "published",
+      publicationStatus: "needs_review",
       verificationStatus: "unresolved",
       ruleVersionId: "hod-policy-2026-10-22-optional-monthly",
       sourceCode: "hod-policy",
-      sourceLabel: "TMF due date (no BIR deadline)",
+      sourceLabel: "Proposed TMF due date (no BIR deadline) · awaiting Tax Team release",
       adjustmentReason: "",
-      explanation: `${family.label} · ${form} is filed only when the client elects it. TMF due date is the ${optionalMonthlyTmfDueDay}th of the following month (HOD policy, 2026-10-22); the BIR sets no deadline.`,
+      unresolvedReason: "Awaiting Tax Team release of the TMF due date.",
+      explanation: `${family.label} · ${form} is filed only when the client elects it. Proposed TMF due date is the ${optionalMonthlyTmfDueDay}th of the following month (HOD policy H-006); the BIR sets no deadline.`,
     } satisfies DeadlineControlRow;
   });
 }

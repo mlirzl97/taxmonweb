@@ -7,6 +7,8 @@ export type ExpectedComplianceItem = {
   serviceScope: "in_scope" | "out_of_scope" | null;
   reason: string | null;
   decidedAt: string | null;
+  pendingDecision: "in_scope" | "out_of_scope" | "not_applicable" | "unresolved" | null;
+  pendingReason: string | null;
 };
 
 export type ExpectedComplianceApproval = { approvedAt: string; approvedBy: string; reason: string };
@@ -32,7 +34,7 @@ export async function listExpectedCompliance(registrationUnitId: string) {
   const supabase = await client();
   const [{ data: items, error: itemsError }, { data: approvals, error: approvalsError }] = await Promise.all([
     supabase.from("client_compliance_universe_items")
-      .select("id, form_number, selection_status, service_scope, decision_reason, decided_at")
+      .select("id, form_number, selection_status, service_scope, decision_reason, decided_at, pending_decision, pending_reason")
       .eq("registration_unit_id", registrationUnitId)
       .neq("selection_status", "superseded")
       .order("form_number"),
@@ -54,6 +56,8 @@ export async function listExpectedCompliance(registrationUnitId: string) {
       serviceScope: (item.service_scope ?? null) as ExpectedComplianceItem["serviceScope"],
       reason: (item.decision_reason ?? null) as string | null,
       decidedAt: (item.decided_at ?? null) as string | null,
+      pendingDecision: (item.pending_decision ?? null) as ExpectedComplianceItem["pendingDecision"],
+      pendingReason: (item.pending_reason ?? null) as string | null,
     })) satisfies ExpectedComplianceItem[],
     latestApproval: latest ? { approvedAt: latest.approved_at, reason: latest.reason, approvedBy: approver?.display_name ?? "Recorded approver" } satisfies ExpectedComplianceApproval : null,
   };
