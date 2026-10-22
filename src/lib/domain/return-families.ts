@@ -160,7 +160,8 @@ export function projectReturnFamilyCalendar(client: FixtureClient, candidateForm
         taxablePeriod: period,
         earliestApplicableDeadline: due,
         publishedOperationalDeadline: row.publishedOperationalDeadline ? due : null,
-        tmfPackageTarget: due ? calculateInternalTarget(due) : row.tmfPackageTarget,
+        // A released target (e.g. a Tax Team override) stands; compute only when absent.
+        tmfPackageTarget: row.tmfPackageTarget ?? (due ? calculateInternalTarget(due) : null),
         explanation: `${family.label} · earliest published date across filing channels and eFPS groups.`,
       });
     }

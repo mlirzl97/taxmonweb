@@ -69,8 +69,8 @@ export async function proposeExpectedCompliance(registrationUnitId: string) {
   return Number(data ?? 0);
 }
 
-export async function decideExpectedComplianceItem(itemId: string, decision: string, reason: string | null) {
-  const { error } = await (await client()).rpc("decide_expected_compliance_item", { p_item_id: itemId, p_decision: decision, p_reason: reason });
+export async function decideExpectedComplianceItem(registrationUnitId: string, itemId: string, decision: string, reason: string | null) {
+  const { error } = await (await client()).rpc("decide_expected_compliance_item", { p_registration_unit_id: registrationUnitId, p_item_id: itemId, p_decision: decision, p_reason: reason });
   if (error) throw new Error(`Unable to record the Expected Compliance decision: ${error.message}`);
 }
 

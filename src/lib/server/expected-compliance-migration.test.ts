@@ -43,8 +43,17 @@ describe("Expected Compliance and generation migration", () => {
   });
 
   it("keeps the calendar row's statutory dates as the legal deadline, apart from the operational due date", () => {
-    expect(migration).toMatch(/entry\.base_statutory_deadline,\s+entry\.adjusted_statutory_deadline,\s+\(due_date - 1\)/);
+    expect(migration).toMatch(/entry\.base_statutory_deadline,\s+entry\.adjusted_statutory_deadline,[\s\S]{0,200}coalesce\(entry\.tmf_package_target, due_date - 1\)/);
     expect(migration).toContain("'The published operational date is after the BIR deadline; the Tax Team must review it.'");
+  });
+
+  it("records a decision only for an item of the Registration Unit being addressed", () => {
+    expect(migration).toContain("item.registration_unit_id is distinct from p_registration_unit_id");
+  });
+
+  it("takes only requirement versions in force today", () => {
+    expect(migration).toContain("and version.effective_from <= current_date");
+    expect(migration).toContain("and (requirement.effective_to is null or requirement.effective_to >= current_date)");
   });
 
   it("keeps the helper functions out of reach of API callers", () => {

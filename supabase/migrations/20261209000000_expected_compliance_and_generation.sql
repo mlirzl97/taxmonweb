@@ -125,6 +125,11 @@ as $$
   where upper(form.form_number) = upper(trim(p_form_number))
     and requirement.status = 'active'
     and version.status = 'approved'
+    -- Only what is in force today: no future-dated or expired requirement or version.
+    and (requirement.effective_from is null or requirement.effective_from <= current_date)
+    and (requirement.effective_to is null or requirement.effective_to >= current_date)
+    and version.effective_from <= current_date
+    and (version.effective_to is null or version.effective_to >= current_date)
   order by (relation.relationship_type = 'primary_form') desc, version.effective_from desc nulls last
   limit 1;
 $$;
@@ -247,7 +252,7 @@ $$;
 revoke execute on function public.propose_expected_compliance(uuid) from public, anon;
 grant execute on function public.propose_expected_compliance(uuid) to authenticated;
 
-create or replace function public.decide_expected_compliance_item(p_item_id uuid, p_decision text, p_reason text default null)
+create or replace function public.decide_expected_compliance_item(p_registration_unit_id uuid, p_item_id uuid, p_decision text, p_reason text default null)
 returns void
 language plpgsql
 security definer set search_path = public
@@ -264,7 +269,9 @@ begin
     raise exception using errcode = '42501', message = 'Deciding Expected Compliance is not authorized for the caller.';
   end if;
   select * into item from public.client_compliance_universe_items where id = p_item_id for update;
-  if item.id is null or not public.can_view_registration_unit(item.registration_unit_id) then
+  -- The item must belong to the Registration Unit the caller is looking at.
+  if item.id is null or item.registration_unit_id is distinct from p_registration_unit_id
+     or not public.can_view_registration_unit(item.registration_unit_id) then
     raise exception using errcode = '42501', message = 'The Expected Compliance item is outside the caller''s scope.';
   end if;
   if decision not in ('in_scope', 'out_of_scope', 'not_applicable', 'unresolved') then
@@ -294,8 +301,8 @@ begin
   );
 end;
 $$;
-revoke execute on function public.decide_expected_compliance_item(uuid, text, text) from public, anon;
-grant execute on function public.decide_expected_compliance_item(uuid, text, text) to authenticated;
+revoke execute on function public.decide_expected_compliance_item(uuid, uuid, text, text) from public, anon;
+grant execute on function public.decide_expected_compliance_item(uuid, uuid, text, text) to authenticated;
 
 create or replace function public.approve_expected_compliance(p_registration_unit_id uuid, p_reason text)
 returns integer
@@ -520,7 +527,8 @@ begin
       -- named on that row.
       select calendar_entry.id, calendar_entry.requirement_id, calendar_entry.requirement_version_id,
              calendar_entry.published_operational_deadline, calendar_entry.period_or_event,
-             calendar_entry.base_statutory_deadline, calendar_entry.adjusted_statutory_deadline
+             calendar_entry.base_statutory_deadline, calendar_entry.adjusted_statutory_deadline,
+             calendar_entry.tmf_package_target
         into entry
         from public.monthly_calendar_entries calendar_entry
         join public.monthly_calendar_versions calendar_version on calendar_version.id = calendar_entry.calendar_version_id
@@ -552,13 +560,15 @@ begin
       continue;
     end if;
     -- The internal target may never fall after the legal deadline.
-    if entry.adjusted_statutory_deadline is not null and due_date - 1 > entry.adjusted_statutory_deadline then
+    if entry.adjusted_statutory_deadline is not null and coalesce(entry.tmf_package_target, due_date - 1) > entry.adjusted_statutory_deadline then
       skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The published operational date is after the BIR deadline; the Tax Team must review it.'));
       continue;
     end if;
     if governed_version_id is null then
       select version.id into governed_version_id from public.bir_requirement_versions version
        where version.requirement_id = governed_requirement_id and version.status = 'approved'
+         and version.effective_from <= current_date
+         and (version.effective_to is null or version.effective_to >= current_date)
        order by version.effective_from desc limit 1;
     end if;
 
@@ -586,7 +596,9 @@ begin
       -- published operational due date is kept separately in source_context.
       entry.base_statutory_deadline,
       entry.adjusted_statutory_deadline,
-      (due_date - 1),
+      -- The released target stands (e.g. a Tax Team override); one day before
+      -- the due date only when the row carries none.
+      coalesce(entry.tmf_package_target, due_date - 1),
       'unresolved',
       preparer_id, checker_id, reviewer_id, preparer_id,
       'preparer',

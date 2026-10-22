@@ -69,6 +69,12 @@ describe("return families", () => {
     expect(byForm("0619-F")).toHaveLength(0);
   });
 
+  it("keeps a released TMF target, such as a Tax Team override, instead of recalculating it", () => {
+    const overridden = { ...april[0], tmfPackageTarget: "2026-05-07" };
+    const { rows } = projectReturnFamilyCalendar(client(), ["1601-C"], [overridden, april[1]], 2026);
+    expect(rows.find((candidate) => candidate.formNumber === "1601-C")?.tmfPackageTarget).toBe("2026-05-07");
+  });
+
   it("keeps payment forms to months 1 and 2 of a quarter", () => {
     const juneCombined = row("j", `${combinedApril}. Non-eFPS Filers. Month of June 2026`, "2026-07-10");
     const { rows } = projectReturnFamilyCalendar(client(), ["0619-E"], [juneCombined], 2026);

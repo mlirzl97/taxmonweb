@@ -104,7 +104,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (action === "decide") {
       if (!isNonEmptyString(command?.itemId) || !isNonEmptyString(command?.decision)) return NextResponse.json({ error: "An item and a decision are required." }, { status: 400 });
       const reason = typeof command?.reason === "string" && command.reason.trim() ? command.reason.trim() : null;
-      await decideExpectedComplianceItem(command.itemId, command.decision, reason);
+      await decideExpectedComplianceItem(loaded.unitId, command.itemId, command.decision, reason);
       return NextResponse.json({ ok: true });
     }
     if (action === "approve") {
