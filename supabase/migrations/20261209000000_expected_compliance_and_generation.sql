@@ -110,7 +110,9 @@ create table if not exists public.expected_compliance_approvals (
   approved_at timestamptz not null default now(),
   reason text not null check (length(trim(reason)) > 0),
   items_snapshot jsonb not null,
-  elevated_override boolean not null default false
+  elevated_override boolean not null default false,
+  -- The validated Tax Profile version the approved universe was proposed from.
+  tax_profile_version_id uuid references public.tax_profile_versions(id)
 );
 comment on table public.expected_compliance_approvals is 'Append-only record of each Expected Compliance approval, per Registration Unit, with the decisions approved.';
 alter table public.expected_compliance_approvals enable row level security;
@@ -493,12 +495,12 @@ begin
     from public.client_compliance_universe_items item
    where item.registration_unit_id = p_registration_unit_id
      and item.selection_status <> 'superseded';
-  insert into public.expected_compliance_approvals (registration_unit_id, approved_by, reason, items_snapshot, elevated_override)
-  values (p_registration_unit_id, auth.uid(), trim(p_reason), snapshot, elevated);
+  insert into public.expected_compliance_approvals (registration_unit_id, approved_by, reason, items_snapshot, elevated_override, tax_profile_version_id)
+  values (p_registration_unit_id, auth.uid(), trim(p_reason), snapshot, elevated, (public.active_tax_profile_for_unit(p_registration_unit_id)).id);
   perform public.append_audit_event(
     'expected_compliance_approved', 'registration_unit', p_registration_unit_id::text,
     case when elevated then 'Expected Compliance approved by Elevated Override (approver recorded some decisions)' else 'Expected Compliance approved for the Registration Unit' end,
-    null, jsonb_build_object('items', snapshot, 'elevatedOverride', elevated), trim(p_reason), now(), gen_random_uuid()
+    null, jsonb_build_object('items', snapshot, 'elevatedOverride', elevated, 'taxProfileVersionId', (public.active_tax_profile_for_unit(p_registration_unit_id)).id), trim(p_reason), now(), gen_random_uuid()
   );
   return approved_count;
 end;

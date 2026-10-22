@@ -54,7 +54,7 @@ describe("Expected Compliance and generation migration", () => {
   it("refuses approval of one's own recorded decisions unless by marked Elevated Override", () => {
     expect(migration).toContain("and item.pending_source = 'manual'\n     and item.pending_by = auth.uid();");
     expect(migration).toContain("coalesce(p_elevated_override, false) and public.has_active_capability('PerformElevatedOverride')");
-    expect(migration).toContain("values (p_registration_unit_id, auth.uid(), trim(p_reason), snapshot, elevated);");
+    expect(migration).toContain("values (p_registration_unit_id, auth.uid(), trim(p_reason), snapshot, elevated, ");
     // Decisions and approval serialize on the Registration Unit.
     expect(migration.match(/perform 1 from public\.registration_units where id = p_registration_unit_id for update;/g)?.length).toBeGreaterThanOrEqual(3);
   });
@@ -84,6 +84,7 @@ describe("Expected Compliance and generation migration", () => {
     // A person's decision never carries a move, and the snapshot records the version approved.
     expect(migration).toMatch(/pending_source = 'manual',[\s\S]{0,200}pending_requirement_version_id = null/);
     expect(migration).toContain("'requirementVersionId', item.requirement_version_id");
+    expect(migration).toContain("snapshot, elevated, (public.active_tax_profile_for_unit(p_registration_unit_id)).id);");
   });
 
   it("turns an unresolved return into a candidate once a governed requirement is active", () => {
