@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { portfolioClientToFixtureClient } from "@/lib/domain/live-client-adapter";
+import type { FixtureClient } from "@/lib/fixtures";
 import { workGenerationItems } from "@/lib/domain/work-generation";
 import { apiErrorResponse, inferredApiErrorStatus } from "@/lib/server/api-error";
 import { requireApiCapability } from "@/lib/server/api-authorization";
@@ -19,17 +20,29 @@ import { asRecord, isNonEmptyString } from "@/lib/server/request-input";
 
 type RouteContext = { params: Promise<{ clientId: string }> };
 
-/** The Registration Unit the dossier shows and saves: the head office, else the first active unit. */
-function dossierUnitId(client: PortfolioClient) {
+/**
+ * The Registration Unit addressed: the one the request names, which must
+ * belong to this client, or else the head office (the unit the dossier saves).
+ */
+function registrationUnitId(client: PortfolioClient, requested: unknown) {
   const units = client.taxpayer_entities.flatMap((entity) => entity.registration_units);
+  if (typeof requested === "string" && requested) return units.find((unit) => unit.id === requested)?.id ?? null;
   return (units.find((unit) => unit.active && unit.unit_kind === "head_office") ?? units.find((unit) => unit.active))?.id ?? null;
 }
 
-async function loadContext(context: RouteContext) {
+async function loadContext(context: RouteContext, requestedUnitId: unknown) {
   const portfolioClient = await getPortfolioClient((await context.params).clientId);
   if (!portfolioClient) return null;
-  const unitId = dossierUnitId(portfolioClient);
+  const unitId = registrationUnitId(portfolioClient, requestedUnitId);
   return unitId ? { portfolioClient, unitId } : null;
+}
+
+function clientForUnit(client: FixtureClient, unitId: string): FixtureClient {
+  for (const entity of client.entities) {
+    const unit = entity.units.find((candidate) => candidate.id === unitId);
+    if (unit) return { ...client, entities: [{ ...entity, profile: unit.profile, units: [unit] }] };
+  }
+  return client;
 }
 
 /** Generates work for every approved In TMF Scope return, from the first period to file through next year. */
@@ -37,7 +50,8 @@ async function generate(portfolioClient: PortfolioClient, unitId: string) {
   const { items } = await listExpectedCompliance(unitId);
   const approvedForms = items.filter((item) => item.status === "approved" && item.serviceScope === "in_scope").map((item) => item.formNumber);
   if (approvedForms.length === 0) return { created: 0, existing: 0, skipped: [] };
-  const client = portfolioClientToFixtureClient(portfolioClient);
+  // The calendar follows the addressed unit's own profile: its returns and first period.
+  const client = clientForUnit(portfolioClientToFixtureClient(portfolioClient), unitId);
   const firstPeriod = client.entities[0]?.profile.firstPeriodToFile ?? "";
   const currentYear = new Date().getUTCFullYear();
   const firstYear = /^\d{4}-\d{2}$/.test(firstPeriod) ? Math.min(Number(firstPeriod.slice(0, 4)), currentYear) : currentYear;
@@ -49,12 +63,12 @@ async function generate(portfolioClient: PortfolioClient, unitId: string) {
   return recordGeneratedComplianceWork(unitId, generationItems);
 }
 
-export async function GET(_request: Request, context: RouteContext) {
+export async function GET(request: Request, context: RouteContext) {
   const denied = await requireApiCapability(["ReviewTaxProfile", "ViewScopedPortfolio", "ProposeComplianceUniverse", "ApproveComplianceUniverse"]);
   if (denied) return denied;
   try {
-    const loaded = await loadContext(context);
-    if (!loaded) return NextResponse.json({ error: "Client not found." }, { status: 404 });
+    const loaded = await loadContext(context, new URL(request.url).searchParams.get("registrationUnitId"));
+    if (!loaded) return NextResponse.json({ error: "Client or Registration Unit not found." }, { status: 404 });
     const [expected, permissions] = await Promise.all([listExpectedCompliance(loaded.unitId), expectedCompliancePermissions()]);
     return NextResponse.json({ data: expected, permissions });
   } catch (error) {
@@ -81,8 +95,8 @@ export async function POST(request: Request, context: RouteContext) {
   if (denied) return denied;
 
   try {
-    const loaded = await loadContext(context);
-    if (!loaded) return NextResponse.json({ error: "Client not found." }, { status: 404 });
+    const loaded = await loadContext(context, command?.registrationUnitId);
+    if (!loaded) return NextResponse.json({ error: "Client or Registration Unit not found." }, { status: 404 });
     if (action === "propose") {
       const proposed = await proposeExpectedCompliance(loaded.unitId);
       return NextResponse.json({ proposed });

@@ -351,7 +351,10 @@ export function portfolioClientToFixtureClient(client: PortfolioClient): Fixture
   const entities = client.taxpayer_entities.map((candidate) => {
     const units = candidate.registration_units
       .filter((registrationUnit) => registrationUnit.active || registrationUnit.id === unit?.id)
+      // The unit the dossier shows and saves comes first.
+      .sort((left, right) => Number(right.id === unit?.id) - Number(left.id === unit?.id))
       .map((registrationUnit) => ({
+        id: registrationUnit.id,
         name: registrationUnit.display_name,
         type: registrationUnit.unit_kind === "branch" ? "Branch" as const : "Head Office" as const,
         profile: buildProfile(client, candidate, registrationUnit),

@@ -158,6 +158,8 @@ declare
   form_code text;
   governed record;
   proposed integer := 0;
+  removed integer := 0;
+  restored integer := 0;
 begin
   if auth.uid() is null or not public.is_active_app_user() then
     raise exception using errcode = '42501', message = 'Authentication is required.';
@@ -202,6 +204,37 @@ begin
     );
     proposed := proposed + 1;
   end loop;
+
+  -- A return no longer on the validated profile is proposed for removal,
+  -- and one that comes back is proposed again; both apply only on approval.
+  update public.client_compliance_universe_items item
+     set pending_decision = 'not_applicable',
+         pending_reason = 'Removed from the validated Tax Profile.',
+         pending_by = auth.uid(),
+         pending_at = now()
+   where item.registration_unit_id = p_registration_unit_id
+     and item.selection_status not in ('superseded', 'excluded')
+     and item.pending_decision is null
+     and item.form_number is not null
+     and item.form_number <> all (
+       select upper(trim(value)) from jsonb_array_elements_text(coalesce(profile.profile_data -> 'registeredReturnCodes', '[]'::jsonb)) as value
+     );
+  get diagnostics removed = row_count;
+  update public.client_compliance_universe_items item
+     set pending_decision = 'in_scope',
+         pending_reason = 'Back on the validated Tax Profile.',
+         pending_by = auth.uid(),
+         pending_at = now()
+   where item.registration_unit_id = p_registration_unit_id
+     and item.selection_status = 'excluded'
+     and item.decision_reason = 'Removed from the validated Tax Profile.'
+     and item.pending_decision is null
+     and item.requirement_id is not null
+     and item.form_number = any (
+       select upper(trim(value)) from jsonb_array_elements_text(coalesce(profile.profile_data -> 'registeredReturnCodes', '[]'::jsonb)) as value
+     );
+  get diagnostics restored = row_count;
+  proposed := proposed + removed + restored;
 
   perform public.append_audit_event(
     'expected_compliance_proposed', 'registration_unit', p_registration_unit_id::text,
@@ -486,7 +519,8 @@ begin
       -- wording, and a supporting form (e.g. 0619-E on a 1601-C row) must be
       -- named on that row.
       select calendar_entry.id, calendar_entry.requirement_id, calendar_entry.requirement_version_id,
-             calendar_entry.published_operational_deadline, calendar_entry.period_or_event
+             calendar_entry.published_operational_deadline, calendar_entry.period_or_event,
+             calendar_entry.base_statutory_deadline, calendar_entry.adjusted_statutory_deadline
         into entry
         from public.monthly_calendar_entries calendar_entry
         join public.monthly_calendar_versions calendar_version on calendar_version.id = calendar_entry.calendar_version_id
@@ -517,6 +551,11 @@ begin
       skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'This return needs a published calendar row.'));
       continue;
     end if;
+    -- The internal target may never fall after the legal deadline.
+    if entry.adjusted_statutory_deadline is not null and due_date - 1 > entry.adjusted_statutory_deadline then
+      skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The published operational date is after the BIR deadline; the Tax Team must review it.'));
+      continue;
+    end if;
     if governed_version_id is null then
       select version.id into governed_version_id from public.bir_requirement_versions version
        where version.requirement_id = governed_requirement_id and version.status = 'approved'
@@ -532,7 +571,7 @@ begin
     insert into public.generated_compliance_work (
       registration_unit_id, requirement_id, requirement_version_id, generation_key,
       period_label, instance_type, data_readiness, lifecycle_stage, engagement_status, rag_status,
-      adjusted_statutory_deadline, tmf_package_target, payment_applicability,
+      base_statutory_deadline, adjusted_statutory_deadline, tmf_package_target, payment_applicability,
       preparer_user_id, checker_user_id, reviewer_user_id, current_owner_user_id,
       current_gate, source_context, created_by, updated_by
     ) values (
@@ -543,7 +582,10 @@ begin
              '(Month of [A-Za-z]+ \d{4}|(?:Fiscal )?Quarter ending [A-Za-z]+ \d{1,2}, \d{4}|(?:Fiscal |Taxable |Calendar )?Year ending [A-Za-z]+ \d{1,2}, \d{4}|(?:Calendar|Taxable) Year \d{4})', 'i'))[1],
              to_char(item_period_start, 'FMMonth YYYY')), 240),
       'recurring_period', 'not_ready', 'preparation', 'open', 'unresolved',
-      case when entry_id is null then null else due_date end,
+      -- The legal deadline stays the calendar row's own statutory date; the
+      -- published operational due date is kept separately in source_context.
+      entry.base_statutory_deadline,
+      entry.adjusted_statutory_deadline,
       (due_date - 1),
       'unresolved',
       preparer_id, checker_id, reviewer_id, preparer_id,
@@ -554,7 +596,7 @@ begin
         'kind', item_kind,
         'periodStart', item_period_start,
         'dueDate', due_date,
-        'dueDateBasis', case when entry_id is null then 'TMF due date (no BIR deadline)' else 'Published BIR calendar' end,
+        'dueDateBasis', 'Published operational calendar',
         'calendarEntryId', entry_id,
         'expectedComplianceItemId', approved_item.id,
         'taxProfileVersionId', profile.id

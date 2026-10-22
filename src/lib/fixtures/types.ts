@@ -222,6 +222,8 @@ export type FixtureTaxProfile = {
 };
 
 export type FixtureRegistrationUnit = {
+  /** The live Registration Unit id; fixtures have none. */
+  id?: string;
   name: string;
   type: "Head Office" | "Branch";
   profile: FixtureTaxProfile;

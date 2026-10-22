@@ -44,7 +44,7 @@ function generationSummary(generation: Generation) {
  * validated Tax Profile, decided per return, approved per Registration Unit.
  * Approval generates the Compliance Work; generating again never duplicates.
  */
-export function ExpectedComplianceSection({ clientId }: { clientId: string }) {
+export function ExpectedComplianceSection({ clientId, registrationUnitId }: { clientId: string; registrationUnitId?: string }) {
   const [items, setItems] = useState<Item[]>([]);
   const [approval, setApproval] = useState<{ approvedAt: string; approvedBy: string } | null>(null);
   const [permissions, setPermissions] = useState<Permissions>({ canPropose: false, canApprove: false, canGenerate: false });
@@ -57,7 +57,8 @@ export function ExpectedComplianceSection({ clientId }: { clientId: string }) {
 
   useEffect(() => {
     let active = true;
-    void fetch(`/api/clients/${encodeURIComponent(clientId)}/expected-compliance`, { headers: { accept: "application/json" }, cache: "no-store" })
+    const query = registrationUnitId ? `?registrationUnitId=${encodeURIComponent(registrationUnitId)}` : "";
+    void fetch(`/api/clients/${encodeURIComponent(clientId)}/expected-compliance${query}`, { headers: { accept: "application/json" }, cache: "no-store" })
       .then(async (response) => {
         const payload = await response.json() as { data?: { items: Item[]; latestApproval: { approvedAt: string; approvedBy: string } | null }; permissions?: Permissions; error?: string };
         if (!response.ok || !payload.data) throw new Error(payload.error ?? "Expected Compliance could not be loaded.");
@@ -73,13 +74,13 @@ export function ExpectedComplianceSection({ clientId }: { clientId: string }) {
     return () => {
       active = false;
     };
-  }, [clientId, reloadKey]);
+  }, [clientId, registrationUnitId, reloadKey]);
 
   async function command(body: Record<string, unknown>, success: (payload: Record<string, unknown>) => string) {
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/expected-compliance`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/expected-compliance`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, registrationUnitId }) });
       const payload = await response.json() as Record<string, unknown> & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "The command could not be applied.");
       setMessage(success(payload));

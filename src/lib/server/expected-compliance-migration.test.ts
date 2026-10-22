@@ -37,6 +37,16 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).not.toContain("form_code not in ('2550M', '2551M')");
   });
 
+  it("proposes removal of a return dropped from the validated profile, and proposes it again when it returns", () => {
+    expect(migration).toContain("pending_reason = 'Removed from the validated Tax Profile.'");
+    expect(migration).toContain("pending_reason = 'Back on the validated Tax Profile.'");
+  });
+
+  it("keeps the calendar row's statutory dates as the legal deadline, apart from the operational due date", () => {
+    expect(migration).toMatch(/entry\.base_statutory_deadline,\s+entry\.adjusted_statutory_deadline,\s+\(due_date - 1\)/);
+    expect(migration).toContain("'The published operational date is after the BIR deadline; the Tax Team must review it.'");
+  });
+
   it("keeps the helper functions out of reach of API callers", () => {
     expect(migration).toContain("revoke execute on function public.requirement_for_form(text) from public, anon, authenticated;");
     expect(migration).toContain("revoke execute on function public.active_tax_profile_for_unit(uuid) from public, anon, authenticated;");
