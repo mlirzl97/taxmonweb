@@ -192,6 +192,27 @@ begin
     where nullif(trim(value), '') is not null
   loop
     form_code := return_code;
+    select * into governed from public.requirement_for_form(form_code);
+    -- A return held unresolved for want of a governed requirement becomes a
+    -- candidate again once the Tax Team activates one.
+    if governed.requirement_id is not null then
+      update public.client_compliance_universe_items item
+         set requirement_id = governed.requirement_id,
+             requirement_version_id = governed.requirement_version_id,
+             selection_status = 'candidate',
+             decision_reason = null,
+             proposed_by = auth.uid(),
+             proposed_at = now()
+       where item.registration_unit_id = p_registration_unit_id
+         and item.form_number = form_code
+         and item.selection_status = 'unresolved'
+         and item.requirement_id is null
+         and item.pending_decision is null;
+      if found then
+        proposed := proposed + 1;
+        continue;
+      end if;
+    end if;
     if exists (
       select 1 from public.client_compliance_universe_items item
       where item.registration_unit_id = p_registration_unit_id
@@ -201,7 +222,6 @@ begin
     ) then
       continue;
     end if;
-    select * into governed from public.requirement_for_form(form_code);
     insert into public.client_compliance_universe_items (
       registration_unit_id, requirement_id, requirement_version_id, form_number, selection_status,
       effective_from, selection_source, decision_reason, proposed_by, proposed_at
@@ -590,9 +610,20 @@ begin
       continue;
     end if;
     -- The internal target may never fall after the legal deadline.
-    if entry.adjusted_statutory_deadline is not null and coalesce(entry.tmf_package_target, due_date - 1) > entry.adjusted_statutory_deadline then
+    if coalesce(entry.adjusted_statutory_deadline, entry.base_statutory_deadline) is not null
+       and coalesce(entry.tmf_package_target, due_date - 1) > coalesce(entry.adjusted_statutory_deadline, entry.base_statutory_deadline) then
       skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The published operational date is after the BIR deadline; the Tax Team must review it.'));
       continue;
+    end if;
+    -- Work follows the requirement version Expected Compliance approved. A
+    -- newer version of that requirement is a universe change: it needs an
+    -- impact decision and a new approval, never a silent rebase.
+    if governed_requirement_id = approved_item.requirement_id and approved_item.requirement_version_id is not null then
+      if governed_version_id is not null and governed_version_id <> approved_item.requirement_version_id then
+        skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The calendar row is on a newer requirement version than the one approved; it needs an authorized impact decision before work moves to it.'));
+        continue;
+      end if;
+      governed_version_id := approved_item.requirement_version_id;
     end if;
     if governed_version_id is null then
       select version.id into governed_version_id from public.bir_requirement_versions version

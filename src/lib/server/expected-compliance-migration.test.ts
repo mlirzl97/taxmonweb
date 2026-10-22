@@ -59,6 +59,15 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration.match(/perform 1 from public\.registration_units where id = p_registration_unit_id for update;/g)?.length).toBeGreaterThanOrEqual(3);
   });
 
+  it("keeps generated work on the approved requirement version and checks the base deadline when none is adjusted", () => {
+    expect(migration).toContain("governed_version_id <> approved_item.requirement_version_id");
+    expect(migration).toContain("coalesce(entry.tmf_package_target, due_date - 1) > coalesce(entry.adjusted_statutory_deadline, entry.base_statutory_deadline)");
+  });
+
+  it("turns an unresolved return into a candidate once a governed requirement is active", () => {
+    expect(migration).toMatch(/and item\.selection_status = 'unresolved'\s+and item\.requirement_id is null/);
+  });
+
   it("takes only requirement versions in force today", () => {
     expect(migration).toContain("and version.effective_from <= current_date");
     expect(migration).toContain("and (requirement.effective_to is null or requirement.effective_to >= current_date)");
