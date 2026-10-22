@@ -192,6 +192,14 @@ begin
     raise exception using errcode = '22023', message = 'Expected Compliance needs a validated, active Tax Profile.';
   end if;
 
+  -- Changes proposed from an earlier profile are recomputed from this one,
+  -- so a return removed and re-added (or the reverse) before approval never
+  -- carries a stale proposal. A person's own pending decisions stay.
+  update public.client_compliance_universe_items item
+     set pending_decision = null, pending_reason = null, pending_by = null, pending_at = null, pending_source = null
+   where item.registration_unit_id = p_registration_unit_id
+     and item.pending_source = 'tax_profile';
+
   for return_code in
     select distinct upper(trim(value)) from jsonb_array_elements_text(coalesce(profile.profile_data -> 'registeredReturnCodes', '[]'::jsonb)) as value
     where nullif(trim(value), '') is not null

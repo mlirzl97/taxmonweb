@@ -70,6 +70,10 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toContain("(upper(requirement.requirement_code) = 'BIR-' || upper(trim(p_form_number))) desc");
   });
 
+  it("recomputes changes proposed from an earlier profile on every proposal", () => {
+    expect(migration).toMatch(/set pending_decision = null, pending_reason = null, pending_by = null, pending_at = null, pending_source = null\s+where item\.registration_unit_id = p_registration_unit_id\s+and item\.pending_source = 'tax_profile';/);
+  });
+
   it("turns an unresolved return into a candidate once a governed requirement is active", () => {
     expect(migration).toMatch(/and item\.selection_status = 'unresolved'\s+and item\.requirement_id is null/);
   });
