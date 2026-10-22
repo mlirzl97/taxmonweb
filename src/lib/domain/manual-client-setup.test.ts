@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixtureClients } from "@/lib/fixtures";
 import { applyPersistedTaxProfileSnapshot, buildTaxProfilePersistencePayload, profileActivationGaps } from "./client-profile-persistence";
-import { isManualClientSetupSourceAllowed, parseManualClientSetupInput } from "./manual-client-setup";
+import { isPermanentFileLocation, sourceSystemForFileLocation, isManualClientSetupSourceAllowed, parseManualClientSetupInput } from "./manual-client-setup";
 
 describe("manual client setup contract", () => {
   it("allows fixture source only in prototype mode", () => {
@@ -27,6 +27,58 @@ describe("manual client setup contract", () => {
     });
 
     expect(result.ok).toBe(true);
+  });
+
+  it("records SharePoint provenance only for a SharePoint web address", () => {
+    expect(sourceSystemForFileLocation("https://tenant.sharepoint.invalid/sites/AT/Brightwater")).toBe("sharepoint");
+    expect(sourceSystemForFileLocation("\\\\fileserver\\A&T\\Clients\\Brightwater")).toBe("manual_reference");
+    expect(sourceSystemForFileLocation("S:/A&T/Clients/Brightwater")).toBe("manual_reference");
+    expect(sourceSystemForFileLocation("http://sharepoint.invalid/sites/AT")).toBe("manual_reference");
+  });
+
+  it("accepts a shared-drive path or a SharePoint link as the permanent file location", () => {
+    const base = {
+      clientReferenceCode: "FIXTURE-CLIENT-05",
+      clientDisplayName: "Brightwater Trading (synthetic)",
+      entityReferenceCode: "FIXTURE-ENTITY-05",
+      entityDisplayName: "Brightwater Trading (synthetic)",
+      unitReferenceCode: "FIXTURE-RU-05",
+      unitDisplayName: "Head Office",
+      unitKind: "head_office",
+      organizationUnitId: "00000000-0000-4000-8000-000000000001",
+      sourceReference: "synthetic-2303-05",
+      sourceSystem: "synthetic_fixture",
+    };
+    for (const location of ["\\\\fileserver\\A&T\\Clients\\Brightwater", "S:/A&T/Clients/Brightwater", "https://tenant.sharepoint.invalid/sites/AT/Brightwater"]) {
+      const result = parseManualClientSetupInput({ ...base, profileData: { permanentFileLink: location } });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.value.profileData?.permanentFileLink).toBe(location);
+    }
+    expect(parseManualClientSetupInput({ ...base, profileData: { permanentFileLink: "x".repeat(241) } }).ok).toBe(false);
+    for (const notALocation of ["TBD", "notes pending", "http://insecure.invalid/AT", "fileserver/AT"]) {
+      expect(parseManualClientSetupInput({ ...base, profileData: { permanentFileLink: notALocation } }).ok).toBe(false);
+    }
+    expect(parseManualClientSetupInput({ ...base, profileData: { permanentFileLink: "synthetic://permanent-file/CRM-2026-001" } }).ok).toBe(true);
+    expect(isPermanentFileLocation("synthetic://permanent-file/CRM-2026-001", "manual_reference")).toBe(false);
+  });
+
+  it("refuses a first period to file before the go-live month", () => {
+    const base = {
+      clientReferenceCode: "FIXTURE-CLIENT-05",
+      clientDisplayName: "Brightwater Trading (synthetic)",
+      entityReferenceCode: "FIXTURE-ENTITY-05",
+      entityDisplayName: "Brightwater Trading (synthetic)",
+      unitReferenceCode: "FIXTURE-RU-05",
+      unitDisplayName: "Head Office",
+      unitKind: "head_office",
+      organizationUnitId: "00000000-0000-4000-8000-000000000001",
+      sourceReference: "synthetic-2303-05",
+      sourceSystem: "synthetic_fixture",
+    };
+    const early = parseManualClientSetupInput({ ...base, profileData: { goLiveDate: "2026-03-01", firstPeriodToFile: "2026-02" } });
+    expect(early.ok).toBe(false);
+    if (!early.ok) expect(early.errors).toContain("profileData.firstPeriodToFile cannot be before the go-live month.");
+    expect(parseManualClientSetupInput({ ...base, profileData: { goLiveDate: "2026-03-01", firstPeriodToFile: "2026-03" } }).ok).toBe(true);
   });
 
   it("generates the internal entity reference and normalizes a source-formatted TIN", () => {
@@ -259,6 +311,40 @@ describe("manual client setup contract", () => {
     expect(gaps).toContain("distinct Preparer, Checker, and Reviewer");
     expect(gaps).toContain("filing channel");
     expect(gaps).not.toContain("accounting system");
+  });
+
+  it("treats an unresolved Cluster as a gap, as the database validator does, and accepts a Cluster-only scope", () => {
+    const client = fixtureClients.find((item) => item.id === "fixture-client-06");
+    if (!client) throw new Error("Expected incomplete fixture.");
+    const profile = client.entities[0].profile;
+    const unit = client.entities[0].units[0];
+    const gaps = profileActivationGaps(profile, { ...client.assignment, cluster: "Unresolved", tower: "Unresolved" as typeof client.assignment.tower }, unit);
+    expect(gaps).toContain("Cluster");
+    expect(gaps).not.toContain("Tower");
+    expect(profileActivationGaps(profile, { ...client.assignment, tower: "Unresolved" as typeof client.assignment.tower }, unit)).not.toContain("Cluster");
+  });
+
+  it("requires the first period to file before activation, while drafts may park without it", () => {
+    const client = fixtureClients.find((item) => item.id === "fixture-client-06");
+    if (!client) throw new Error("Expected incomplete fixture.");
+    const unit = client.entities[0].units[0];
+    expect(profileActivationGaps({ ...client.entities[0].profile, firstPeriodToFile: undefined }, client.assignment, unit)).toContain("first period to file");
+    expect(profileActivationGaps({ ...client.entities[0].profile, firstPeriodToFile: "2026-03" }, client.assignment, unit)).not.toContain("first period to file");
+    expect(profileActivationGaps({ ...client.entities[0].profile, firstPeriodToFile: "2026-13" }, client.assignment, unit)).toContain("first period to file");
+    expect(profileActivationGaps({ ...client.entities[0].profile, goLiveDate: undefined, firstPeriodToFile: "2026-03" }, client.assignment, unit)).toContain("go-live date");
+    expect(profileActivationGaps({ ...client.entities[0].profile, goLiveDate: "2026-03-01", firstPeriodToFile: "2026-02" }, client.assignment, unit)).toContain("first period to file on or after the go-live month");
+    expect(profileActivationGaps({ ...client.entities[0].profile, goLiveDate: "2026-03-01", firstPeriodToFile: "2026-03" }, client.assignment, unit)).not.toContain("go-live date");
+  });
+
+  it("treats two staff who share a name as distinct owners when their ids differ", () => {
+    const client = fixtureClients.find((item) => item.id === "fixture-client-06");
+    if (!client) throw new Error("Expected incomplete fixture.");
+    const sameName = { ...client.assignment, preparer: "Totoy Bibo", checker: "Totoy Bibo", reviewer: "Kristine Kalamansi" };
+    const unit = client.entities[0].units[0];
+    expect(profileActivationGaps(client.entities[0].profile, sameName, unit)).toContain("distinct Preparer, Checker, and Reviewer");
+    const withIds = { ...sameName, preparerUserId: "user-totoy-1", checkerUserId: "user-totoy-2", reviewerUserId: "user-kristine" };
+    expect(profileActivationGaps(client.entities[0].profile, withIds, unit)).not.toContain("distinct Preparer, Checker, and Reviewer");
+    expect(profileActivationGaps(client.entities[0].profile, { ...withIds, checkerUserId: "user-totoy-1" }, unit)).toContain("distinct Preparer, Checker, and Reviewer");
   });
 
   it("rehydrates a saved version without replacing immutable fixture context", () => {

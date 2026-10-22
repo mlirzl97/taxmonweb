@@ -16,10 +16,10 @@ import { BrandLockup } from "../brand/brand-lockup";
 import { Icon } from "../ui/icon";
 import { GlobalSearch } from "./global-search";
 
-type AppShellProps = { children: React.ReactNode; email: string; demoMode?: boolean; persona?: string };
+type AppShellProps = { children: React.ReactNode; email: string; displayName?: string; demoMode?: boolean; persona?: string };
 const sidebarStorageKey = "taxmonweb.sidebar.collapsed";
 
-export function AppShell({ children, email, demoMode = false, persona }: AppShellProps) {
+export function AppShell({ children, email, displayName, demoMode = false, persona }: AppShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [collapsed, setCollapsed] = useState<boolean | null>(null);
@@ -153,7 +153,7 @@ export function AppShell({ children, email, demoMode = false, persona }: AppShel
           <PersonaNavigation pathname={pathname} firstNavLinkRef={firstNavLinkRef} onNavigate={() => setMobileOpen(false)} />
         </nav>
         <div className="app-sidebar__footer">
-          <SidebarProfile avatarUrl={avatarUrl} email={email} persona={persona} />
+          <SidebarProfile avatarUrl={avatarUrl} displayName={displayName} email={email} persona={persona} />
           <Link aria-label="Settings &amp; preferences" className="sidebar-settings-link" href="/app/admin?view=settings" onClick={() => setMobileOpen(false)} title="Settings &amp; preferences"><Icon name="settings" /><span>Settings &amp; preferences</span></Link>
           {!demoMode && <button className="button button--quiet button--full" disabled={isSigningOut} onClick={signOut} type="button">{isSigningOut ? "Signing out…" : "Sign out"}</button>}
         </div>
@@ -163,7 +163,7 @@ export function AppShell({ children, email, demoMode = false, persona }: AppShel
         <header className="app-main-header">
           <button aria-controls="application-sidebar" aria-expanded={isMobile ? mobileOpen : !sidebarCollapsed} aria-label={isMobile ? (mobileOpen ? "Close modules" : "Open modules") : (sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar")} className="sidebar-toggle" data-usage-action="toggle_navigation" onClick={toggleNavigation} ref={toggleRef} type="button"><Icon name="menu" size={19} /></button>
           <GlobalSearch />
-          {demoMode ? <span className="prototype-mark">Prototype · Sanitized data</span> : <span className="app-main-header__user">{email}</span>}
+          {demoMode ? <span className="prototype-mark">Prototype · Sanitized data</span> : <span className="app-main-header__user" title={email}>{displayName ?? email}</span>}
           <ActionNotifications />
         </header>
         <main className="app-content" id="main-content" tabIndex={-1}><PersonaContent pathname={pathname}>{children}</PersonaContent></main>
@@ -175,8 +175,9 @@ export function AppShell({ children, email, demoMode = false, persona }: AppShel
 
 type ActionNotification = { work: FixtureWorkItem; step: FixtureWorkItem["steps"][number]; owner: string };
 
-function SidebarProfile({ avatarUrl, email, persona }: { avatarUrl: string | null; email: string; persona?: string }) {
-  const label = persona ?? email;
+function SidebarProfile({ avatarUrl, displayName, email, persona }: { avatarUrl: string | null; displayName?: string; email: string; persona?: string }) {
+  // "All modules" belongs to the prototype Super Admin persona only, never to a live user's name.
+  const label = persona ?? displayName ?? email;
   const initials = label.split(/[@.\s_-]+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U";
   return <div aria-label="Current user" className="sidebar-profile" role="img" title={label}><span aria-hidden="true" className={`sidebar-profile__avatar${avatarUrl ? " sidebar-profile__avatar--photo" : ""}`} style={avatarUrl ? { backgroundImage: `url(${avatarUrl})` } : undefined}>{avatarUrl ? null : initials}</span><span className="sidebar-profile__identity"><strong>{label}</strong>{persona && <small>All modules</small>}</span></div>;
 }

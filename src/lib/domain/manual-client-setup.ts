@@ -65,6 +65,22 @@ export type ManualClientSetupResult =
   | { ok: false; errors: string[] };
 
 /**
+ * The permanent file location is either a SharePoint link or a shared-drive
+ * path; only a SharePoint web address is recorded as SharePoint provenance.
+ */
+export function isPermanentFileLocation(location: string, sourceSystem?: ManualClientSetupInput["sourceSystem"]): boolean {
+  const value = location.trim();
+  if (sourceSystem === "synthetic_fixture" && /^synthetic:\/\/\S+$/i.test(value)) return true;
+  return /^https:\/\/[^/\s]+\/\S/i.test(value) // SharePoint or other web link
+    || /^\\\\[^\\/\s]+[\\/][^\\/]/.test(value) // UNC share: \\server\share
+    || /^[A-Za-z]:[\\/]\S/.test(value); // mapped drive: S:\ or S:/
+}
+
+export function sourceSystemForFileLocation(location: string): "sharepoint" | "manual_reference" {
+  return /^https:\/\/[^/\s]*sharepoint\.[^/\s]+\//i.test(location.trim()) ? "sharepoint" : "manual_reference";
+}
+
+/**
  * Fixture writes are only valid inside the explicitly sanitized prototype.
  * Production and authenticated source-backed setup must never accept them.
  */
@@ -153,7 +169,7 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
   const profileData = profileSource && typeof profileSource === "object" && !Array.isArray(profileSource)
     ? profileSource as Record<string, unknown>
     : undefined;
-  if (profileData) errors.push(...clientProfileControlErrors(profileData));
+  if (profileData) errors.push(...clientProfileControlErrors(profileData, { sourceSystem: sourceSystem as ManualClientSetupInput["sourceSystem"] | undefined }));
 
   const profileText = (key: string, maxLength: number) => {
     if (!profileData) return undefined;
@@ -186,9 +202,9 @@ export function parseManualClientSetupInput(input: unknown): ManualClientSetupRe
   const goLiveDate = profileText("goLiveDate", 10);
   if (goLiveDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(goLiveDate)) errors.push("profileData.goLiveDate must use YYYY-MM-DD.");
   const firstPeriodToFile = profileText("firstPeriodToFile", 7);
-  if (firstPeriodToFile !== undefined && !/^\d{4}-\d{2}$/.test(firstPeriodToFile)) errors.push("profileData.firstPeriodToFile must use YYYY-MM.");
-  const permanentFileLink = profileText("permanentFileLink", 500);
-  if (permanentFileLink !== undefined && !/^https:\/\//i.test(permanentFileLink) && !/^synthetic:\/\//i.test(permanentFileLink)) errors.push("profileData.permanentFileLink must be an HTTPS or sanitized synthetic link.");
+  if (firstPeriodToFile !== undefined && !/^\d{4}-(0[1-9]|1[0-2])$/.test(firstPeriodToFile)) errors.push("profileData.firstPeriodToFile must use YYYY-MM.");
+  // A SharePoint link or a shared-drive path; it is a location reference, not a fetched URL.
+  const permanentFileLink = profileText("permanentFileLink", 240);
   const enateSetup = profileText("enateSetup", 32);
   if (enateSetup !== undefined && !["Yes", "No", "Unknown"].includes(enateSetup)) errors.push("profileData.enateSetup must be Yes, No, or Unknown.");
   const paymentRoute = profileText("paymentRoute", 32);

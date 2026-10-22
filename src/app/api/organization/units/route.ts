@@ -5,7 +5,7 @@ import { apiErrorResponse } from "@/lib/server/api-error";
 import { requireApiCapability } from "@/lib/server/api-authorization";
 
 export async function GET() {
-  const denied = await requireApiCapability(["ViewScopedPortfolio", "MaintainClientRepository", "AdministerUsers", "AdministerOrganization"]);
+  const denied = await requireApiCapability(["ViewScopedPortfolio", "MaintainClientRepository", "CorrectTaxProfile", "AdministerUsers", "AdministerOrganization"]);
   if (denied) return denied;
   try {
     return NextResponse.json({ data: await listOrganizationUnitOptions() });

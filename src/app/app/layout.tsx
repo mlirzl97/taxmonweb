@@ -25,5 +25,7 @@ export default async function ProtectedAppLayout({ children }: Readonly<{ childr
     redirect("/login?error=inactive");
   }
 
-  return <AppShell demoMode={demoMode} email={user?.email ?? "Super Admin"} persona={demoMode ? "Super Admin" : undefined}>{children}</AppShell>;
+  // Show the person's Team name; the email stays available as the account identity.
+  const displayName = appUser?.display_name?.trim() || undefined;
+  return <AppShell demoMode={demoMode} displayName={displayName} email={user?.email ?? "Super Admin"} persona={demoMode ? "Super Admin" : undefined}>{children}</AppShell>;
 }

@@ -14,15 +14,25 @@ function scopeForClient(client: PortfolioClient): { tower: FixtureScope; cluster
     .flatMap((unit) => unit.registration_unit_scope_assignments)
     .filter((assignment) => (!assignment.effective_from || assignment.effective_from <= today) && (!assignment.effective_to || assignment.effective_to >= today))
     .flatMap((assignment) => Array.isArray(assignment.organization_units) ? assignment.organization_units : [assignment.organization_units])
-    .filter((candidate): candidate is { code: string; name: string; unit_kind: string } => Boolean(candidate?.code || candidate?.name));
-  const resolved = organizationUnits.find((candidate) => candidate.unit_kind === "tower" && !/review|required|unresolved|unknown/i.test(candidate.name));
-  const resolvedCluster = organizationUnits.find((candidate) => candidate.unit_kind === "cluster" && !/review|required|unresolved|unknown/i.test(candidate.name));
+    .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate?.code || candidate?.name));
+  // A unit counts only while it is active and in effect today; a closed
+  // Cluster or Tower leaves the scope unresolved rather than silently valid.
+  const inEffect = (unit: { active?: boolean; effective_from?: string | null; effective_to?: string | null } | null | undefined) =>
+    Boolean(unit) && unit!.active !== false && (!unit!.effective_from || unit!.effective_from <= today) && (!unit!.effective_to || unit!.effective_to >= today);
+  const parentOf = (unit: (typeof organizationUnits)[number]) => (Array.isArray(unit.parent) ? unit.parent[0] : unit.parent) ?? null;
+  const resolved = organizationUnits.find((candidate) => candidate.unit_kind === "tower" && !/review|required|unresolved|unknown/i.test(candidate.name)
+    && inEffect(candidate) && (!parentOf(candidate) || inEffect(parentOf(candidate))));
+  const towerParent = resolved ? parentOf(resolved) : null;
+  // A tower scope implies its parent cluster; an explicit cluster scope still wins.
+  const resolvedCluster = organizationUnits.find((candidate) => candidate.unit_kind === "cluster" && !/review|required|unresolved|unknown/i.test(candidate.name) && inEffect(candidate))
+    ?? (towerParent?.unit_kind === "cluster" ? towerParent : undefined);
   return {
     // The adapter keeps the legacy UI type for compatibility, but the runtime
     // sentinel intentionally does not match any selectable tower filter.
     tower: (resolved?.name ?? "Unresolved") as FixtureScope,
     cluster: resolvedCluster?.name ?? "Unresolved",
-    resolved: Boolean(resolved),
+    // Onboarding may place a client directly in a Cluster; that scope is resolved too.
+    resolved: Boolean(resolved || resolvedCluster),
   };
 }
 
@@ -91,20 +101,30 @@ export function additionalEngagementToFixtureChangeRequestForm(
   };
 }
 
-function currentAssignment(client: PortfolioClient): Pick<FixtureClient["assignment"], "preparer" | "checker" | "reviewer" | "effectiveFrom"> {
+function currentAssignment(client: PortfolioClient, selectedUnit?: PortfolioClient["taxpayer_entities"][number]["registration_units"][number]): Pick<FixtureClient["assignment"], "preparer" | "checker" | "reviewer" | "preparerUserId" | "checkerUserId" | "reviewerUserId" | "effectiveFrom"> {
   const today = new Date().toISOString().slice(0, 10);
   const clientAssignments = client.client_team_assignments.map((assignment) => ({ ...assignment, source: "client" as const }));
-  const unitAssignments = client.taxpayer_entities.flatMap((entity) => entity.registration_units.flatMap((unit) => unit.registration_unit_team_assignments.map((assignment) => ({ ...assignment, source: "registration_unit" as const }))));
-  const current = [...clientAssignments, ...unitAssignments].filter((assignment) => assignment.effective_from <= today && (!assignment.effective_to || assignment.effective_to >= today));
-  const namesFor = (role: PortfolioClient["client_team_assignments"][number]["assignment_role"]) => current
-    .filter((assignment) => assignment.assignment_role === role)
-    .map((assignment) => Array.isArray(assignment.app_users) ? assignment.app_users[0]?.display_name ?? assignment.assignee_label : assignment.app_users?.display_name ?? assignment.assignee_label)
-    .filter((name): name is string => Boolean(name));
-  const first = (names: string[]) => names[0] ?? "Unassigned";
+  // Only the Registration Unit the dossier shows and saves supplies owners;
+  // another unit's owners never stand in for it.
+  const unitAssignments = (selectedUnit?.registration_unit_team_assignments ?? []).map((assignment) => ({ ...assignment, source: "registration_unit" as const }));
+  // Registration-unit owners are authoritative; client-level rows are a legacy fallback.
+  const current = [...unitAssignments, ...clientAssignments].filter((assignment) => assignment.effective_from <= today && (!assignment.effective_to || assignment.effective_to >= today));
+  const displayName = (assignment: (typeof current)[number]) => Array.isArray(assignment.app_users) ? assignment.app_users[0]?.display_name ?? assignment.assignee_label : assignment.app_users?.display_name ?? assignment.assignee_label;
+  // One row per role decides both the name and the id. A unit row with no
+  // resolved user stays unresolved; it never borrows a legacy row's id.
+  const ownerRow = (role: PortfolioClient["client_team_assignments"][number]["assignment_role"]) => current
+    .find((assignment) => assignment.assignment_role === role && Boolean(displayName(assignment)));
+  const nameFor = (role: PortfolioClient["client_team_assignments"][number]["assignment_role"]) => (ownerRow(role) && displayName(ownerRow(role)!)) || "Unassigned";
+  // The relational row's user id is the authoritative owner, so a resave of
+  // a label-only profile keeps the same person.
+  const userIdFor = (role: PortfolioClient["client_team_assignments"][number]["assignment_role"]) => ownerRow(role)?.user_id ?? undefined;
   return {
-    preparer: first(namesFor("preparer")),
-    checker: first(namesFor("checker")),
-    reviewer: first(namesFor("reviewer")),
+    preparer: nameFor("preparer"),
+    checker: nameFor("checker"),
+    reviewer: nameFor("reviewer"),
+    preparerUserId: userIdFor("preparer"),
+    checkerUserId: userIdFor("checker"),
+    reviewerUserId: userIdFor("reviewer"),
     effectiveFrom: current.map((assignment) => assignment.effective_from).sort()[0] ?? "Current repository state",
   };
 }
@@ -323,7 +343,7 @@ export function portfolioClientToFixtureClient(client: PortfolioClient): Fixture
   const profile = buildProfile(client, entity, unit);
   if (!scope.resolved) profile.attention = [...profile.attention, "Organizational scope requires validation"];
   const tower = scope.tower;
-  const assignment = { ...currentAssignment(client), tower, cluster: scope.cluster } satisfies FixtureClient["assignment"];
+  const assignment = { ...currentAssignment(client, unit), tower, cluster: scope.cluster } satisfies FixtureClient["assignment"];
   const teamHistory = client.taxpayer_entities
     .flatMap((candidate) => candidate.registration_units.flatMap((registrationUnit) => teamHistoryForUnit(registrationUnit)))
     .map((history) => ({ ...history, clientId: client.reference_code }))

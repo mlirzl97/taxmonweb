@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { clientCandidateFormNumbers, getClientServiceCalendarRows, type DeadlineControlRow } from "@/lib/domain/deadline-control";
+import { clientCandidateFormNumbers, compliancePeriodStartFromLabel, getClientServiceCalendarRows, type DeadlineControlRow } from "@/lib/domain/deadline-control";
 import { portfolioClientToFixtureClient } from "@/lib/domain/live-client-adapter";
 import { calculateInternalTarget } from "@/lib/domain/tax-foundation";
 import { apiErrorResponse } from "@/lib/server/api-error";
@@ -38,7 +38,8 @@ function toDeadlineRow(entry: Awaited<ReturnType<typeof listLiveClientCalendarEn
     component: "Return / filing",
     activityMonth: calendarMonthLabel(entry.calendar_month),
     activityPeriod: entry.period_or_event ?? entry.period_start ?? entry.calendar_month,
-    periodStartDate: entry.period_start ?? entry.calendar_month,
+    // The compliance period, not the month the deadline falls in.
+    periodStartDate: entry.period_start ?? compliancePeriodStartFromLabel(entry.period_or_event) ?? "",
     taxablePeriod: entry.period_or_event ?? entry.period_start ?? entry.calendar_month,
     baseStatutoryDeadline: entry.base_statutory_deadline,
     adjustedStatutoryDeadline: entry.adjusted_statutory_deadline,

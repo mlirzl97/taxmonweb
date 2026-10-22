@@ -1,6 +1,14 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ManualClientSetupInput } from "@/lib/domain/manual-client-setup";
 
+type ScopeOrganizationUnitWindow = { active?: boolean; effective_from?: string | null; effective_to?: string | null };
+type ScopeOrganizationUnit = ScopeOrganizationUnitWindow & {
+  code: string;
+  name: string;
+  unit_kind: string;
+  parent?: ({ name: string; unit_kind: string } & ScopeOrganizationUnitWindow) | Array<{ name: string; unit_kind: string } & ScopeOrganizationUnitWindow> | null;
+};
+
 export type PortfolioClient = {
   id: string;
   reference_code: string;
@@ -122,7 +130,7 @@ export type PortfolioClient = {
         registration_unit_scope_assignments: Array<{
           effective_from?: string;
           effective_to?: string | null;
-          organization_units: { code: string; name: string; unit_kind: string } | Array<{ code: string; name: string; unit_kind: string }> | null;
+          organization_units: ScopeOrganizationUnit | ScopeOrganizationUnit[] | null;
         }>;
         registration_unit_team_assignments: Array<{
           id: string;
@@ -203,6 +211,8 @@ export type OrganizationUnitOption = {
   name: string;
   unit_kind: "team" | "tower" | "cluster" | "a_and_t";
   parent_id?: string | null;
+  effective_from?: string | null;
+  effective_to?: string | null;
 };
 
 export async function listOrganizationUnitOptions(): Promise<OrganizationUnitOption[]> {
@@ -210,7 +220,7 @@ export async function listOrganizationUnitOptions(): Promise<OrganizationUnitOpt
   if (!client) throw new Error("Supabase is not configured for this environment.");
   const { data, error } = await client
     .from("organization_units")
-    .select("id, code, name, unit_kind, parent_id")
+    .select("id, code, name, unit_kind, parent_id, effective_from, effective_to")
     .eq("active", true)
     .order("unit_kind")
     .order("name");
@@ -327,7 +337,7 @@ export async function listPortfolioClients(options: { detail?: "registry" | "ful
         ,registration_unit_scope_assignments (
           effective_from,
           effective_to,
-          organization_units (code, name, unit_kind)
+          organization_units (code, name, unit_kind, active, effective_from, effective_to, parent:parent_id (name, unit_kind, active, effective_from, effective_to))
         )
         ,registration_unit_team_assignments (
           id,

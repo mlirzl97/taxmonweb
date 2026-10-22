@@ -23,4 +23,16 @@ describe("client profile controlled references", () => {
     ]);
     expect(clientProfileControlErrors({ filingChannel: "eFPS", eFPSGroup: "Group B", rdoOrLts: "RDO-50" })).toEqual([]);
   });
+  it("checks the file location and first period on profile corrections", () => {
+    expect(clientProfileControlErrors({ permanentFileLink: "TBD" })).toEqual([
+      "profileData.permanentFileLink must be a SharePoint link (https://…), a network share (\\\\server\\share) or a mapped drive path (S:\\…).",
+    ]);
+    expect(clientProfileControlErrors({ permanentFileLink: "https://mock-tenant.sharepoint.invalid/sites/AT/MOCK-Voltline" })).toEqual([]);
+    expect(clientProfileControlErrors({ permanentFileLink: "\\\\fileserver\\AT\\Voltline" })).toEqual([]);
+    expect(clientProfileControlErrors({ goLiveDate: "2026-03-01", firstPeriodToFile: "2026-02" })).toEqual(["profileData.firstPeriodToFile cannot be before the go-live month."]);
+    expect(clientProfileControlErrors({ goLiveDate: "2026-03-01", firstPeriodToFile: "2026-03" })).toEqual([]);
+    expect(clientProfileControlErrors({ goLiveDate: "2026-03-01", firstPeriodToFile: "2026-13" })).toEqual(["profileData.firstPeriodToFile must use YYYY-MM."]);
+    expect(clientProfileControlErrors({ firstPeriodToFile: "2026-00" })).toEqual(["profileData.firstPeriodToFile must use YYYY-MM."]);
+    expect(clientProfileControlErrors({ firstPeriodToFile: " 2026-07 " })).toEqual(["profileData.firstPeriodToFile must use YYYY-MM."]);
+  });
 });

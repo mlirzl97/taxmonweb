@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixtureClients } from "@/lib/fixtures";
-import { buildDeadlineControlRows, deadlineControlSummary, earliestApplicableDeadline, getClientServiceCalendarRows } from "./deadline-control";
+import { buildDeadlineControlRows, compliancePeriodStartFromLabel, deadlineControlSummary, earliestApplicableDeadline, getClientServiceCalendarRows } from "./deadline-control";
 
 describe("deadline control projection", () => {
   it("generates a deterministic annual set with separate statutory and TMF dates", () => {
@@ -9,7 +9,7 @@ describe("deadline control projection", () => {
     const second = buildDeadlineControlRows(2026);
 
     expect(first).toEqual(second);
-    expect(first).toHaveLength(91);
+    expect(first).toHaveLength(108);
     const cit = first.find((row) => row.formNumber === "1702-RT");
     const vatQ1 = first.find((row) => row.formNumber === "2550Q" && row.activityPeriod === "Q1 2026");
     expect(cit?.baseStatutoryDeadline).toBe("2027-04-15");
@@ -23,10 +23,10 @@ describe("deadline control projection", () => {
 
   it("keeps source verification and publication status distinct", () => {
     const summary = deadlineControlSummary(buildDeadlineControlRows(2026));
-    expect(summary).toEqual({ total: 91, published: 5, requiringReview: 4, unresolved: 82 });
+    expect(summary).toEqual({ total: 108, published: 5, requiringReview: 4, unresolved: 99 });
     expect(buildDeadlineControlRows(2026).filter((row) => row.publicationStatus === "unresolved").every((row) => row.publishedOperationalDeadline === null)).toBe(true);
     expect(buildDeadlineControlRows(2026).filter((row) => row.publicationStatus === "needs_review").every((row) => row.adjustedStatutoryDeadline !== null)).toBe(true);
-    expect(deadlineControlSummary(buildDeadlineControlRows(2027))).toEqual({ total: 91, published: 0, requiringReview: 9, unresolved: 82 });
+    expect(deadlineControlSummary(buildDeadlineControlRows(2027))).toEqual({ total: 108, published: 0, requiringReview: 9, unresolved: 99 });
   });
 
   it("shows the official BIR calendar as evidence without making it operational", () => {
@@ -39,7 +39,13 @@ describe("deadline control projection", () => {
 
   it("exposes every governed return to global Tax Team control", () => {
     const formNumbers = new Set(buildDeadlineControlRows(2026).map((row) => row.formNumber));
-    expect(formNumbers).toEqual(new Set(["0619-E", "0619-F", "1600", "1600WP", "1601-C", "1601-EQ", "1604-C", "1604-E", "1702Q", "1702-RT", "2550Q", "2551M", "2551Q"]));
+    expect(formNumbers).toEqual(new Set(["0619-E", "0619-F", "1600", "1600WP", "1601-C", "1601-EQ", "1601-FQ", "1604-C", "1604-E", "1604-F", "1702Q", "1702-RT", "2550M", "2550Q", "2551M", "2551Q"]));
+  });
+
+  it("keeps forms added without a governed deadline unresolved instead of inventing dates", () => {
+    const added = buildDeadlineControlRows(2026).filter((row) => ["1601-FQ", "1604-F", "2550M"].includes(row.formNumber));
+    expect(added).toHaveLength(17);
+    expect(added.every((row) => row.publicationStatus === "unresolved" && row.baseStatutoryDeadline === null && row.earliestApplicableDeadline === null && row.publishedOperationalDeadline === null)).toBe(true);
   });
 
   it("derives a client's calendar from registered tax types and published rows", () => {
@@ -164,8 +170,40 @@ describe("deadline control projection", () => {
     expect(projection.rows[0]?.publishedOperationalDeadline).toBe("2026-04-25");
   });
 
+  it("applies the first period to file to the compliance period, not the due month", () => {
+    const client = fixtureClients.find((item) => item.id === "fixture-client-03");
+    const template = buildDeadlineControlRows(2026).find((row) => row.formNumber === "2550Q" && row.activityPeriod === "Q1 2026");
+    expect(client).toBeDefined();
+    expect(template).toBeDefined();
+    const julyStart = { ...client!, entities: [{ ...client!.entities[0], profile: { ...client!.entities[0].profile, goLiveDate: "2026-01-01", firstPeriodToFile: " 2026-07 " } }] };
+    const released = (id: string, periodStartDate: string, deadline: string) => ({ ...template!, id, periodStartDate, publicationStatus: "published" as const, publishedOperationalDeadline: deadline, adjustedStatutoryDeadline: deadline });
+    const projection = getClientServiceCalendarRows(julyStart, 2026, {}, [
+      released("june-period-due-july", "2026-06-01", "2026-07-10"),
+      released("july-period", "2026-07-01", "2026-08-10"),
+      released("unknown-period", "", "2026-08-15"),
+    ]);
+    expect(projection.rows.map((row) => row.id)).toEqual(["july-period", "unknown-period"]);
+  });
+
   it("uses the earliest applicable component deadline as the master default", () => {
     expect(earliestApplicableDeadline(["2026-10-25", "2026-10-15", null])).toBe("2026-10-15");
     expect(earliestApplicableDeadline([null, undefined])).toBeNull();
+  });
+
+  it("reads the compliance period from the BIR calendar wording, never the due month", () => {
+    expect(compliancePeriodStartFromLabel("BIR Form 1601-C (Monthly Remittance Return of Income Taxes Withheld on Compensation) - Non-eFPS Filers. Month of December 2025")).toBe("2025-12-01");
+    expect(compliancePeriodStartFromLabel("BIR Form 1601-FQ (Quarterly Remittance Return of Final Income Taxes Withheld) and Quarterly Alphalist of Payees (QAP) - eFPS & Non-eFPS Filers. For the Quarter ending September 30, 2026")).toBe("2026-07-01");
+    expect(compliancePeriodStartFromLabel("BIR Form 2550Q (Quarterly Value-Added Tax Return) - eFPS & Non-eFPS Filers. Fiscal Quarter ending July 31, 2026")).toBe("2026-05-01");
+    expect(compliancePeriodStartFromLabel("BIR Form 2551Q (Quarterly Percentage Tax Return) - eFPS & Non-eFPS Filers - For the Quarter ending March 31, 2026")).toBe("2026-01-01");
+    expect(compliancePeriodStartFromLabel("Proof of eFiled BIR Form 1702-RT/1702-EX/1702-MX with Audited Financial Statements (AFS) - Fiscal Year ending May 31, 2026")).toBe("2025-06-01");
+    expect(compliancePeriodStartFromLabel("Sworn Declaration of Motels & Other Similar Establishments. Taxable Year 2025")).toBe("2025-01-01");
+    expect(compliancePeriodStartFromLabel("BIR Form 1604-C (Annual Information Return of Income Taxes Withheld on Compensation) and/or BIR Form 1604-F (Annual Information Return of Income Payments Subjected to Final Withholding Taxes) and Related Alphalist. Calendar Year 2025")).toBe("2025-01-01");
+    expect(compliancePeriodStartFromLabel("Engagement Letters and Renewals or Subsequent Agreements for Financial Audit by Independent CPAs. Fiscal Year beginning April 1, 2026")).toBe("2026-04-01");
+    expect(compliancePeriodStartFromLabel("Contract of Lease and Lessee Information Statement and Other Attachments by Lessors/Sub-Lessors of Commercial Establishments, Buildings or Spaces for Tenants. 2nd Semester of 2025")).toBe("2025-07-01");
+    expect(compliancePeriodStartFromLabel("Sworn Statement by every Lessee/Concessionaire/Owner or Operator of Mines & Quarry - 1 st Semester of 2026")).toBe("2026-01-01");
+    expect(compliancePeriodStartFromLabel("Consolidated Return of All Transactions based on the Reconciled Data of Stockbrokers. March 16 - 31, 2026")).toBe("2026-03-01");
+    expect(compliancePeriodStartFromLabel("Consolidated Return of All Transactions based on the Reconciled Data of Stockbrokers. December 16-31, 2025")).toBe("2025-12-01");
+    expect(compliancePeriodStartFromLabel("eFILING & PAYMENT (Online/Manual)")).toBeNull();
+    expect(compliancePeriodStartFromLabel(null)).toBeNull();
   });
 });

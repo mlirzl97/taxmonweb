@@ -8,6 +8,7 @@ import {
   canViewerOverride,
   canViewerPerformTeamAction,
   canViewerSetDataReadiness,
+  canViewerValidateTaxProfile,
   canViewerViewModule,
   isViewerLeader,
   viewerModuleLevel,
@@ -124,6 +125,12 @@ describe("viewer action-specific controls", () => {
     expect(canViewerSetDataReadiness(teamLead)).toBe(true);
     expect(canViewerSetDataReadiness(staff)).toBe(true);
     expect(canViewerSetDataReadiness(viewerOnly)).toBe(false);
+  });
+
+  it("reserves Tax Profile validation for the validation capability", () => {
+    expect(canViewerValidateTaxProfile(hod)).toBe(true);
+    expect(canViewerValidateTaxProfile(viewer("corrector", ["ReviewTaxProfile", "CorrectTaxProfile", "MaintainClientRepository"]))).toBe(false);
+    expect(canViewerValidateTaxProfile(teamLead)).toBe(false);
   });
 
   it("lets Tax Profile correction authority edit the profile without repository maintenance", () => {

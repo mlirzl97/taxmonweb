@@ -1285,6 +1285,7 @@ button.client-overview__metric:hover, button.client-overview__metric:focus-visib
 .dossier-fact strong { font-size: 11px; overflow-wrap: anywhere; }
 .dossier-section__footer { align-items: center; border-top: 1px solid var(--border); display: flex; gap: 12px; justify-content: space-between; margin-top: 12px; padding-top: 11px; }
 .dossier-section__footer > div { display: grid; gap: 2px; min-width: 0; }
+.dossier-section__footer > .dossier-section__actions { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
 .dossier-section__footer strong { font-size: 11px; }
 .dossier-section__footer small { color: var(--slate); font-size: 10px; }
 .assignment-grid--dossier { gap: 1px; grid-template-columns: repeat(2, minmax(0, 1fr)); }

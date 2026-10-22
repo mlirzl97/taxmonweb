@@ -63,6 +63,9 @@ export function buildTaxProfilePersistencePayload(
       preparer: assignment.preparer,
       checker: assignment.checker,
       reviewer: assignment.reviewer,
+      ...(assignment.preparerUserId ? { preparerUserId: assignment.preparerUserId } : {}),
+      ...(assignment.checkerUserId ? { checkerUserId: assignment.checkerUserId } : {}),
+      ...(assignment.reviewerUserId ? { reviewerUserId: assignment.reviewerUserId } : {}),
       tower: assignment.tower,
       cluster: assignment.cluster,
       effectiveFrom: assignment.effectiveFrom,
@@ -73,6 +76,8 @@ export function buildTaxProfilePersistencePayload(
 }
 
 export type PersistedTaxProfileSnapshot = {
+  /** Saved version id; validation activates exactly this version. */
+  id?: string;
   state: "draft" | "ready_for_validation" | "active" | "superseded";
   effectiveFrom: string;
   profile: Record<string, unknown>;
@@ -147,6 +152,14 @@ function weightLabel(weight: number): string {
 }
 
 /** Use the assigned operating weight when a source reconciliation weight is unavailable. */
+// A saved id wins. A label-only save inherits the current owner's id only when
+// it names that same person, so a stale label never borrows someone's id.
+function restoredUserId(savedUserId: unknown, savedLabel: unknown, baseLabel: string, baseUserId: string | undefined): string | undefined {
+  if (typeof savedUserId === "string" && savedUserId) return savedUserId;
+  if (typeof savedLabel === "string" && savedLabel.trim() && savedLabel.trim().toLowerCase() !== baseLabel.toLowerCase()) return undefined;
+  return baseUserId;
+}
+
 export function getClientDisplayWeight(profile: Pick<FixtureTaxProfile, "sourceFinalWeight" | "weight">): number | null {
   if (profile.sourceFinalWeight !== null) return profile.sourceFinalWeight;
   return profile.weight >= 1 && profile.weight <= 5 ? profile.weight : null;
@@ -214,6 +227,9 @@ export function applyPersistedTaxProfileSnapshot(
     preparer: text(savedAssignment.preparer, baseAssignment.preparer),
     checker: text(savedAssignment.checker, baseAssignment.checker),
     reviewer: text(savedAssignment.reviewer, baseAssignment.reviewer),
+    preparerUserId: restoredUserId(savedAssignment.preparerUserId, savedAssignment.preparer, baseAssignment.preparer, baseAssignment.preparerUserId),
+    checkerUserId: restoredUserId(savedAssignment.checkerUserId, savedAssignment.checker, baseAssignment.checker, baseAssignment.checkerUserId),
+    reviewerUserId: restoredUserId(savedAssignment.reviewerUserId, savedAssignment.reviewer, baseAssignment.reviewer, baseAssignment.reviewerUserId),
     tower: text(savedAssignment.tower, baseAssignment.tower),
     cluster: text(savedAssignment.cluster, baseAssignment.cluster),
     effectiveFrom: text(savedAssignment.effectiveFrom, snapshot.effectiveFrom),
@@ -246,13 +262,23 @@ export function profileActivationGaps(profile: FixtureTaxProfile, assignment: Fi
   if (!profile.sourceLabel.trim()) gaps.push("approved source/provenance");
   if (!profile.filingChannel.trim() || /not configured|needs review/i.test(profile.filingChannel)) gaps.push("filing channel");
   if (!profile.taxYearBasis) gaps.push("tax year basis");
+  // Drafts may park without it, but an active profile needs the first period
+  // the engagement covers so earlier periods never reach the calendar.
+  if (!profile.goLiveDate || !/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(profile.goLiveDate)) gaps.push("go-live date");
+  if (!profile.firstPeriodToFile || !/^\d{4}-(0[1-9]|1[0-2])$/.test(profile.firstPeriodToFile)) gaps.push("first period to file");
+  else if (profile.goLiveDate && profile.firstPeriodToFile < profile.goLiveDate.slice(0, 7)) gaps.push("first period to file on or after the go-live month");
   if (profile.taxYearBasis === "Fiscal year" && (!profile.fiscalYearEnd?.trim() || /requires|not configured|needs/i.test(profile.fiscalYearEnd))) gaps.push("fiscal year-end");
-  if (!assignment.cluster.trim()) gaps.push("Cluster");
-  if (!assignment.tower.trim()) gaps.push("Tower");
+  // The live adapter shows "Unresolved" when scope cannot be resolved; the
+  // database validator treats it as missing, so the gap list must too. Tower
+  // is optional: onboarding may place a client directly in a Cluster.
+  const isPlaceholder = (value: string) => !value.trim() || /^(unassigned|unresolved|needs review|not configured)$/i.test(value.trim());
+  if (isPlaceholder(assignment.cluster)) gaps.push("Cluster");
   if (!assignment.preparer.trim() || assignment.preparer === "Unassigned") gaps.push("Preparer");
   if (!assignment.checker.trim() || assignment.checker === "Unassigned") gaps.push("Checker");
   if (!assignment.reviewer.trim() || assignment.reviewer === "Unassigned") gaps.push("Reviewer");
-  if (new Set([assignment.preparer, assignment.checker, assignment.reviewer]).size !== 3) gaps.push("distinct Preparer, Checker, and Reviewer");
+  // Distinct people, not distinct names: two staff may share a display name.
+  const owners = (["preparer", "checker", "reviewer"] as const).map((role) => assignment[`${role}UserId`] ?? `label:${assignment[role].trim().toLowerCase()}`);
+  if (new Set(owners).size !== 3) gaps.push("distinct Preparer, Checker, and Reviewer");
   if (profile.weight < 1 || profile.weight > 5) gaps.push("Client Weight");
   if (profile.enateSetup === "Unknown") gaps.push("eNATE setup");
   if (profile.paymentRoute === "Not configured") gaps.push("payment route");

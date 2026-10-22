@@ -23,8 +23,6 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function POST(request: Request, context: RouteContext) {
-  const denied = await requireApiCapability(["CorrectTaxProfile", "MaintainClientRepository"]);
-  if (denied) return denied;
   const originDenied = requireSameOrigin(request);
   if (originDenied) return originDenied;
 
@@ -38,12 +36,19 @@ export async function POST(request: Request, context: RouteContext) {
   const command = asRecord(body);
   if (!command) return NextResponse.json({ error: "Profile command is invalid." }, { status: 400 });
   const action = command.action;
+  // Validating an existing version is its own authority; every other action edits the profile.
+  const denied = await requireApiCapability(action === "validate" ? ["ValidateTaxProfile"] : ["CorrectTaxProfile", "MaintainClientRepository"]);
+  if (denied) return denied;
   const reason = typeof command.reason === "string" ? command.reason.trim() : "";
   if (!reason) return NextResponse.json({ error: "A reason is required for a profile change." }, { status: 400 });
 
   try {
     if (action === "validate") {
       if (typeof command.versionId !== "string") return NextResponse.json({ error: "A saved profile version is required before validation." }, { status: 400 });
+      // Bind validation to this client's latest version; a stale page must reload first.
+      const latest = await getLatestTaxProfileVersion((await context.params).clientId);
+      if (!latest?.clientFound || !latest.data) return NextResponse.json({ error: "Client or saved Tax Profile not found." }, { status: 404 });
+      if (latest.data.id !== command.versionId) return NextResponse.json({ error: "A newer Tax Profile version exists; reload and validate the latest version." }, { status: 409 });
       const data = await validateTaxProfileVersion(command.versionId, reason);
       return NextResponse.json({ data, state: "active" });
     }

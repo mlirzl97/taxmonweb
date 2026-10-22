@@ -295,12 +295,48 @@ export function clientCandidateFormNumbers(client: FixtureClient) {
   return [...new Set(forms.filter((form) => form.taxTypeCodes.length > 0 && form.formNumber in ruleSeeds && taxTypeMatches(form.formNumber, taxTypes)).map((form) => form.formNumber))];
 }
 
+const calendarMonthNames = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+
+function monthStart(year: number, monthIndex: number) {
+  const normalizedYear = year + Math.floor(monthIndex / 12);
+  const normalizedMonth = ((monthIndex % 12) + 12) % 12;
+  return `${normalizedYear}-${String(normalizedMonth + 1).padStart(2, "0")}-01`;
+}
+
+/**
+ * Reads the compliance period a calendar row covers from the BIR calendar's own
+ * wording ("Month of June 2026", "Quarter ending September 30, 2026", "Fiscal
+ * Year ending May 31, 2026", "Calendar Year 2025", "1st Semester of 2026",
+ * "October 1-15, 2026"). Returns null when the text does not state a period;
+ * the due month is never used as a stand-in.
+ */
+export function compliancePeriodStartFromLabel(label: string | null | undefined): string | null {
+  if (!label) return null;
+  const text = label.replace(/\s+/g, " ");
+  const monthPattern = calendarMonthNames.join("|");
+  const month = new RegExp(`Month of (${monthPattern}) (\\d{4})`, "i").exec(text);
+  if (month) return monthStart(Number(month[2]), calendarMonthNames.indexOf(month[1].toLowerCase()));
+  const quarter = new RegExp(`Quarter ending (${monthPattern}) \\d{1,2}, (\\d{4})`, "i").exec(text);
+  if (quarter) return monthStart(Number(quarter[2]), calendarMonthNames.indexOf(quarter[1].toLowerCase()) - 2);
+  const fiscalYear = new RegExp(`Year ending (${monthPattern}) \\d{1,2}, (\\d{4})`, "i").exec(text);
+  if (fiscalYear) return monthStart(Number(fiscalYear[2]), calendarMonthNames.indexOf(fiscalYear[1].toLowerCase()) - 11);
+  const fiscalYearStart = new RegExp(`Fiscal Year beginning (${monthPattern}) \\d{1,2}, (\\d{4})`, "i").exec(text);
+  if (fiscalYearStart) return monthStart(Number(fiscalYearStart[2]), calendarMonthNames.indexOf(fiscalYearStart[1].toLowerCase()));
+  const wholeYear = /(?:Taxable|Calendar) Year (\d{4})/i.exec(text);
+  if (wholeYear) return `${wholeYear[1]}-01-01`;
+  const semester = /\b([12]) ?(?:st|nd) Semester of (\d{4})/i.exec(text);
+  if (semester) return monthStart(Number(semester[2]), semester[1] === "1" ? 0 : 6);
+  const dayRange = new RegExp(`(${monthPattern}) \\d{1,2} ?- ?\\d{1,2}, (\\d{4})`, "i").exec(text);
+  if (dayRange) return monthStart(Number(dayRange[2]), calendarMonthNames.indexOf(dayRange[1].toLowerCase()));
+  return null;
+}
+
 export function getClientServiceCalendarRows(client: FixtureClient, year: number, overrides: Readonly<Record<string, DeadlinePublicationOverride>> = {}, governedRows?: readonly DeadlineControlRow[]): { rows: ClientServiceCalendarRow[]; heldRows: DeadlineControlRow[] } {
   const candidateForms = clientCandidateFormNumbers(client);
   const clientDeadlinePolicy = normalizeClientDeadlinePolicy(client.entities[0]?.profile.deadlinePolicy);
   const goLiveDate = client.entities[0]?.profile.goLiveDate;
-  const firstPeriodToFile = client.entities[0]?.profile.firstPeriodToFile;
-  const firstPeriodStart = firstPeriodToFile && /^\d{4}-\d{2}$/.test(firstPeriodToFile) ? `${firstPeriodToFile}-01` : undefined;
+  const firstPeriodToFile = client.entities[0]?.profile.firstPeriodToFile?.trim();
+  const firstPeriodStart = firstPeriodToFile && /^\d{4}-(0[1-9]|1[0-2])$/.test(firstPeriodToFile) ? `${firstPeriodToFile}-01` : undefined;
   const goLiveYear = goLiveDate ? Number(goLiveDate.slice(0, 4)) : undefined;
   const candidateRows = (governedRows ? [...governedRows] : buildDeadlineControlRows(year, candidateForms))
     .map((row) => {
@@ -310,7 +346,9 @@ export function getClientServiceCalendarRows(client: FixtureClient, year: number
     })
     .filter((row) => {
       if (goLiveYear === undefined || !Number.isFinite(goLiveYear) || !goLiveDate) return true;
-      if (firstPeriodStart && row.periodStartDate < firstPeriodStart) return false;
+      // A row whose compliance period is unknown stays visible rather than
+      // being dropped or placed by its due month.
+      if (firstPeriodStart && row.periodStartDate && row.periodStartDate < firstPeriodStart) return false;
       const effectiveDeadline = row.publishedOperationalDeadline ?? row.adjustedStatutoryDeadline;
       if (effectiveDeadline) return effectiveDeadline > goLiveDate;
       // An unresolved rule has no due date to compare. Keep it visible as a
@@ -318,7 +356,7 @@ export function getClientServiceCalendarRows(client: FixtureClient, year: number
       // (for example, an annual period may be due in the following year).
       return row.calendarYear >= goLiveYear;
     })
-    .filter((row) => !firstPeriodStart || row.periodStartDate >= firstPeriodStart);
+    .filter((row) => !firstPeriodStart || !row.periodStartDate || row.periodStartDate >= firstPeriodStart);
   const rows = candidateRows.filter((row) => row.publicationStatus === "published" && row.publishedOperationalDeadline).map((row) => ({
     ...row,
     clientId: client.id,

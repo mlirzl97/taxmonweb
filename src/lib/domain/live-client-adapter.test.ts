@@ -55,6 +55,16 @@ function liveClient(overrides: Record<string, unknown> = {}) {
 }
 
 describe("live client adapter", () => {
+  it("derives the cluster from a tower scope's parent", () => {
+    const base = liveClient();
+    const entity = base.taxpayer_entities[0];
+    const unit = entity.registration_units[0];
+    const client = { ...base, taxpayer_entities: [{ ...entity, registration_units: [{ ...unit, registration_unit_scope_assignments: [{ organization_units: { code: "CL-BEATO-T1", name: "Brgy. Beato · Tower 1", unit_kind: "tower", parent: { name: "Brgy. Beato", unit_kind: "cluster" } } }] }] }] };
+    const projected = portfolioClientToFixtureClient(client as unknown as Parameters<typeof portfolioClientToFixtureClient>[0]);
+    expect(projected.assignment.tower).toBe("Brgy. Beato · Tower 1");
+    expect(projected.assignment.cluster).toBe("Brgy. Beato");
+  });
+
   it("projects normalized additional engagements without inventing ownership", () => {
     const client = liveClient({
       contract_repositories: [{
@@ -273,7 +283,86 @@ describe("live client adapter", () => {
     }));
 
     expect(projected.assignment.preparer).toBe("Current Preparer");
-    expect(projected.assignment.checker).toBe("Unassigned");
+    expect(projected.assignment.checker).toBe("Unassigned");    expect(projected.assignment.preparerUserId).toBe("user-preparer");
+    expect(projected.assignment.checkerUserId).toBeUndefined();
+  });
+
+  it("prefers the registration-unit owner over a legacy client-level owner", () => {
+    const base = liveClient({
+      client_team_assignments: [
+        { id: "legacy", user_id: "user-legacy", assignment_role: "preparer", effective_from: "2026-01-01", effective_to: null, app_users: { display_name: "Legacy Preparer" } },
+      ],
+    });
+    const unit = base.taxpayer_entities[0].registration_units[0];
+    const projected = portfolioClientToFixtureClient({
+      ...base,
+      taxpayer_entities: [{ ...base.taxpayer_entities[0], registration_units: [{ ...unit, registration_unit_team_assignments: [
+        { id: "unit", user_id: "user-unit", assignment_role: "preparer", assignee_label: "Unit Preparer", effective_from: "2026-02-01", effective_to: null, app_users: { display_name: "Unit Preparer" } },
+      ] }] }],
+    });
+
+    expect(projected.assignment.preparer).toBe("Unit Preparer");
+    expect(projected.assignment.preparerUserId).toBe("user-unit");
+  });
+
+  it("keeps an unresolved registration-unit owner unresolved instead of borrowing a legacy id", () => {
+    const base = liveClient({
+      client_team_assignments: [
+        { id: "legacy", user_id: "user-legacy", assignment_role: "preparer", effective_from: "2026-01-01", effective_to: null, app_users: { display_name: "Legacy Preparer" } },
+      ],
+    });
+    const unit = base.taxpayer_entities[0].registration_units[0];
+    const projected = portfolioClientToFixtureClient({
+      ...base,
+      taxpayer_entities: [{ ...base.taxpayer_entities[0], registration_units: [{ ...unit, registration_unit_team_assignments: [
+        { id: "unit", user_id: null, assignment_role: "preparer", assignee_label: "Label Only", effective_from: "2026-02-01", effective_to: null, app_users: null },
+      ] }] }],
+    });
+
+    expect(projected.assignment.preparer).toBe("Label Only");
+    expect(projected.assignment.preparerUserId).toBeUndefined();
+  });
+
+  it("takes owners only from the Registration Unit the dossier shows, never from another branch", () => {
+    const base = liveClient({});
+    const head = base.taxpayer_entities[0].registration_units[0];
+    const branch = { ...head, id: "ru-branch", reference_code: "RU-BRANCH", display_name: "Branch", unit_kind: "branch" as const, registration_unit_team_assignments: [
+      { id: "branch-owner", user_id: "user-branch", assignment_role: "preparer" as const, assignee_label: "Branch Preparer", effective_from: "2026-01-01", effective_to: null, app_users: { display_name: "Branch Preparer" } },
+    ] };
+    const projected = portfolioClientToFixtureClient({
+      ...base,
+      taxpayer_entities: [{ ...base.taxpayer_entities[0], registration_units: [branch, { ...head, registration_unit_team_assignments: [] }] }],
+    });
+
+    expect(projected.assignment.preparer).toBe("Unassigned");
+    expect(projected.assignment.preparerUserId).toBeUndefined();
+  });
+
+  it("treats a Cluster-only scope as resolved", () => {
+    const base = liveClient({});
+    const head = base.taxpayer_entities[0].registration_units[0];
+    const projected = portfolioClientToFixtureClient({
+      ...base,
+      taxpayer_entities: [{ ...base.taxpayer_entities[0], registration_units: [{ ...head, registration_unit_scope_assignments: [{ organization_units: { code: "FIXTURE-CLUSTER-A", name: "Cluster A", unit_kind: "cluster" } }] }] }],
+    });
+
+    expect(projected.assignment.cluster).toBe("Cluster A");
+    expect(projected.entities[0].profile.attention).not.toContain("Organizational scope requires validation");
+  });
+
+  it("leaves the scope unresolved when its Cluster is closed or its Tower's parent Cluster is closed", () => {
+    const base = liveClient({});
+    const head = base.taxpayer_entities[0].registration_units[0];
+    const withScope = (organization_units: object) => portfolioClientToFixtureClient({
+      ...base,
+      taxpayer_entities: [{ ...base.taxpayer_entities[0], registration_units: [{ ...head, registration_unit_scope_assignments: [{ organization_units } as never] }] }],
+    });
+    const closedCluster = withScope({ code: "FIXTURE-CLUSTER-A", name: "Cluster A", unit_kind: "cluster", active: true, effective_from: "2020-01-01", effective_to: "2021-12-31" });
+    expect(closedCluster.assignment.cluster).toBe("Unresolved");
+    expect(closedCluster.entities[0].profile.attention).toContain("Organizational scope requires validation");
+    const towerUnderClosedCluster = withScope({ code: "FIXTURE-TOWER-A", name: "Tower A", unit_kind: "tower", active: true, parent: { name: "Cluster A", unit_kind: "cluster", active: false } });
+    expect(towerUnderClosedCluster.scope).not.toBe("Tower A");
+    expect(towerUnderClosedCluster.entities[0].profile.attention).toContain("Organizational scope requires validation");
   });
 
   it("projects effective-dated registration-unit team history without inventing staff identities", () => {

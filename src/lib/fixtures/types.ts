@@ -237,6 +237,10 @@ export type FixtureAssignment = {
   preparer: string;
   checker: string;
   reviewer: string;
+  /** Live Team user ids; the label is display only when an id is present. */
+  preparerUserId?: string;
+  checkerUserId?: string;
+  reviewerUserId?: string;
   tower: string;
   cluster: string;
   effectiveFrom: string;

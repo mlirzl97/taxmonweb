@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 
 import { canAccessModule, canManageModuleRecords, canPerformTeamAction, cloneAccessMatrix, isAccessMatrix, moduleAccessForPersona, rbacPersonaDescription, rbacPersonaLabel, type AccessLevel, type AccessMatrix, type ModuleKey, type RbacPersona, type TeamAction } from "@/lib/domain/access";
-import { canViewerActOnWorkRole, canViewerEditTaxProfile, canViewerExecuteWork, canViewerSetDataReadiness, canViewerManageModule, canViewerOverride, canViewerPerformTeamAction, isViewerLeader, viewerModuleLevel, type ViewerAccess } from "@/lib/domain/viewer-access";
+import { canViewerActOnWorkRole, canViewerEditTaxProfile, canViewerValidateTaxProfile, canViewerExecuteWork, canViewerSetDataReadiness, canViewerManageModule, canViewerOverride, canViewerPerformTeamAction, isViewerLeader, viewerModuleLevel, type ViewerAccess } from "@/lib/domain/viewer-access";
 import { fixtureClients, fixtureClock, fixtureOrgDirectoryMembers, fixtureWork, type FixtureClient, type FixtureDataReadiness, type FixturePaymentApplicability, type FixtureStatus, type FixtureWorkItem } from "@/lib/fixtures";
 import { applySavedCalibrationToClient, prototypeClientProfileUpdatedEvent } from "@/lib/domain/client-profile-persistence";
 import { clientIsAssignedForRole, clientMatchesPerspective, staffMemberIdForPerspective } from "@/lib/domain/team";
@@ -228,6 +228,7 @@ type WorkflowContextValue = {
   isLeader: boolean;
   canManagePeriodLocks: boolean;
   canEditTaxProfile: boolean;
+  canValidateTaxProfile: boolean;
   canSetDataReadiness: (work: FixtureWorkItem) => boolean;
   getModuleAccess: (module: ModuleKey) => AccessLevel;
   canAccessModule: (module: ModuleKey, allowed?: readonly AccessLevel[]) => boolean;
@@ -772,7 +773,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     const record = recordForWork(work, records[work.id]);
     if (periodLocks[workReturnLockKey(work)]?.locked || record.periodLock.locked) return { ok: false, error: "This return and compliance period are locked by Tax Team and cannot be edited." };
     if (!roleQuestions[role].some((question) => question.id === questionId)) return { ok: false, error: "That checklist item is not configured for this responsibility." };
-    if (!canActOnWorkflow(role, work)) return { ok: false, error: `The ${rbacPersonaLabel(workPerspective)} access view cannot update this checklist for this taxpayer.` };
+    if (!canActOnWorkflow(role, work)) return { ok: false, error: `${prototypeMode ? `The ${rbacPersonaLabel(workPerspective)} access view` : "You"} cannot update this checklist for this taxpayer.` };
     const update: WorkflowChecklistUpdate = { id: `${work.id}-checklist-${record.checklistHistory.length + 1}`, role, questionId, completed, actor: rbacPersonaLabel(workPerspective), recordedAt: workflowTimestamp(record.checklistHistory.length) };
     const roleAnswers = record.checklistAnswers[role] ?? {};
     setRecords((current) => ({
@@ -808,7 +809,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (status === "DONE" && ["client-approval", "filing", "payment-confirmation", "esubmission"].includes(stepId) && !/^\d{4}-\d{2}-\d{2}$/.test(completedOn)) return { ok: false, error: "Record the actual completion date before marking this outcome complete." };
     if (status === "DONE" && stepId === "esubmission" && (!/^\d{4}-\d{2}-\d{2}$/.test(acknowledgedOn) || !/^\d{4}-\d{2}-\d{2}$/.test(validatedOn))) return { ok: false, error: "Record the BIR acknowledgment and validation dates before completing eSubmission." };
     if (!isCurrentStep && !isUndo) return { ok: false, error: "Only the current process step can be edited." };
-    if (!canActOnProcessStep(stepId, work)) return { ok: false, error: `The ${rbacPersonaLabel(workPerspective)} access view cannot update this process step for this taxpayer.` };
+    if (!canActOnProcessStep(stepId, work)) return { ok: false, error: `${prototypeMode ? `The ${rbacPersonaLabel(workPerspective)} access view` : "You"} cannot update this process step for this taxpayer.` };
     const nextStep = status === "DONE" || status === "NOT_APPLICABLE" ? nextApplicableProcessStep(work, stepIndex, record.processStatuses) : undefined;
     const nextStatus = nextStep && autoStartProcessStep(nextStep.id) && record.processStatuses[nextStep.id] !== "DONE" && record.processStatuses[nextStep.id] !== "NOT_APPLICABLE" ? "IN_PROGRESS" : undefined;
     const actor = rbacPersonaLabel(workPerspective);
@@ -880,7 +881,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     if (!prototypeMode) return executeLiveCommand(work, "payment_profile", { paymentApplicability: work.paymentApplicability.toLowerCase(), paymentAmount: amount });
     const record = recordForWork(work, records[work.id]);
     if (periodLocks[workReturnLockKey(work)]?.locked || record.periodLock.locked) return { ok: false, error: "This return and compliance period are locked by Tax Team and cannot be edited." };
-    if (!canActOnWorkflow("CHECKER", work)) return { ok: false, error: `The ${rbacPersonaLabel(workPerspective)} access view cannot record the amount to pay for this taxpayer.` };
+    if (!canActOnWorkflow("CHECKER", work)) return { ok: false, error: `${prototypeMode ? `The ${rbacPersonaLabel(workPerspective)} access view` : "You"} cannot record the amount to pay for this taxpayer.` };
     if (work.paymentAmount !== null && work.paymentAmount !== undefined && amount !== work.paymentAmount) return { ok: false, error: "The amount to pay is already recorded and cannot be edited." };
     if (amount !== null && (!Number.isFinite(amount) || amount < 0)) return { ok: false, error: "Enter a valid non-negative payment amount." };
     const actor = rbacPersonaLabel(workPerspective);
@@ -907,7 +908,7 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
     }
     const record = recordForWork(work, records[work.id]);
     if (periodLocks[workReturnLockKey(work)]?.locked || record.periodLock.locked) return { ok: false, error: "This return and compliance period are locked by Tax Team and cannot be edited." };
-    if (!canActOnWorkflow(role, work)) return { ok: false, error: `The ${rbacPersonaLabel(workPerspective)} access view cannot record this gate decision for this taxpayer.` };
+    if (!canActOnWorkflow(role, work)) return { ok: false, error: `${prototypeMode ? `The ${rbacPersonaLabel(workPerspective)} access view` : "You"} cannot record this gate decision for this taxpayer.` };
     if (record.currentGate !== role) return { ok: false, error: `This work is not currently waiting for ${roleLabels[role]} certification.` };
     const questions = roleQuestions[role];
     if (decision !== "RETURN" && questions.some((question) => !answers[question.id])) return { ok: false, error: "Complete every gate question before recording this decision." };
@@ -949,11 +950,12 @@ export function WorkflowProvider({ children, prototypeMode = false }: { children
   const isLeader = prototypeMode ? ["TOWER_LEADER", "CLUSTER_LEADER", "TAX_CONTROL", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective) : Boolean(viewer && isViewerLeader(viewer));
   const canManagePeriodLocks = prototypeMode ? ["TAX_CONTROL", "MASTER_ADMIN", "SUPER_ADMIN"].includes(workPerspective) : Boolean(viewer && canViewerActOnWorkRole(viewer, undefined, "TAX_CONTROL"));
   const canEditTaxProfile = prototypeMode ? canManageModule("clients") : Boolean(viewer && canViewerEditTaxProfile(viewer));
+  const canValidateTaxProfile = prototypeMode ? canManageModule("clients") : Boolean(viewer && canViewerValidateTaxProfile(viewer));
   const canSetDataReadiness = useCallback((work: FixtureWorkItem) => {
     if (prototypeMode) return canActOnProcessStep("prepare", work);
     return Boolean(viewer && canViewerSetDataReadiness(viewer));
   }, [canActOnProcessStep, prototypeMode, viewer]);
-  const value = useMemo<WorkflowContextValue>(() => ({ prototypeMode, clientRegistry, clientRegistryState, refreshClientRegistry, currentRole, setCurrentRole, workPerspective, setWorkPerspective, applyAccessPerspective, accessMatrix, accessPolicyHistory, commitAccessMatrix, canManageAccess, viewer, viewerStatus, canManageModule, canPerformTeam, canOverride, isLeader, canManagePeriodLocks, canEditTaxProfile, canSetDataReadiness, getModuleAccess, canAccessModule: canAccess, getRecord, getEffectiveWork, getWorkItems, getOperationalRecords, operationalToday: prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10), createWorkItem, createLiveWorkItem, updateWorkItem, deleteWorkItem, isWorkVisible, isClientVisible, canActOnWorkflow, canActOnProcessStep, getProcessStatus, getLatestProcessUpdate, setDataReadiness, setPaymentApplicability, setPaymentAmount, getPeriodLock, setPeriodLock, setProcessStatus, getChecklistAnswers, setChecklistAnswer, getQuestions: (role: WorkflowRole) => roleQuestions[role], submitDecision, recordFinalCertification }), [accessMatrix, accessPolicyHistory, applyAccessPerspective, canAccess, canEditTaxProfile, canManageModule, canManagePeriodLocks, canSetDataReadiness, canOverride, canPerformTeam, isLeader, viewer, viewerStatus, canActOnProcessStep, canActOnWorkflow, canManageAccess, clientRegistry, clientRegistryState, commitAccessMatrix, createLiveWorkItem, createWorkItem, currentRole, deleteWorkItem, getChecklistAnswers, getEffectiveWork, getLatestProcessUpdate, getModuleAccess, getOperationalRecords, getPeriodLock, getProcessStatus, getRecord, getWorkItems, isClientVisible, isWorkVisible, prototypeMode, recordFinalCertification, refreshClientRegistry, setDataReadiness, setChecklistAnswer, setPaymentApplicability, setPaymentAmount, setPeriodLock, setProcessStatus, submitDecision, updateWorkItem, workPerspective]);
+  const value = useMemo<WorkflowContextValue>(() => ({ prototypeMode, clientRegistry, clientRegistryState, refreshClientRegistry, currentRole, setCurrentRole, workPerspective, setWorkPerspective, applyAccessPerspective, accessMatrix, accessPolicyHistory, commitAccessMatrix, canManageAccess, viewer, viewerStatus, canManageModule, canPerformTeam, canOverride, isLeader, canManagePeriodLocks, canEditTaxProfile, canValidateTaxProfile, canSetDataReadiness, getModuleAccess, canAccessModule: canAccess, getRecord, getEffectiveWork, getWorkItems, getOperationalRecords, operationalToday: prototypeMode ? fixtureClock.today : new Date().toISOString().slice(0, 10), createWorkItem, createLiveWorkItem, updateWorkItem, deleteWorkItem, isWorkVisible, isClientVisible, canActOnWorkflow, canActOnProcessStep, getProcessStatus, getLatestProcessUpdate, setDataReadiness, setPaymentApplicability, setPaymentAmount, getPeriodLock, setPeriodLock, setProcessStatus, getChecklistAnswers, setChecklistAnswer, getQuestions: (role: WorkflowRole) => roleQuestions[role], submitDecision, recordFinalCertification }), [accessMatrix, accessPolicyHistory, applyAccessPerspective, canAccess, canEditTaxProfile, canValidateTaxProfile, canManageModule, canManagePeriodLocks, canSetDataReadiness, canOverride, canPerformTeam, isLeader, viewer, viewerStatus, canActOnProcessStep, canActOnWorkflow, canManageAccess, clientRegistry, clientRegistryState, commitAccessMatrix, createLiveWorkItem, createWorkItem, currentRole, deleteWorkItem, getChecklistAnswers, getEffectiveWork, getLatestProcessUpdate, getModuleAccess, getOperationalRecords, getPeriodLock, getProcessStatus, getRecord, getWorkItems, isClientVisible, isWorkVisible, prototypeMode, recordFinalCertification, refreshClientRegistry, setDataReadiness, setChecklistAnswer, setPaymentApplicability, setPaymentAmount, setPeriodLock, setProcessStatus, submitDecision, updateWorkItem, workPerspective]);
   return <WorkflowContext.Provider value={value}>{children}</WorkflowContext.Provider>;
 }
 
