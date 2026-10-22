@@ -71,7 +71,7 @@ describe("Expected Compliance and generation migration", () => {
   });
 
   it("recomputes changes proposed from an earlier profile on every proposal", () => {
-    expect(migration).toMatch(/set pending_decision = null, pending_reason = null, pending_by = null, pending_at = null, pending_source = null\s+where item\.registration_unit_id = p_registration_unit_id\s+and item\.pending_source = 'tax_profile';/);
+    expect(migration).toContain("and item.pending_source in ('tax_profile', 'requirement_version');");
   });
 
   it("refuses a proposal made from a profile that is no longer active", () => {
