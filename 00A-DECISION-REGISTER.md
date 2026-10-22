@@ -161,6 +161,23 @@ The pre-domain decision phase and core product/domain freeze are complete. The s
 
 Future documents may refine configuration values, role-capability mappings, approved tax content, and technical implementation details without reopening these architectural decisions unless a concrete control, data-integrity, or architectural contradiction is found.
 
+## HOD operating decisions
+
+The HOD (domain owner) made these decisions on 2026-10-22 while reviewing the live prototype. They configure locked mechanisms; they do not reopen them.
+
+| ID | Area | Decision | Consequence |
+|---|---|---|---|
+| H-001 | Owner reassignment | A change of Preparer, Checker or Reviewer applies when it is saved; it does not wait for Tax Profile validation. | Validation governs tax facts, not team management. A save that names no one, or the person already in the role, is no change. Emptying a role with no replacement needs an explicit, audited command (not yet built). |
+| H-002 | Client placement | Onboarding places new clients in Brgy. Beato as a whole Cluster. A client may be validated in a Cluster without a Tower. Real Preparer, Checker and Reviewer are named from the start; there are no placeholder "Unassigned" accounts. | Cluster is required for activation; Tower is optional. |
+| H-003 | Leader powers | Cluster leaders onboard clients, correct profiles and reassign owners within their own Cluster. Tower leaders reassign owners within their own Tower. Validation stays with the HOD and named delegates. The HOD and the backup admin hand clients over from Brgy. Beato to their long-term Cluster. | A narrower "reassign owners only" capability for tower leaders is pending; today they hold CorrectTaxProfile. Mock grants applied 2026-10-22, effective-dated. |
+| H-004 | Onboarding | The permanent file location is captured on step 1, so a draft can be saved from any step. | A saved draft is a real client record and needs its provenance. |
+| H-005 | Return families | Returns are read by family, by month of the quarter: VAT 2550M (optional) · 2550Q; expanded withholding 0619-E · 1601-EQ · 1604-E; final withholding 0619-F · 1601-FQ · 1604-F; compensation withholding 1601-C monthly · 1604-C; percentage tax 2551M (optional) · 2551Q; corporate income tax 1702Q (Q1–Q3) · annual 1702. 06xx forms are payment forms (months 1–2); the quarterly return covers month 3. VAT and percentage tax have no annual return. | 0619-E/F are not part of 1601-C even though the BIR calendar prints them on one combined row. |
+| H-006 | Optional monthly returns | 2550M and 2551M are filed only when the client elects them. TMF due date is the 20th of the following month, internal target the 19th, shown as "TMF due date (no BIR deadline)". 2550Q/2551Q cover month 3. | RMC 52-2023 removed the mandatory 2550M; secondary sources report 2551M was discontinued from 2018 under TRAIN. |
+| H-007 | Earliest date | For each return and period, the earliest date across manual filing and all eFPS groups is the TMF due date for every client. The eFPS group stays on the profile for reference only. | e.g. manual on the 10th and eFPS groups on the 11th–15th → due on the 10th, target the 9th. |
+| H-008 | Weekends and holidays | TMF dates never move for weekends or holidays. | The internal target is simply one day before the due date. |
+| H-009 | Year basis | Withholding, VAT and percentage tax follow calendar quarters. A fiscal-year client's VAT quarters coincide with calendar quarters when the fiscal year ends in March, June, September or December; any other year-end is held for Tax Team review. Corporate income tax follows the client's fiscal year: 1702Q 60 days after each of fiscal quarters 1–3, the annual 1702 on the 15th day of the 4th month after year-end. | The HOD confirmed VAT on calendar quarters from team experience. Regulation text (RR 16-2005 / RR 13-2018 §4.114-1) ties the VAT taxable quarter to the income-tax quarter; this agrees when the year-end is quarter-aligned. |
+| H-010 | Deadline release | A deadline is confirmed by one person and published by a different person. A published deadline changes only through Override: a superseding row with a required reason, keeping the original in history. A TMF override (e.g. the 10th moved to the 11th) is distinct from a BIR statutory date, which changes only with its BIR issuance as source. | The confirm/publish separation and Override are not yet built (calendar governance PR). |
+
 ## Deferred
 
 | ID | Area | Deferred item |
