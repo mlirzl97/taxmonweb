@@ -81,6 +81,9 @@ describe("Expected Compliance and generation migration", () => {
   it("proposes moving an approved return to a newer requirement version, applied only on approval", () => {
     expect(migration).toContain("pending_source = 'requirement_version',");
     expect(migration).toContain("requirement_version_id = coalesce(item.pending_requirement_version_id, item.requirement_version_id),");
+    // A person's decision never carries a move, and the snapshot records the version approved.
+    expect(migration).toMatch(/pending_source = 'manual',[\s\S]{0,200}pending_requirement_version_id = null/);
+    expect(migration).toContain("'requirementVersionId', item.requirement_version_id");
   });
 
   it("turns an unresolved return into a candidate once a governed requirement is active", () => {

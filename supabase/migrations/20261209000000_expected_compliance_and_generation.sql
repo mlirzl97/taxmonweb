@@ -208,6 +208,10 @@ begin
          pending_requirement_id = null, pending_requirement_version_id = null
    where item.registration_unit_id = p_registration_unit_id
      and item.pending_source in ('tax_profile', 'requirement_version');
+  update public.client_compliance_universe_items item
+     set pending_requirement_id = null, pending_requirement_version_id = null
+   where item.registration_unit_id = p_registration_unit_id
+     and item.pending_requirement_version_id is not null;
 
   for return_code in
     select distinct upper(trim(value)) from jsonb_array_elements_text(coalesce(profile.profile_data -> 'registeredReturnCodes', '[]'::jsonb)) as value
@@ -377,7 +381,11 @@ begin
          pending_reason = reason,
          pending_by = auth.uid(),
          pending_at = now(),
-         pending_source = 'manual'
+         pending_source = 'manual',
+         -- A person's decision is about scope only; it never carries a
+         -- requirement move proposed earlier.
+         pending_requirement_id = null,
+         pending_requirement_version_id = null
    where id = item.id;
   perform public.append_audit_event(
     'expected_compliance_item_decided', 'client_compliance_universe_item', item.id::text,
@@ -479,7 +487,8 @@ begin
   end if;
   select coalesce(jsonb_agg(jsonb_build_object(
            'itemId', item.id, 'form', item.form_number, 'status', item.selection_status,
-           'scope', item.service_scope, 'reason', item.decision_reason) order by item.form_number), '[]'::jsonb)
+           'scope', item.service_scope, 'reason', item.decision_reason,
+           'requirementId', item.requirement_id, 'requirementVersionId', item.requirement_version_id) order by item.form_number), '[]'::jsonb)
     into snapshot
     from public.client_compliance_universe_items item
    where item.registration_unit_id = p_registration_unit_id
