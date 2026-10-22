@@ -7,11 +7,11 @@ function firstRelation<T>(value: T | T[] | null | undefined): T | undefined {
   return Array.isArray(value) ? value[0] : value ?? undefined;
 }
 
-function scopeForClient(client: PortfolioClient): { tower: FixtureScope; cluster: string; resolved: boolean } {
+function scopeForClient(selectedUnit: PortfolioClient["taxpayer_entities"][number]["registration_units"][number] | undefined): { tower: FixtureScope; cluster: string; resolved: boolean } {
   const today = new Date().toISOString().slice(0, 10);
-  const organizationUnits = client.taxpayer_entities
-    .flatMap((entity) => entity.registration_units)
-    .flatMap((unit) => unit.registration_unit_scope_assignments)
+  // Only the Registration Unit the dossier shows and saves supplies its scope;
+  // another unit's Cluster or Tower never stands in for it.
+  const organizationUnits = (selectedUnit?.registration_unit_scope_assignments ?? [])
     .filter((assignment) => (!assignment.effective_from || assignment.effective_from <= today) && (!assignment.effective_to || assignment.effective_to >= today))
     .flatMap((assignment) => Array.isArray(assignment.organization_units) ? assignment.organization_units : [assignment.organization_units])
     .filter((candidate): candidate is NonNullable<typeof candidate> => Boolean(candidate?.code || candidate?.name));
@@ -339,7 +339,7 @@ export function portfolioClientToFixtureClient(client: PortfolioClient): Fixture
   const unit = entity?.registration_units.find((candidate) => candidate.active && candidate.unit_kind === "head_office")
     ?? entity?.registration_units.find((candidate) => candidate.active)
     ?? entity?.registration_units[0];
-  const scope = scopeForClient(client);
+  const scope = scopeForClient(unit);
   const profile = buildProfile(client, entity, unit);
   if (!scope.resolved) profile.attention = [...profile.attention, "Organizational scope requires validation"];
   const tower = scope.tower;

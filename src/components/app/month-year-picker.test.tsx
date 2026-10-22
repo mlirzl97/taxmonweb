@@ -19,4 +19,10 @@ describe("month-year picker", () => {
     expect(html).toMatch(/<option value="04">April<\/option>/);
     expect(html).not.toContain('<option value="2025">');
   });
+
+  it("offers years well past the go-live year", () => {
+    const html = renderToStaticMarkup(<MonthYearPicker label="First period to file" minMonth="2030-01" onChange={() => undefined} value="" />);
+    expect(html).toContain('<option value="2030">2030</option>');
+    expect(html).toContain('<option value="2035">2035</option>');
+  });
 });

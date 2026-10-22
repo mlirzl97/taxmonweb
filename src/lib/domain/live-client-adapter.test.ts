@@ -365,6 +365,18 @@ describe("live client adapter", () => {
     expect(towerUnderClosedCluster.entities[0].profile.attention).toContain("Organizational scope requires validation");
   });
 
+  it("takes the scope only from the Registration Unit the dossier shows, never from another branch", () => {
+    const base = liveClient({});
+    const head = base.taxpayer_entities[0].registration_units[0];
+    const branch = { ...head, id: "ru-branch", reference_code: "RU-BRANCH", display_name: "Branch", unit_kind: "branch" as const, registration_unit_scope_assignments: [{ organization_units: { code: "FIXTURE-CLUSTER-B", name: "Cluster B", unit_kind: "cluster" } }] };
+    const projected = portfolioClientToFixtureClient({
+      ...base,
+      taxpayer_entities: [{ ...base.taxpayer_entities[0], registration_units: [branch, { ...head, registration_unit_scope_assignments: [{ organization_units: { code: "FIXTURE-CLUSTER-A", name: "Cluster A", unit_kind: "cluster" } }] }] }],
+    });
+
+    expect(projected.assignment.cluster).toBe("Cluster A");
+  });
+
   it("projects effective-dated registration-unit team history without inventing staff identities", () => {
     const projected = portfolioClientToFixtureClient(liveClient({
       taxpayer_entities: [{
