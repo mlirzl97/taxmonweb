@@ -23,7 +23,9 @@
 
 insert into public.capabilities (key, description) values
   ('ProposeComplianceUniverse', 'Propose Expected Compliance for a validated Tax Profile.'),
-  ('ApproveComplianceUniverse', 'Approve Expected Compliance per Registration Unit within scope.')
+  ('ApproveComplianceUniverse', 'Approve Expected Compliance per Registration Unit within scope.'),
+  -- Already checked by work and lock commands; registered here so it can be granted.
+  ('PerformElevatedOverride', 'Exceptional, reason-required, audited override of an internal control where policy permits; never of an external fact.')
 on conflict (key) do nothing;
 
 -- Optional monthly returns as governed masters.
@@ -66,7 +68,10 @@ alter table public.client_compliance_universe_items
   add column if not exists pending_decision text check (pending_decision in ('in_scope', 'out_of_scope', 'not_applicable', 'unresolved')),
   add column if not exists pending_reason text,
   add column if not exists pending_by uuid references public.app_users(id),
-  add column if not exists pending_at timestamptz;
+  add column if not exists pending_at timestamptz,
+  -- 'tax_profile' when proposing reconciled the validated profile; 'manual'
+  -- when a person recorded the decision (subject to the self-approval check).
+  add column if not exists pending_source text check (pending_source in ('tax_profile', 'manual'));
 alter table public.client_compliance_universe_items alter column requirement_id drop not null;
 alter table public.client_compliance_universe_items
   drop constraint if exists client_compliance_universe_it_registration_unit_id_requirem_key;
@@ -96,7 +101,8 @@ create table if not exists public.expected_compliance_approvals (
   approved_by uuid not null references public.app_users(id),
   approved_at timestamptz not null default now(),
   reason text not null check (length(trim(reason)) > 0),
-  items_snapshot jsonb not null
+  items_snapshot jsonb not null,
+  elevated_override boolean not null default false
 );
 comment on table public.expected_compliance_approvals is 'Append-only record of each Expected Compliance approval, per Registration Unit, with the decisions approved.';
 alter table public.expected_compliance_approvals enable row level security;
@@ -216,7 +222,8 @@ begin
      set pending_decision = 'not_applicable',
          pending_reason = 'Removed from the validated Tax Profile.',
          pending_by = auth.uid(),
-         pending_at = now()
+         pending_at = now(),
+         pending_source = 'tax_profile'
    where item.registration_unit_id = p_registration_unit_id
      and item.selection_status not in ('superseded', 'excluded')
      and item.pending_decision is null
@@ -229,7 +236,8 @@ begin
      set pending_decision = 'in_scope',
          pending_reason = 'Back on the validated Tax Profile.',
          pending_by = auth.uid(),
-         pending_at = now()
+         pending_at = now(),
+         pending_source = 'tax_profile'
    where item.registration_unit_id = p_registration_unit_id
      and item.selection_status = 'excluded'
      and item.decision_reason = 'Removed from the validated Tax Profile.'
@@ -292,7 +300,8 @@ begin
      set pending_decision = decision,
          pending_reason = reason,
          pending_by = auth.uid(),
-         pending_at = now()
+         pending_at = now(),
+         pending_source = 'manual'
    where id = item.id;
   perform public.append_audit_event(
     'expected_compliance_item_decided', 'client_compliance_universe_item', item.id::text,
@@ -304,7 +313,7 @@ $$;
 revoke execute on function public.decide_expected_compliance_item(uuid, uuid, text, text) from public, anon;
 grant execute on function public.decide_expected_compliance_item(uuid, uuid, text, text) to authenticated;
 
-create or replace function public.approve_expected_compliance(p_registration_unit_id uuid, p_reason text)
+create or replace function public.approve_expected_compliance(p_registration_unit_id uuid, p_reason text, p_elevated_override boolean default false)
 returns integer
 language plpgsql
 security definer set search_path = public
@@ -312,6 +321,8 @@ as $$
 declare
   approved_count integer;
   candidate_count integer;
+  own_decisions integer;
+  elevated boolean := false;
   snapshot jsonb;
 begin
   if auth.uid() is null or not public.is_active_app_user() then
@@ -330,6 +341,21 @@ begin
   if (public.active_tax_profile_for_unit(p_registration_unit_id)).id is null then
     raise exception using errcode = '22023', message = 'Expected Compliance needs a validated, active Tax Profile.';
   end if;
+  -- No one independently approves a decision they recorded themselves (L-047).
+  -- Reconciliations proposed from the validated profile are not a person's
+  -- judgment. Elevated Override is the exception: reasoned, marked, audited.
+  select count(*) into own_decisions
+    from public.client_compliance_universe_items item
+   where item.registration_unit_id = p_registration_unit_id
+     and item.pending_decision is not null
+     and item.pending_source = 'manual'
+     and item.pending_by = auth.uid();
+  if own_decisions > 0 then
+    if not (coalesce(p_elevated_override, false) and public.has_active_capability('PerformElevatedOverride')) then
+      raise exception using errcode = '42501', message = format('You recorded %s of the proposed decisions; another approver must approve them.', own_decisions);
+    end if;
+    elevated := true;
+  end if;
 
   -- Proposed decisions take effect now, with their reasons.
   update public.client_compliance_universe_items item
@@ -338,7 +364,7 @@ begin
          decision_reason = item.pending_reason,
          decided_by = item.pending_by,
          decided_at = item.pending_at,
-         pending_decision = null, pending_reason = null, pending_by = null, pending_at = null
+         pending_decision = null, pending_reason = null, pending_by = null, pending_at = null, pending_source = null
    where item.registration_unit_id = p_registration_unit_id
      and item.pending_decision is not null
      and item.selection_status <> 'superseded'
@@ -363,17 +389,18 @@ begin
     from public.client_compliance_universe_items item
    where item.registration_unit_id = p_registration_unit_id
      and item.selection_status <> 'superseded';
-  insert into public.expected_compliance_approvals (registration_unit_id, approved_by, reason, items_snapshot)
-  values (p_registration_unit_id, auth.uid(), trim(p_reason), snapshot);
+  insert into public.expected_compliance_approvals (registration_unit_id, approved_by, reason, items_snapshot, elevated_override)
+  values (p_registration_unit_id, auth.uid(), trim(p_reason), snapshot, elevated);
   perform public.append_audit_event(
     'expected_compliance_approved', 'registration_unit', p_registration_unit_id::text,
-    'Expected Compliance approved for the Registration Unit', null, snapshot, trim(p_reason), now(), gen_random_uuid()
+    case when elevated then 'Expected Compliance approved by Elevated Override (approver recorded some decisions)' else 'Expected Compliance approved for the Registration Unit' end,
+    null, jsonb_build_object('items', snapshot, 'elevatedOverride', elevated), trim(p_reason), now(), gen_random_uuid()
   );
   return approved_count;
 end;
 $$;
-revoke execute on function public.approve_expected_compliance(uuid, text) from public, anon;
-grant execute on function public.approve_expected_compliance(uuid, text) to authenticated;
+revoke execute on function public.approve_expected_compliance(uuid, text, boolean) from public, anon;
+grant execute on function public.approve_expected_compliance(uuid, text, boolean) to authenticated;
 
 -- The first month a BIR calendar row's own wording says it covers, mirroring
 -- compliancePeriodStartFromLabel in the app: "Month of June 2026",

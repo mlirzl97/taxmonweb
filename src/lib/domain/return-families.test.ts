@@ -111,6 +111,10 @@ describe("return families", () => {
     // Never published by projection: no operational date until release.
     expect(vat.every((candidate) => candidate.publicationStatus === "needs_review" && candidate.publishedOperationalDeadline === null)).toBe(true);
     expect(rows.filter((candidate) => candidate.formNumber === "2551M")).toHaveLength(8);
+    // A month whose date the Tax Team released shows once, as released.
+    const released = row("vat-apr", "BIR Form 2550M. Month of April 2026", "2026-05-20");
+    const withRelease = projectReturnFamilyCalendar(client(), ["2550M"], [{ ...released, formNumber: "2550M", periodStartDate: "2026-04-01" }], 2026).rows.filter((candidate) => candidate.periodStartDate === "2026-04-01");
+    expect(withRelease.map((candidate) => candidate.publicationStatus)).toEqual(["published"]);
     // Not elected: no optional rows.
     expect(projectReturnFamilyCalendar(client(), ["2550Q"], [], 2026).rows).toHaveLength(0);
   });

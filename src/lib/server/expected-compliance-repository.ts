@@ -74,8 +74,8 @@ export async function decideExpectedComplianceItem(registrationUnitId: string, i
   if (error) throw new Error(`Unable to record the Expected Compliance decision: ${error.message}`);
 }
 
-export async function approveExpectedCompliance(registrationUnitId: string, reason: string) {
-  const { data, error } = await (await client()).rpc("approve_expected_compliance", { p_registration_unit_id: registrationUnitId, p_reason: reason });
+export async function approveExpectedCompliance(registrationUnitId: string, reason: string, elevatedOverride = false) {
+  const { data, error } = await (await client()).rpc("approve_expected_compliance", { p_registration_unit_id: registrationUnitId, p_reason: reason, p_elevated_override: elevatedOverride });
   if (error) throw new Error(`Unable to approve Expected Compliance: ${error.message}`);
   return Number(data ?? 0);
 }

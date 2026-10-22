@@ -169,7 +169,9 @@ export function projectReturnFamilyCalendar(client: FixtureClient, candidateForm
 
   const elected = returnFamilies
     .filter((family) => family.monthly?.optional && candidates.has(family.monthly.form) && (quarterAligned || (family.id !== "vat" && family.id !== "percentage_tax")))
-    .flatMap((family) => optionalMonthlyRows(family, year));
+    .flatMap((family) => optionalMonthlyRows(family, year))
+    // A period whose date the Tax Team has already released needs no proposal.
+    .filter((row) => !kept.has(`${row.formNumber}|return|${row.periodStartDate}|calendar`));
   return { rows: [...kept.values(), ...elected, ...passThrough], notices };
 }
 

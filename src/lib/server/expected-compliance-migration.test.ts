@@ -51,6 +51,12 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toContain("item.registration_unit_id is distinct from p_registration_unit_id");
   });
 
+  it("refuses approval of one's own recorded decisions unless by marked Elevated Override", () => {
+    expect(migration).toContain("and item.pending_source = 'manual'\n     and item.pending_by = auth.uid();");
+    expect(migration).toContain("coalesce(p_elevated_override, false) and public.has_active_capability('PerformElevatedOverride')");
+    expect(migration).toContain("values (p_registration_unit_id, auth.uid(), trim(p_reason), snapshot, elevated);");
+  });
+
   it("takes only requirement versions in force today", () => {
     expect(migration).toContain("and version.effective_from <= current_date");
     expect(migration).toContain("and (requirement.effective_to is null or requirement.effective_to >= current_date)");

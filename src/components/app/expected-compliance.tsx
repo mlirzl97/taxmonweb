@@ -76,7 +76,7 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId }: { cl
     };
   }, [clientId, registrationUnitId, reloadKey]);
 
-  async function command(body: Record<string, unknown>, success: (payload: Record<string, unknown>) => string) {
+  async function command(body: Record<string, unknown>, success: (payload: Record<string, unknown>) => string): Promise<{ error?: string }> {
     setBusy(true);
     setMessage(null);
     try {
@@ -84,18 +84,25 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId }: { cl
       const payload = await response.json() as Record<string, unknown> & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "The command could not be applied.");
       setMessage(success(payload));
+      return {};
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The command could not be applied.");
+      const text = error instanceof Error ? error.message : "The command could not be applied.";
+      setMessage(text);
+      return { error: text };
     } finally {
       setReloadKey((key) => key + 1);
       setBusy(false);
     }
   }
 
-  function approve() {
+  async function approve() {
     const reason = window.prompt("Approval note (required):", "Expected Compliance reviewed against the validated Tax Profile")?.trim();
     if (!reason) return;
-    void command({ action: "approve", reason }, (payload) => `Approved. ${generationSummary(payload.generation as Generation)}.`);
+    const outcome = await command({ action: "approve", reason }, (payload) => `Approved. ${generationSummary(payload.generation as Generation)}.`);
+    // Approving one's own decisions needs another approver, or a marked, audited Elevated Override.
+    if (outcome.error?.includes("another approver") && window.confirm(`${outcome.error}\n\nApprove anyway as an Elevated Override? It is recorded and marked in the audit trail.`)) {
+      await command({ action: "approve", reason, elevatedOverride: true }, (payload) => `Approved by Elevated Override. ${generationSummary(payload.generation as Generation)}.`);
+    }
   }
 
   const proposed = items.filter((item) => item.status === "candidate" || item.pendingDecision).length;
@@ -131,7 +138,7 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId }: { cl
         <div className="dossier-section__actions">
           {permissions.canPropose && <button className="text-button" disabled={busy} onClick={() => void command({ action: "propose" }, (payload) => `${Number(payload.proposed ?? 0)} return${Number(payload.proposed ?? 0) === 1 ? "" : "s"} proposed from the Tax Profile.`)} type="button">Propose from profile</button>}
           {permissions.canGenerate && approvedInScope > 0 && <button className="text-button" disabled={busy} onClick={() => void command({ action: "generate" }, (payload) => `${generationSummary(payload.generation as Generation)}.`)} type="button">Generate work</button>}
-          {permissions.canApprove && proposed > 0 && <button className="button button--primary button--small" disabled={busy} onClick={approve} type="button">Approve &amp; generate work</button>}
+          {permissions.canApprove && proposed > 0 && <button className="button button--primary button--small" disabled={busy} onClick={() => void approve()} type="button">Approve &amp; generate work</button>}
         </div>
       </div>
       {message && <div className="saved-notice" role="status">{message}</div>}

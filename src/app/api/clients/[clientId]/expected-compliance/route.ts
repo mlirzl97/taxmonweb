@@ -50,14 +50,15 @@ async function generate(portfolioClient: PortfolioClient, unitId: string) {
   const { items } = await listExpectedCompliance(unitId);
   const approvedForms = items.filter((item) => item.status === "approved" && item.serviceScope === "in_scope").map((item) => item.formNumber);
   if (approvedForms.length === 0) return { created: 0, existing: 0, skipped: [] };
-  // The calendar follows the addressed unit's own profile: its returns and first period.
+  // Generation follows the approved Expected Compliance, not a newer profile whose
+  // changes are still awaiting approval; the unit's profile supplies its first period.
   const client = clientForUnit(portfolioClientToFixtureClient(portfolioClient), unitId);
   const firstPeriod = client.entities[0]?.profile.firstPeriodToFile ?? "";
   const currentYear = new Date().getUTCFullYear();
   const firstYear = /^\d{4}-\d{2}$/.test(firstPeriod) ? Math.min(Number(firstPeriod.slice(0, 4)), currentYear) : currentYear;
   const generationItems = [];
   for (let year = firstYear; year <= currentYear + 1; year += 1) {
-    const calendar = await loadClientServiceCalendar(client, year);
+    const calendar = await loadClientServiceCalendar(client, year, approvedForms);
     generationItems.push(...workGenerationItems(calendar.rows, approvedForms));
   }
   return recordGeneratedComplianceWork(unitId, generationItems);
@@ -110,7 +111,7 @@ export async function POST(request: Request, context: RouteContext) {
     if (action === "approve") {
       const reason = typeof command?.reason === "string" ? command.reason.trim() : "";
       if (!reason) return NextResponse.json({ error: "A reason is required to approve Expected Compliance." }, { status: 400 });
-      const approved = await approveExpectedCompliance(loaded.unitId, reason);
+      const approved = await approveExpectedCompliance(loaded.unitId, reason, command?.elevatedOverride === true);
       // Approval is what makes work generate: set up once, generate automatically.
       const generation = await generate(loaded.portfolioClient, loaded.unitId);
       return NextResponse.json({ approved, generation });
@@ -120,6 +121,10 @@ export async function POST(request: Request, context: RouteContext) {
     }
     return NextResponse.json({ error: "Unknown Expected Compliance command." }, { status: 400 });
   } catch (error) {
+    // The self-approval refusal is a control outcome the approver must see, not an internal error.
+    if (error instanceof Error && /another approver must approve/.test(error.message)) {
+      return NextResponse.json({ error: "You recorded some of these decisions; another approver must approve them." }, { status: 403 });
+    }
     return apiErrorResponse(error, "Unable to apply the Expected Compliance command.", { status: inferredApiErrorStatus(error), logContext: "apply expected compliance command" });
   }
 }
