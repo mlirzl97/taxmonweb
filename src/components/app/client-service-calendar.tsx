@@ -38,7 +38,8 @@ function serviceCalendarRow(item: ClientServiceCalendarRow): ServiceCalendarRow 
     clientApprovalDate: formatCalendarDate(item.clientApprovalDate),
     estimatedFilingDate: formatCalendarDate(item.estimatedFilingDate),
     estimatedPaymentDate: formatCalendarDate(item.estimatedPaymentDate),
-    dueDate: formatCalendarDate(item.publishedOperationalDeadline ?? "Not configured"),
+    // An optional return the client elected has a TMF due date, not a BIR deadline.
+    dueDate: `${formatCalendarDate(item.publishedOperationalDeadline ?? "Not configured")}${item.sourceCode === "hod-policy" ? " · TMF due date (no BIR deadline)" : ""}`,
   };
 }
 
@@ -118,7 +119,7 @@ export function ClientServiceCalendarView({ client, clientName, profile }: { cli
   const years = Array.from({ length: Math.max(2, currentYear - firstYear + 2) }, (_, index) => String(firstYear + index));
   const [year, setYear] = useState(years[0] ?? "2026");
   const [overrides, setOverrides] = useState(() => readDeadlinePublicationOverrides(typeof window === "undefined" ? undefined : window.localStorage));
-  const [liveCalendar, setLiveCalendar] = useState<{ rows: ClientServiceCalendarRow[]; heldRows: DeadlineControlRow[] } | null>(null);
+  const [liveCalendar, setLiveCalendar] = useState<{ rows: ClientServiceCalendarRow[]; heldRows: DeadlineControlRow[]; notices: string[] } | null>(null);
   const [liveCalendarState, setLiveCalendarState] = useState<"loading" | "ready" | "error">(prototypeMode ? "ready" : "loading");
   useEffect(() => {
     const handleStorage = () => setOverrides(readDeadlinePublicationOverrides(window.localStorage));
@@ -133,10 +134,10 @@ export function ClientServiceCalendarView({ client, clientName, profile }: { cli
       setLiveCalendarState("loading");
       void fetch(`/api/clients/${client.id}/service-calendar?year=${year}`, { headers: { accept: "application/json" }, cache: "no-store" })
         .then(async (response) => {
-          const payload = await response.json() as { data?: ClientServiceCalendarRow[]; heldRows?: DeadlineControlRow[]; error?: string };
+          const payload = await response.json() as { data?: ClientServiceCalendarRow[]; heldRows?: DeadlineControlRow[]; notices?: string[]; error?: string };
           if (!response.ok) throw new Error(payload.error ?? "Unable to load the service calendar.");
           if (cancelled) return;
-          setLiveCalendar({ rows: payload.data ?? [], heldRows: payload.heldRows ?? [] });
+          setLiveCalendar({ rows: payload.data ?? [], heldRows: payload.heldRows ?? [], notices: payload.notices ?? [] });
           setLiveCalendarState("ready");
         })
         .catch(() => {
@@ -154,9 +155,9 @@ export function ClientServiceCalendarView({ client, clientName, profile }: { cli
   const timingLabel = deadlinePolicy.mode === "follow_group" ? "Follows group schedule" : "Client-specific working-day offsets";
   const firstPeriodLabel = formatPeriodLabel(profile?.firstPeriodToFile || (profile?.goLiveDate ? profile.goLiveDate.slice(0, 7) : undefined));
   const localCalendar = getClientServiceCalendarRows(calendarClient, Number(year), overrides);
-  const { rows, heldRows } = prototypeMode
-    ? localCalendar
-    : liveCalendar ?? { rows: [], heldRows: [] };
+  const { rows, heldRows, notices } = prototypeMode
+    ? { ...localCalendar, notices: [] as string[] }
+    : liveCalendar ?? { rows: [], heldRows: [], notices: [] as string[] };
   const calendarSections = calendarMonths
     .map((month) => ({ month, rows: rows.filter((item) => activityMonthForPeriod(item.activityMonth) === month) }))
     .filter((section) => section.rows.length > 0);
@@ -313,6 +314,7 @@ export function ClientServiceCalendarView({ client, clientName, profile }: { cli
     </header>
     <div className="service-calendar-print-summary" aria-label="Service calendar summary"><div><span>Published returns</span><strong>{rows.length}</strong></div><div><span>Activity months</span><strong>{new Set(rows.map((item) => serviceCalendarRow(item).activityMonth)).size}</strong></div><div><span>Calendar year</span><strong>{year}</strong></div></div>
     <section aria-label="Service calendar year" className="registry-toolbar"><div className="registry-toolbar__filters"><label className="select-control"><span>Year</span><select aria-label="Year" onChange={(event) => setYear(event.target.value)} value={year}>{years.map((option) => <option key={option}>{option}</option>)}</select></label></div></section>
+    {notices.length > 0 && <div className="form-error" role="alert">{notices.join(" ")}</div>}
     {heldRows.length > 0 && <section aria-label="Selected returns awaiting due-date release" className="panel service-calendar-gate"><SectionHeading title="Selected returns awaiting due-date release" detail="These returns came from onboarding. They are connected to the client, but no operational date is shown until the governing deadline is approved and published." /><p>{heldRows.length} return period{heldRows.length === 1 ? " is" : "s are"} held outside the operational calendar. Once Tax Team publishes the deadline rule, the due date and service milestones will appear here automatically.</p><ul>{[...new Set(heldRows.map((row) => `${row.formNumber} · ${row.publicationStatus === "unresolved" ? "deadline unresolved" : "Tax Team review required"}`))].map((label) => <li key={label}>{label}</li>)}</ul><a className="button button--quiet button--small" href="/app/tax-team?view=deadline-control">Open Tax Team Deadline Control</a></section>}
     <section aria-label={`${rows.length} published service calendar rows`} className="panel panel--table registry-panel"><SectionHeading title={`${rows.length} published service calendar row${rows.length === 1 ? "" : "s"}`} detail={`Only released operational dates are shown · candidate basis: ${candidateBasis}.`} /><div className="service-calendar-table-wrap">{liveCalendarState === "loading" && <div className="inline-empty" role="status">Loading published service calendar…</div>}{liveCalendarState === "error" && <div className="inline-empty" role="alert"><strong>Service calendar unavailable</strong><br />The published deadline projection could not be loaded. Try refreshing this client workspace.</div>}{liveCalendarState === "ready" && <><table className="service-calendar-table"><thead><tr><th scope="col">Activity</th><th scope="col">Period filed</th><th scope="col">Return</th><th scope="col">Client provide</th><th scope="col">TMF target</th><th scope="col">Client approval</th><th scope="col">Est. filing</th><th scope="col">Est. payment</th><th scope="col">Published due</th></tr></thead><tbody>{calendarSections.flatMap((section) => [<tr className="service-calendar-month-row" key={`month-${section.month}`}><th colSpan={9} scope="colgroup">{section.month}</th></tr>, ...section.rows.map((item) => { const row = serviceCalendarRow(item); return <tr key={item.id}><td data-label="Activity month">{row.activityMonth}</td><td data-label="Period filed">{row.taxableMonth}</td><td data-label="Return"><strong>{row.taxReturn}</strong></td><td data-label="Client provide">{row.clientProvideDate}</td><td data-label="TMF target">{row.tmfCommitmentDate}</td><td data-label="Client approval">{row.clientApprovalDate}</td><td data-label="Est. filing">{row.estimatedFilingDate}</td><td data-label="Est. payment">{row.estimatedPaymentDate}</td><td data-label="Published due">{row.dueDate}</td></tr>; })])}</tbody></table>{rows.length === 0 && <div className="inline-empty">No Tax Team-published service calendar rows are available for this client in {year}.</div>}</>}</div></section>
     <div className="service-calendar-print-sections">{calendarSections.map((section) => <section className="service-calendar-print-section" key={`print-${section.month}`}><h3>{section.month}</h3><table className="service-calendar-print-table"><thead><tr><th>Activity</th><th>Taxable</th><th>Tax / return</th><th>Client provide</th><th>TMF commit</th><th>Client approval</th><th>Est. filing</th><th>Est. payment</th><th>Published due</th></tr></thead><tbody>{section.rows.map((item) => { const row = serviceCalendarRow(item); return <tr key={item.id}><td>{row.activityMonth}</td><td>{row.taxableMonth}</td><td><strong>{row.taxReturn}</strong></td><td>{row.clientProvideDate}</td><td>{row.tmfCommitmentDate}</td><td>{row.clientApprovalDate}</td><td>{row.estimatedFilingDate}</td><td>{row.estimatedPaymentDate}</td><td>{row.dueDate}</td></tr>; })}</tbody></table></section>)}{calendarSections.length === 0 && <div className="inline-empty">No published returns for {year}.</div>}</div>

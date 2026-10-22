@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { clientCandidateFormNumbers, compliancePeriodStartFromLabel, getClientServiceCalendarRows, type DeadlineControlRow } from "@/lib/domain/deadline-control";
 import { portfolioClientToFixtureClient } from "@/lib/domain/live-client-adapter";
+import { projectReturnFamilyCalendar } from "@/lib/domain/return-families";
 import { calculateInternalTarget } from "@/lib/domain/tax-foundation";
 import { apiErrorResponse } from "@/lib/server/api-error";
 import { requireApiCapability } from "@/lib/server/api-authorization";
@@ -73,9 +74,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ clie
     const client = portfolioClientToFixtureClient(portfolioClient);
     const candidateForms = clientCandidateFormNumbers(client);
     const requirementIds = await listRequirementIdsForFormNumbers(candidateForms);
-    const governedRows = (await listLiveClientCalendarEntries(requirementIds, year)).map(toDeadlineRow);
-    const projection = getClientServiceCalendarRows(client, year, {}, governedRows);
-    return NextResponse.json({ data: projection.rows, heldRows: projection.heldRows, source: "published-calendar", fixtureSafe: true });
+    const publishedRows = (await listLiveClientCalendarEntries(requirementIds, year)).map(toDeadlineRow);
+    // One row per return and period, by return family (HOD rules of 2026-10-22).
+    const families = projectReturnFamilyCalendar(client, candidateForms, publishedRows, year);
+    const projection = getClientServiceCalendarRows(client, year, {}, families.rows);
+    return NextResponse.json({ data: projection.rows, heldRows: projection.heldRows, notices: families.notices, source: "published-calendar", fixtureSafe: true });
   } catch (error) {
     return apiErrorResponse(error, "Unable to load the client service calendar.", { status: 503, logContext: "load client service calendar" });
   }
