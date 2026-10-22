@@ -276,6 +276,9 @@ begin
   if not (public.has_active_capability('ProposeComplianceUniverse') or public.has_active_capability('ApproveComplianceUniverse')) then
     raise exception using errcode = '42501', message = 'Deciding Expected Compliance is not authorized for the caller.';
   end if;
+  -- Same lock as approval, so a decision cannot land between approval's
+  -- self-approval check and its update.
+  perform 1 from public.registration_units where id = p_registration_unit_id for update;
   select * into item from public.client_compliance_universe_items where id = p_item_id for update;
   -- The item must belong to the Registration Unit the caller is looking at.
   if item.id is null or item.registration_unit_id is distinct from p_registration_unit_id

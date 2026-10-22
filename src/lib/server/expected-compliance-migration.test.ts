@@ -55,6 +55,8 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toContain("and item.pending_source = 'manual'\n     and item.pending_by = auth.uid();");
     expect(migration).toContain("coalesce(p_elevated_override, false) and public.has_active_capability('PerformElevatedOverride')");
     expect(migration).toContain("values (p_registration_unit_id, auth.uid(), trim(p_reason), snapshot, elevated);");
+    // Decisions and approval serialize on the Registration Unit.
+    expect(migration.match(/perform 1 from public\.registration_units where id = p_registration_unit_id for update;/g)?.length).toBeGreaterThanOrEqual(3);
   });
 
   it("takes only requirement versions in force today", () => {
