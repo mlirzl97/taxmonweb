@@ -74,6 +74,15 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toMatch(/set pending_decision = null, pending_reason = null, pending_by = null, pending_at = null, pending_source = null\s+where item\.registration_unit_id = p_registration_unit_id\s+and item\.pending_source = 'tax_profile';/);
   });
 
+  it("refuses a proposal made from a profile that is no longer active", () => {
+    expect(migration).toContain("item.proposed_from_profile_id is distinct from (public.active_tax_profile_for_unit(p_registration_unit_id)).id");
+  });
+
+  it("proposes moving an approved return to a newer requirement version, applied only on approval", () => {
+    expect(migration).toContain("pending_source = 'requirement_version',");
+    expect(migration).toContain("requirement_version_id = coalesce(item.pending_requirement_version_id, item.requirement_version_id),");
+  });
+
   it("turns an unresolved return into a candidate once a governed requirement is active", () => {
     expect(migration).toMatch(/and item\.selection_status = 'unresolved'\s+and item\.requirement_id is null/);
   });

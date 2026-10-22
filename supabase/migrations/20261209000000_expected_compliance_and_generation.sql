@@ -69,9 +69,17 @@ alter table public.client_compliance_universe_items
   add column if not exists pending_reason text,
   add column if not exists pending_by uuid references public.app_users(id),
   add column if not exists pending_at timestamptz,
-  -- 'tax_profile' when proposing reconciled the validated profile; 'manual'
-  -- when a person recorded the decision (subject to the self-approval check).
-  add column if not exists pending_source text check (pending_source in ('tax_profile', 'manual'));
+  -- 'tax_profile' when proposing reconciled the validated profile;
+  -- 'requirement_version' when a newer governed requirement version is in
+  -- force; 'manual' when a person recorded the decision (subject to the
+  -- self-approval check).
+  add column if not exists pending_source text check (pending_source in ('tax_profile', 'requirement_version', 'manual')),
+  -- The requirement and version a pending change moves the return to.
+  add column if not exists pending_requirement_id uuid references public.bir_requirements(id),
+  add column if not exists pending_requirement_version_id uuid references public.bir_requirement_versions(id),
+  -- The Tax Profile version the item was last proposed from; approval
+  -- refuses a proposal made from a profile that is no longer active.
+  add column if not exists proposed_from_profile_id uuid references public.tax_profile_versions(id);
 alter table public.client_compliance_universe_items alter column requirement_id drop not null;
 alter table public.client_compliance_universe_items
   drop constraint if exists client_compliance_universe_it_registration_unit_id_requirem_key;
@@ -196,9 +204,10 @@ begin
   -- so a return removed and re-added (or the reverse) before approval never
   -- carries a stale proposal. A person's own pending decisions stay.
   update public.client_compliance_universe_items item
-     set pending_decision = null, pending_reason = null, pending_by = null, pending_at = null, pending_source = null
+     set pending_decision = null, pending_reason = null, pending_by = null, pending_at = null, pending_source = null,
+         pending_requirement_id = null, pending_requirement_version_id = null
    where item.registration_unit_id = p_registration_unit_id
-     and item.pending_source = 'tax_profile';
+     and item.pending_source in ('tax_profile', 'requirement_version');
 
   for return_code in
     select distinct upper(trim(value)) from jsonb_array_elements_text(coalesce(profile.profile_data -> 'registeredReturnCodes', '[]'::jsonb)) as value
@@ -224,6 +233,33 @@ begin
       if found then
         proposed := proposed + 1;
         continue;
+      end if;
+      -- A candidate not yet approved simply follows the governed requirement.
+      update public.client_compliance_universe_items item
+         set requirement_id = governed.requirement_id,
+             requirement_version_id = governed.requirement_version_id
+       where item.registration_unit_id = p_registration_unit_id
+         and item.form_number = form_code
+         and item.selection_status = 'candidate'
+         and (item.requirement_id, item.requirement_version_id) is distinct from (governed.requirement_id, governed.requirement_version_id);
+      -- An approved return whose governed requirement or version has changed
+      -- is proposed for the move; it takes effect only on approval, the
+      -- authorized impact decision, and the old version governs until then.
+      update public.client_compliance_universe_items item
+         set pending_decision = coalesce(item.service_scope, 'in_scope'),
+             pending_reason = 'A newer BIR requirement version is in force; approval moves this return to it.',
+             pending_by = auth.uid(),
+             pending_at = now(),
+             pending_source = 'requirement_version',
+             pending_requirement_id = governed.requirement_id,
+             pending_requirement_version_id = governed.requirement_version_id
+       where item.registration_unit_id = p_registration_unit_id
+         and item.form_number = form_code
+         and item.selection_status = 'approved'
+         and item.pending_decision is null
+         and (item.requirement_id, item.requirement_version_id) is distinct from (governed.requirement_id, governed.requirement_version_id);
+      if found then
+        proposed := proposed + 1;
       end if;
     end if;
     if exists (
@@ -281,6 +317,10 @@ begin
      );
   get diagnostics restored = row_count;
   proposed := proposed + removed + restored;
+  update public.client_compliance_universe_items item
+     set proposed_from_profile_id = profile.id
+   where item.registration_unit_id = p_registration_unit_id
+     and item.selection_status <> 'superseded';
 
   perform public.append_audit_event(
     'expected_compliance_proposed', 'registration_unit', p_registration_unit_id::text,
@@ -393,6 +433,17 @@ begin
     elevated := true;
   end if;
 
+  -- A proposal made from a Tax Profile that is no longer the active one is
+  -- stale: it must be proposed again from the profile in force.
+  if exists (
+    select 1 from public.client_compliance_universe_items item
+     where item.registration_unit_id = p_registration_unit_id
+       and item.selection_status <> 'superseded'
+       and item.proposed_from_profile_id is distinct from (public.active_tax_profile_for_unit(p_registration_unit_id)).id
+  ) then
+    raise exception using errcode = '22023', message = 'The Tax Profile changed since Expected Compliance was proposed; propose again before approving.';
+  end if;
+
   -- Proposed decisions take effect now, with their reasons.
   update public.client_compliance_universe_items item
      set selection_status = case item.pending_decision when 'not_applicable' then 'excluded' when 'unresolved' then 'unresolved' else 'approved' end,
@@ -400,7 +451,10 @@ begin
          decision_reason = item.pending_reason,
          decided_by = item.pending_by,
          decided_at = item.pending_at,
-         pending_decision = null, pending_reason = null, pending_by = null, pending_at = null, pending_source = null
+         requirement_id = coalesce(item.pending_requirement_id, item.requirement_id),
+         requirement_version_id = coalesce(item.pending_requirement_version_id, item.requirement_version_id),
+         pending_decision = null, pending_reason = null, pending_by = null, pending_at = null, pending_source = null,
+         pending_requirement_id = null, pending_requirement_version_id = null
    where item.registration_unit_id = p_registration_unit_id
      and item.pending_decision is not null
      and item.selection_status <> 'superseded'

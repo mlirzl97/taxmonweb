@@ -79,10 +79,10 @@ function labelEndMonth(label: string, kind: "Quarter" | "Year"): number | null {
 }
 
 /** Strip filing-channel and eFPS-group wording so variants of one return and period read the same. */
-function periodText(label: string): string {
+function periodText(label: string, fallback: string): string {
   const text = label.replace(/\s+/g, " ");
   const period = /(Month of [A-Za-z]+ \d{4}|(?:Fiscal )?Quarter ending [A-Za-z]+ \d{1,2}, \d{4}|(?:Fiscal |Taxable )?Year ending [A-Za-z]+ \d{1,2}, \d{4}|(?:Calendar|Taxable) Year \d{4}|Fiscal Year beginning [A-Za-z]+ \d{1,2}, \d{4})/i.exec(text);
-  return period ? period[1] : text;
+  return period ? period[1] : fallback;
 }
 
 export type ReturnFamilyProjection = { rows: DeadlineControlRow[]; notices: string[] };
@@ -118,7 +118,11 @@ export function projectReturnFamilyCalendar(client: FixtureClient, candidateForm
   const passThrough: DeadlineControlRow[] = [];
   for (const row of rows) {
     const label = `${row.activityPeriod} ${row.taxablePeriod}`;
+    // A row entered in Deadline Control carries its form in its own field and a
+    // plain period label ("April 2026", "Q2 2026", "FY 2026").
+    const ownForm = row.formNumber?.trim().toUpperCase() ?? "";
     const named = formsNamedInLabel(label);
+    if (named.length === 0 && familyForForm(ownForm)) named.push(ownForm);
     if (named.length === 0) {
       passThrough.push(row);
       continue;
@@ -143,7 +147,7 @@ export function projectReturnFamilyCalendar(client: FixtureClient, candidateForm
         if (monthIndex % 3 === 2) continue;
       }
       const due = row.publishedOperationalDeadline ?? row.earliestApplicableDeadline;
-      const period = periodText(label);
+      const period = periodText(label, row.activityPeriod || row.taxablePeriod);
       // Submitting proof of filing with attachments (e.g. AFS via eAFS) is its
       // own deadline, distinct from filing the return for the same period.
       const proofOfFiling = /^\s*proof of e-?filed/i.test(row.activityPeriod);

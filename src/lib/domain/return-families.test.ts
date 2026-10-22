@@ -136,6 +136,21 @@ describe("return families", () => {
     ]);
   });
 
+  it("applies the family rules to rows entered in Deadline Control, which carry the form in its own field", () => {
+    const entered = (id: string, form: string, period: string, start: string, due: string) => ({ ...row(id, period, due), formNumber: form, periodStartDate: start });
+    const rows = [
+      entered("e-apr", "0619-E", "April 2026", "2026-04-01", "2026-05-10"),
+      entered("e-jun", "0619-E", "June 2026", "2026-06-01", "2026-07-10"),
+      entered("vat-apr", "2550M", "April 2026", "2026-04-01", "2026-05-20"),
+    ];
+    const projected = projectReturnFamilyCalendar(client(), ["0619-E", "2550M"], rows, 2026).rows;
+    // A payment form never in month 3 of a quarter.
+    expect(projected.filter((candidate) => candidate.formNumber === "0619-E").map((candidate) => candidate.periodStartDate)).toEqual(["2026-04-01"]);
+    expect(projected.find((candidate) => candidate.id.startsWith("e-apr"))?.activityPeriod).toBe("0619-E · April 2026");
+    // The released 2550M month shows once, as released.
+    expect(projected.filter((candidate) => candidate.formNumber === "2550M" && candidate.periodStartDate === "2026-04-01").map((candidate) => candidate.publicationStatus)).toEqual(["published"]);
+  });
+
   it("passes through rows that name no family form", () => {
     const other = row("o", "BIR Form 2000 (Documentary Stamp Tax Declaration/Return). Month of April 2026", "2026-05-05");
     expect(projectReturnFamilyCalendar(client(), ["1601-C"], [other], 2026).rows).toEqual([other]);

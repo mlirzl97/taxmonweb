@@ -125,6 +125,9 @@ export async function POST(request: Request, context: RouteContext) {
     if (error instanceof Error && /another approver must approve/.test(error.message)) {
       return NextResponse.json({ error: "You recorded some of these decisions; another approver must approve them." }, { status: 403 });
     }
+    if (error instanceof Error && /The Tax Profile changed since Expected Compliance was proposed/.test(error.message)) {
+      return NextResponse.json({ error: "The Tax Profile changed since Expected Compliance was proposed. Use Propose from profile, review, then approve." }, { status: 409 });
+    }
     if (error instanceof Error && /Nothing is waiting for approval/.test(error.message)) {
       return NextResponse.json({ error: "Already approved; nothing is waiting for approval. Use Generate work to generate again." }, { status: 409 });
     }
