@@ -8,7 +8,7 @@ export type LiveGeneratedWork = {
   period_label: string;
   period_locked?: boolean;
   data_readiness: "not_ready" | "ready";
-  source_context?: { dataReadiness?: { state?: "ready" | "not_ready"; source?: "CLIENT_RECORDS" | "TMF_BOOKS"; reason?: string; recordedAt?: string; recordedBy?: string } } | null;
+  source_context?: { dataReadiness?: { state?: "ready" | "not_ready"; source?: "CLIENT_RECORDS" | "TMF_BOOKS"; reason?: string; recordedAt?: string; recordedBy?: string }; formNumber?: string; dueDate?: string; dueDateBasis?: string } | null;
   lifecycle_stage: "preparation" | "checking" | "review" | "client_approval" | "filing" | "payment" | "other_submissions" | "complete";
   engagement_status: "open" | "complete" | "cancelled" | "superseded";
   rag_status: "green" | "amber" | "red" | "unresolved";

@@ -57,6 +57,14 @@ describe("live generated work adapter", () => {
     ]);
   });
 
+  it("titles generated work by its own return and family, and gives an elected optional return its TMF due date", () => {
+    const generated = adaptLiveGeneratedWork({ ...work, adjusted_statutory_deadline: null, base_statutory_deadline: null, tmf_package_target: "2026-05-19", source_context: { formNumber: "2550M", dueDate: "2026-05-20", dueDateBasis: "TMF due date (no BIR deadline)" } }, new Map());
+    expect(generated.title).toBe("2550M · VAT");
+    expect(generated.dueDate).toBe("2026-05-20");
+    const payment = adaptLiveGeneratedWork({ ...work, source_context: { formNumber: "0619-E" } }, new Map());
+    expect(payment.title).toBe("0619-E · Expanded withholding");
+  });
+
   it("keeps unresolved readiness visible as a blocker", () => {
     const projected = adaptLiveGeneratedWork({ ...work, data_readiness: "not_ready" });
     expect(projected.blocker?.category).toBe("CLIENT DATA");
