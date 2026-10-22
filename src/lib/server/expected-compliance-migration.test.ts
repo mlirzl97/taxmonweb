@@ -64,6 +64,12 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toContain("coalesce(entry.tmf_package_target, due_date - 1) > coalesce(entry.adjusted_statutory_deadline, entry.base_statutory_deadline)");
   });
 
+  it("generates only from the approved requirement and records no second approval on a retry", () => {
+    expect(migration).toContain("if governed_requirement_id is distinct from approved_item.requirement_id then");
+    expect(migration).toContain("message = 'Nothing is waiting for approval.'");
+    expect(migration).toContain("(upper(requirement.requirement_code) = 'BIR-' || upper(trim(p_form_number))) desc");
+  });
+
   it("turns an unresolved return into a candidate once a governed requirement is active", () => {
     expect(migration).toMatch(/and item\.selection_status = 'unresolved'\s+and item\.requirement_id is null/);
   });

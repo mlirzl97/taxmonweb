@@ -136,7 +136,12 @@ as $$
     and (requirement.effective_to is null or requirement.effective_to >= current_date)
     and version.effective_from <= current_date
     and (version.effective_to is null or version.effective_to >= current_date)
-  order by (relation.relationship_type = 'primary_form') desc, version.effective_from desc nulls last
+  -- When a form is primary on several requirements, the one named for the
+  -- form itself (BIR-1601-C for 1601-C) wins; then a stable order.
+  order by (relation.relationship_type = 'primary_form') desc,
+           (upper(requirement.requirement_code) = 'BIR-' || upper(trim(p_form_number))) desc,
+           version.effective_from desc nulls last,
+           requirement.requirement_code
   limit 1;
 $$;
 revoke execute on function public.requirement_for_form(text) from public, anon, authenticated;
@@ -405,6 +410,11 @@ begin
      and item.requirement_id is not null;
   get diagnostics candidate_count = row_count;
   approved_count := approved_count + candidate_count;
+  -- A retry or a duplicate submission finds nothing left to approve and
+  -- records no second approval.
+  if approved_count = 0 and exists (select 1 from public.expected_compliance_approvals where registration_unit_id = p_registration_unit_id) then
+    raise exception using errcode = '22023', message = 'Nothing is waiting for approval.';
+  end if;
   select coalesce(jsonb_agg(jsonb_build_object(
            'itemId', item.id, 'form', item.form_number, 'status', item.selection_status,
            'scope', item.service_scope, 'reason', item.decision_reason) order by item.form_number), '[]'::jsonb)
@@ -618,7 +628,11 @@ begin
     -- Work follows the requirement version Expected Compliance approved. A
     -- newer version of that requirement is a universe change: it needs an
     -- impact decision and a new approval, never a silent rebase.
-    if governed_requirement_id = approved_item.requirement_id and approved_item.requirement_version_id is not null then
+    if governed_requirement_id is distinct from approved_item.requirement_id then
+      skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The calendar row belongs to a different BIR requirement than the one approved for this return.'));
+      continue;
+    end if;
+    if approved_item.requirement_version_id is not null then
       if governed_version_id is not null and governed_version_id <> approved_item.requirement_version_id then
         skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The calendar row is on a newer requirement version than the one approved; it needs an authorized impact decision before work moves to it.'));
         continue;

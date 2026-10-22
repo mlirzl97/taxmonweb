@@ -125,6 +125,9 @@ export async function POST(request: Request, context: RouteContext) {
     if (error instanceof Error && /another approver must approve/.test(error.message)) {
       return NextResponse.json({ error: "You recorded some of these decisions; another approver must approve them." }, { status: 403 });
     }
+    if (error instanceof Error && /Nothing is waiting for approval/.test(error.message)) {
+      return NextResponse.json({ error: "Already approved; nothing is waiting for approval. Use Generate work to generate again." }, { status: 409 });
+    }
     return apiErrorResponse(error, "Unable to apply the Expected Compliance command.", { status: inferredApiErrorStatus(error), logContext: "apply expected compliance command" });
   }
 }
