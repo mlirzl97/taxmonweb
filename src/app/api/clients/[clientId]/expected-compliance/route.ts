@@ -47,13 +47,14 @@ function clientForUnit(client: FixtureClient, unitId: string): FixtureClient {
 
 /** Generates work for every approved In TMF Scope return, from the first period to file through next year. */
 async function generate(portfolioClient: PortfolioClient, unitId: string) {
-  const { items } = await listExpectedCompliance(unitId);
+  const { items, latestApproval } = await listExpectedCompliance(unitId);
   const approvedForms = items.filter((item) => item.status === "approved" && item.serviceScope === "in_scope").map((item) => item.formNumber);
   if (approvedForms.length === 0) return { created: 0, existing: 0, skipped: [] };
-  // Generation follows the approved Expected Compliance, not a newer profile whose
-  // changes are still awaiting approval; the unit's profile supplies its first period.
-  const client = clientForUnit(portfolioClientToFixtureClient(portfolioClient), unitId);
-  const firstPeriod = client.entities[0]?.profile.firstPeriodToFile ?? "";
+  // Generation follows the approved Expected Compliance and the profile it was
+  // approved from, not a newer profile whose changes await approval.
+  const unitClient = clientForUnit(portfolioClientToFixtureClient(portfolioClient), unitId);
+  const firstPeriod = latestApproval?.firstPeriodToFile ?? "";
+  const client = { ...unitClient, entities: unitClient.entities.map((entity) => ({ ...entity, profile: { ...entity.profile, firstPeriodToFile: firstPeriod || undefined } })) };
   const currentYear = new Date().getUTCFullYear();
   const firstYear = /^\d{4}-\d{2}$/.test(firstPeriod) ? Math.min(Number(firstPeriod.slice(0, 4)), currentYear) : currentYear;
   const generationItems = [];

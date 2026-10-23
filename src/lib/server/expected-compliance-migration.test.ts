@@ -89,6 +89,9 @@ describe("Expected Compliance and generation migration", () => {
 
   it("surfaces work already generated under another requirement version instead of counting it as existing", () => {
     expect(migration).toContain("'Work for this period already exists under an earlier requirement version; it needs a keep, rebase or supersede decision.'");
+    expect(migration).toContain("'Work for this period already exists with earlier published dates; it needs a keep, rebase or supersede decision.'");
+    // Generation follows the profile the approved universe came from.
+    expect(migration).toContain("join public.tax_profile_versions profile_version on profile_version.id = approval.tax_profile_version_id");
   });
 
   it("turns an unresolved return into a candidate once a governed requirement is active", () => {

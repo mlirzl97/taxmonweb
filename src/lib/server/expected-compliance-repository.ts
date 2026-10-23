@@ -11,7 +11,13 @@ export type ExpectedComplianceItem = {
   pendingReason: string | null;
 };
 
-export type ExpectedComplianceApproval = { approvedAt: string; approvedBy: string; reason: string };
+export type ExpectedComplianceApproval = {
+  approvedAt: string;
+  approvedBy: string;
+  reason: string;
+  /** First period to file on the Tax Profile version the approval came from (YYYY-MM). */
+  firstPeriodToFile: string | null;
+};
 
 export type GenerationItem = {
   form: string;
@@ -39,15 +45,18 @@ export async function listExpectedCompliance(registrationUnitId: string) {
       .neq("selection_status", "superseded")
       .order("form_number"),
     supabase.from("expected_compliance_approvals")
-      .select("approved_at, reason, app_users!expected_compliance_approvals_approved_by_fkey(display_name)")
+      .select("approved_at, reason, app_users!expected_compliance_approvals_approved_by_fkey(display_name), tax_profile_versions!expected_compliance_approvals_tax_profile_version_id_fkey(profile_data)")
       .eq("registration_unit_id", registrationUnitId)
       .order("approved_at", { ascending: false })
       .limit(1),
   ]);
   if (itemsError) throw new Error(`Unable to load Expected Compliance: ${itemsError.message}`);
   if (approvalsError) throw new Error(`Unable to load Expected Compliance approvals: ${approvalsError.message}`);
-  const latest = approvals?.[0] as { approved_at: string; reason: string; app_users?: { display_name?: string } | { display_name?: string }[] | null } | undefined;
+  type ProfileData = { profile_data?: { firstPeriodToFile?: unknown } | null };
+  const latest = approvals?.[0] as { approved_at: string; reason: string; app_users?: { display_name?: string } | { display_name?: string }[] | null; tax_profile_versions?: ProfileData | ProfileData[] | null } | undefined;
   const approver = Array.isArray(latest?.app_users) ? latest?.app_users[0] : latest?.app_users;
+  const approvedProfile = Array.isArray(latest?.tax_profile_versions) ? latest?.tax_profile_versions[0] : latest?.tax_profile_versions;
+  const approvedFirstPeriod = approvedProfile?.profile_data?.firstPeriodToFile;
   return {
     items: (items ?? []).map((item) => ({
       id: String(item.id),
@@ -59,7 +68,12 @@ export async function listExpectedCompliance(registrationUnitId: string) {
       pendingDecision: (item.pending_decision ?? null) as ExpectedComplianceItem["pendingDecision"],
       pendingReason: (item.pending_reason ?? null) as string | null,
     })) satisfies ExpectedComplianceItem[],
-    latestApproval: latest ? { approvedAt: latest.approved_at, reason: latest.reason, approvedBy: approver?.display_name ?? "Recorded approver" } satisfies ExpectedComplianceApproval : null,
+    latestApproval: latest ? {
+      approvedAt: latest.approved_at,
+      reason: latest.reason,
+      approvedBy: approver?.display_name ?? "Recorded approver",
+      firstPeriodToFile: typeof approvedFirstPeriod === "string" ? approvedFirstPeriod : null,
+    } satisfies ExpectedComplianceApproval : null,
   };
 }
 

@@ -555,6 +555,7 @@ as $$
 declare
   actor_id uuid := auth.uid();
   profile public.tax_profile_versions;
+  approved_profile public.tax_profile_versions;
   first_period date;
   item jsonb;
   form_code text;
@@ -595,8 +596,19 @@ begin
   if profile.id is null then
     raise exception using errcode = '22023', message = 'Compliance Work needs a validated, active Tax Profile.';
   end if;
-  if coalesce(profile.profile_data ->> 'firstPeriodToFile', '') ~ '^\d{4}-(0[1-9]|1[0-2])$' then
-    first_period := (profile.profile_data ->> 'firstPeriodToFile' || '-01')::date;
+  -- Generation follows the profile the approved universe was proposed from,
+  -- not a newer one whose changes have not been approved yet.
+  select profile_version.* into approved_profile
+    from public.expected_compliance_approvals approval
+    join public.tax_profile_versions profile_version on profile_version.id = approval.tax_profile_version_id
+   where approval.registration_unit_id = p_registration_unit_id
+   order by approval.approved_at desc, approval.id desc
+   limit 1;
+  if approved_profile.id is null then
+    raise exception using errcode = '22023', message = 'Compliance Work needs an approved Expected Compliance.';
+  end if;
+  if coalesce(approved_profile.profile_data ->> 'firstPeriodToFile', '') ~ '^\d{4}-(0[1-9]|1[0-2])$' then
+    first_period := (approved_profile.profile_data ->> 'firstPeriodToFile' || '-01')::date;
   end if;
 
   -- Owners in force today are the accountability snapshot.
@@ -733,6 +745,18 @@ begin
         skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'Work for this period already exists under an earlier requirement version; it needs a keep, rebase or supersede decision.'));
         continue;
       end if;
+      -- Likewise when the released dates changed since the work was created.
+      if exists (
+        select 1 from public.generated_compliance_work work
+         where work.generation_key = key
+           and (work.base_statutory_deadline is distinct from entry.base_statutory_deadline
+                or work.adjusted_statutory_deadline is distinct from entry.adjusted_statutory_deadline
+                or work.tmf_package_target is distinct from coalesce(entry.tmf_package_target, due_date - 1)
+                or (work.source_context ->> 'dueDate') is distinct from due_date::text)
+      ) then
+        skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'Work for this period already exists with earlier published dates; it needs a keep, rebase or supersede decision.'));
+        continue;
+      end if;
       existing := existing + 1;
       continue;
     end if;
@@ -770,7 +794,7 @@ begin
         'dueDateBasis', 'Published operational calendar',
         'calendarEntryId', entry_id,
         'expectedComplianceItemId', approved_item.id,
-        'taxProfileVersionId', profile.id
+        'taxProfileVersionId', approved_profile.id
       ),
       actor_id, actor_id
     )
