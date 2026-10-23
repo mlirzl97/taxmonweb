@@ -83,7 +83,6 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toContain("pending_source = 'requirement_version',");
     expect(migration).toContain("requirement_version_id = coalesce(item.pending_requirement_version_id, item.requirement_version_id),");
     // A person's decision never carries a move, and the snapshot records the version approved.
-    expect(migration).toMatch(/pending_source = 'manual',[\s\S]{0,200}pending_requirement_version_id = null/);
     expect(migration).toContain("'requirementVersionId', item.requirement_version_id");
     expect(migration).toContain("snapshot, elevated, (public.active_tax_profile_for_unit(p_registration_unit_id)).id);");
   });
@@ -98,6 +97,11 @@ describe("Expected Compliance and generation migration", () => {
   it("withdraws a person's decision recorded against an earlier profile, and restores returns onto the current version", () => {
     expect(migration).toMatch(/and item\.pending_source = 'manual'\s+and item\.proposed_from_profile_id is distinct from profile\.id;/);
     expect(migration).toContain("pending_requirement_version_id = (select governed_now.requirement_version_id from public.requirement_for_form(item.form_number) governed_now)");
+  });
+
+  it("lets a requirement-less return be excluded, and lands a scope decision on the version in force", () => {
+    expect(migration).toContain("and (requirement_id is not null or selection_status in ('unresolved', 'excluded', 'superseded'))");
+    expect(migration).toContain("is distinct from (governed_now.requirement_id, governed_now.requirement_version_id)");
   });
 
   it("turns an unresolved return into a candidate once a governed requirement is active", () => {

@@ -91,13 +91,13 @@ alter table public.client_compliance_universe_items
 alter table public.client_compliance_universe_items
   drop constraint if exists client_compliance_universe_items_decision_check;
 -- Approved items carry a scope; Not Applicable and Out of Scope carry a reason;
--- an item without a governed requirement can only be unresolved.
+-- an item without a governed requirement can only be unresolved or excluded.
 alter table public.client_compliance_universe_items
   add constraint client_compliance_universe_items_decision_check check (
     (selection_status <> 'approved' or service_scope is not null)
     and (selection_status <> 'excluded' or nullif(trim(coalesce(decision_reason, '')), '') is not null)
     and (service_scope is distinct from 'out_of_scope' or nullif(trim(coalesce(decision_reason, '')), '') is not null)
-    and (requirement_id is not null or selection_status in ('unresolved', 'superseded'))
+    and (requirement_id is not null or selection_status in ('unresolved', 'excluded', 'superseded'))
   );
 create unique index if not exists client_compliance_universe_items_unit_form_from_key
   on public.client_compliance_universe_items (registration_unit_id, form_number, effective_from)
@@ -360,6 +360,7 @@ declare
   item public.client_compliance_universe_items;
   decision text := lower(trim(coalesce(p_decision, '')));
   reason text := nullif(trim(coalesce(p_reason, '')), '');
+  governed_now record;
 begin
   if auth.uid() is null or not public.is_active_app_user() then
     raise exception using errcode = '42501', message = 'Authentication is required.';
@@ -382,7 +383,8 @@ begin
   if decision in ('out_of_scope', 'not_applicable') and reason is null then
     raise exception using errcode = '22023', message = 'A reason is required for Out of TMF Scope or Not Applicable.';
   end if;
-  if decision in ('in_scope', 'out_of_scope') and item.requirement_id is null then
+  select * into governed_now from public.requirement_for_form(item.form_number);
+  if decision in ('in_scope', 'out_of_scope') and governed_now.requirement_id is null then
     raise exception using errcode = '22023', message = 'This return has no governed BIR requirement yet; it stays unresolved.';
   end if;
   if item.selection_status = 'superseded' then
@@ -396,10 +398,14 @@ begin
          pending_by = auth.uid(),
          pending_at = now(),
          pending_source = 'manual',
-         -- A person's decision is about scope only; it never carries a
-         -- requirement move proposed earlier.
-         pending_requirement_id = null,
-         pending_requirement_version_id = null
+         -- A scope decision lands on the requirement and version in force
+         -- now, never on one carried over from an earlier proposal.
+         pending_requirement_id = case when decision in ('in_scope', 'out_of_scope')
+           and (item.requirement_id, item.requirement_version_id) is distinct from (governed_now.requirement_id, governed_now.requirement_version_id)
+           then governed_now.requirement_id end,
+         pending_requirement_version_id = case when decision in ('in_scope', 'out_of_scope')
+           and (item.requirement_id, item.requirement_version_id) is distinct from (governed_now.requirement_id, governed_now.requirement_version_id)
+           then governed_now.requirement_version_id end
    where id = item.id;
   perform public.append_audit_event(
     'expected_compliance_item_decided', 'client_compliance_universe_item', item.id::text,
@@ -492,7 +498,7 @@ begin
    where item.registration_unit_id = p_registration_unit_id
      and item.pending_decision is not null
      and item.selection_status <> 'superseded'
-     and (item.requirement_id is not null or item.pending_decision in ('not_applicable', 'unresolved'));
+     and (coalesce(item.pending_requirement_id, item.requirement_id) is not null or item.pending_decision in ('not_applicable', 'unresolved'));
   get diagnostics approved_count = row_count;
   -- A candidate without a proposed decision is the ordinary case: In TMF Scope.
   update public.client_compliance_universe_items item

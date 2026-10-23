@@ -48,7 +48,9 @@ function clientForUnit(client: FixtureClient, unitId: string): FixtureClient {
 /** Generates work for every approved In TMF Scope return, from the first period to file through next year. */
 async function generate(portfolioClient: PortfolioClient, unitId: string) {
   const { items, latestApproval } = await listExpectedCompliance(unitId);
-  const approvedForms = items.filter((item) => item.status === "approved" && item.serviceScope === "in_scope").map((item) => item.formNumber);
+  const approvedItems = items.filter((item) => item.status === "approved" && item.serviceScope === "in_scope");
+  const approvedForms = approvedItems.map((item) => item.formNumber);
+  const approvedRequirementIds = [...new Set(approvedItems.flatMap((item) => item.requirementId ? [item.requirementId] : []))];
   if (approvedForms.length === 0) return { created: 0, existing: 0, skipped: [] };
   // Generation follows the approved Expected Compliance and the profile it was
   // approved from, not a newer profile whose changes await approval.
@@ -63,7 +65,7 @@ async function generate(portfolioClient: PortfolioClient, unitId: string) {
   const firstYear = /^\d{4}-\d{2}$/.test(firstPeriod) ? Math.min(Number(firstPeriod.slice(0, 4)), currentYear) : currentYear;
   const generationItems = [];
   for (let year = firstYear; year <= currentYear + 1; year += 1) {
-    const calendar = await loadClientServiceCalendar(client, year, approvedForms);
+    const calendar = await loadClientServiceCalendar(client, year, approvedForms, approvedRequirementIds);
     generationItems.push(...workGenerationItems(calendar.rows, approvedForms));
   }
   return recordGeneratedComplianceWork(unitId, generationItems);

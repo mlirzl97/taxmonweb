@@ -54,9 +54,11 @@ function toDeadlineRow(entry: Awaited<ReturnType<typeof listLiveClientCalendarEn
  * return family. `forms` overrides the profile's returns, e.g. with the
  * approved Expected Compliance that generation must follow.
  */
-export async function loadClientServiceCalendar(client: FixtureClient, year: number, forms?: readonly string[]) {
+export async function loadClientServiceCalendar(client: FixtureClient, year: number, forms?: readonly string[], approvedRequirementIds?: readonly string[]) {
   const candidateForms = forms ? [...forms] : clientCandidateFormNumbers(client);
-  const requirementIds = await listRequirementIdsForFormNumbers(candidateForms);
+  // Generation reads only the requirements Expected Compliance approved, so a
+  // row of another requirement carrying the same form never displaces them.
+  const requirementIds = approvedRequirementIds ? [...approvedRequirementIds] : await listRequirementIdsForFormNumbers(candidateForms);
   const publishedRows = (await listLiveClientCalendarEntries(requirementIds, year)).map(toDeadlineRow);
   // One row per return and period, by return family (HOD rules of 2026-10-22).
   const families = projectReturnFamilyCalendar(client, candidateForms, publishedRows, year);

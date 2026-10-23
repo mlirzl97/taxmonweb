@@ -3,6 +3,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export type ExpectedComplianceItem = {
   id: string;
   formNumber: string;
+  requirementId: string | null;
   status: "candidate" | "approved" | "excluded" | "unresolved" | "superseded";
   serviceScope: "in_scope" | "out_of_scope" | null;
   reason: string | null;
@@ -42,7 +43,7 @@ export async function listExpectedCompliance(registrationUnitId: string) {
   const supabase = await client();
   const [{ data: items, error: itemsError }, { data: approvals, error: approvalsError }] = await Promise.all([
     supabase.from("client_compliance_universe_items")
-      .select("id, form_number, selection_status, service_scope, decision_reason, decided_at, pending_decision, pending_reason")
+      .select("id, form_number, requirement_id, selection_status, service_scope, decision_reason, decided_at, pending_decision, pending_reason")
       .eq("registration_unit_id", registrationUnitId)
       .neq("selection_status", "superseded")
       .order("form_number"),
@@ -77,6 +78,7 @@ export async function listExpectedCompliance(registrationUnitId: string) {
     items: (items ?? []).map((item) => ({
       id: String(item.id),
       formNumber: String(item.form_number ?? ""),
+      requirementId: (item.requirement_id ?? null) as string | null,
       status: item.selection_status as ExpectedComplianceItem["status"],
       serviceScope: (item.service_scope ?? null) as ExpectedComplianceItem["serviceScope"],
       reason: (item.decision_reason ?? null) as string | null,
