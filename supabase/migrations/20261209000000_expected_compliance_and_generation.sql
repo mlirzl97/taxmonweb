@@ -253,8 +253,16 @@ begin
        where item.registration_unit_id = p_registration_unit_id
          and item.form_number = form_code
          and item.selection_status = 'unresolved'
-         and item.requirement_id is null
-         and item.pending_decision is null;
+         and item.pending_decision is null
+         -- No requirement, or one that is no longer in force (retired).
+         and (item.requirement_id is null or not exists (
+           select 1 from public.bir_requirements requirement
+           join public.bir_requirement_versions version on version.requirement_id = requirement.id
+           where requirement.id = item.requirement_id and version.id = item.requirement_version_id
+             and requirement.status = 'active' and version.status = 'approved'
+             and (requirement.effective_to is null or requirement.effective_to >= current_date)
+             and version.effective_from <= current_date
+             and (version.effective_to is null or version.effective_to >= current_date)));
       if found then
         proposed := proposed + 1;
         continue;
@@ -303,6 +311,15 @@ begin
       if found then
         proposed := proposed + 1;
       end if;
+      -- A candidate not yet approved simply becomes unresolved again.
+      update public.client_compliance_universe_items item
+         set selection_status = 'unresolved',
+             requirement_id = null,
+             requirement_version_id = null,
+             decision_reason = 'No active, approved BIR requirement carries this return any more; the Tax Team must review it.'
+       where item.registration_unit_id = p_registration_unit_id
+         and item.form_number = form_code
+         and item.selection_status = 'candidate';
     end if;
     if exists (
       select 1 from public.client_compliance_universe_items item
