@@ -186,6 +186,7 @@ declare
   proposed integer := 0;
   removed integer := 0;
   restored integer := 0;
+  withdrawn integer := 0;
 begin
   if auth.uid() is null or not public.is_active_app_user() then
     raise exception using errcode = '42501', message = 'Authentication is required.';
@@ -214,6 +215,14 @@ begin
      set pending_requirement_id = null, pending_requirement_version_id = null
    where item.registration_unit_id = p_registration_unit_id
      and item.pending_requirement_version_id is not null;
+  -- A person's decision recorded against an earlier profile is withdrawn when
+  -- the profile changes; it must be recorded again against this one.
+  update public.client_compliance_universe_items item
+     set pending_decision = null, pending_reason = null, pending_by = null, pending_at = null, pending_source = null
+   where item.registration_unit_id = p_registration_unit_id
+     and item.pending_source = 'manual'
+     and item.proposed_from_profile_id is distinct from profile.id;
+  get diagnostics withdrawn = row_count;
 
   for return_code in
     select distinct upper(trim(value)) from jsonb_array_elements_text(coalesce(profile.profile_data -> 'registeredReturnCodes', '[]'::jsonb)) as value
@@ -312,7 +321,10 @@ begin
          pending_reason = 'Back on the validated Tax Profile.',
          pending_by = auth.uid(),
          pending_at = now(),
-         pending_source = 'tax_profile'
+         pending_source = 'tax_profile',
+         -- A restored return takes the requirement and version in force now.
+         pending_requirement_id = (select governed_now.requirement_id from public.requirement_for_form(item.form_number) governed_now),
+         pending_requirement_version_id = (select governed_now.requirement_version_id from public.requirement_for_form(item.form_number) governed_now)
    where item.registration_unit_id = p_registration_unit_id
      and item.selection_status = 'excluded'
      and item.decision_reason = 'Removed from the validated Tax Profile.'
@@ -331,7 +343,7 @@ begin
   perform public.append_audit_event(
     'expected_compliance_proposed', 'registration_unit', p_registration_unit_id::text,
     'Expected Compliance proposed from the active Tax Profile', null,
-    jsonb_build_object('proposedItems', proposed, 'taxProfileVersionId', profile.id), null, now(), gen_random_uuid()
+    jsonb_build_object('proposedItems', proposed, 'withdrawnManualDecisions', withdrawn, 'taxProfileVersionId', profile.id), null, now(), gen_random_uuid()
   );
   return proposed;
 end;

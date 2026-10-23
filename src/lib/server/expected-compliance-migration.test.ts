@@ -95,6 +95,11 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toContain("join public.tax_profile_versions profile_version on profile_version.id = approval.tax_profile_version_id");
   });
 
+  it("withdraws a person's decision recorded against an earlier profile, and restores returns onto the current version", () => {
+    expect(migration).toMatch(/and item\.pending_source = 'manual'\s+and item\.proposed_from_profile_id is distinct from profile\.id;/);
+    expect(migration).toContain("pending_requirement_version_id = (select governed_now.requirement_version_id from public.requirement_for_form(item.form_number) governed_now)");
+  });
+
   it("turns an unresolved return into a candidate once a governed requirement is active", () => {
     expect(migration).toMatch(/and item\.selection_status = 'unresolved'\s+and item\.requirement_id is null/);
   });
