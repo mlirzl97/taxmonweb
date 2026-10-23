@@ -453,6 +453,18 @@ begin
   ) then
     raise exception using errcode = '22023', message = 'The Tax Profile changed since Expected Compliance was proposed; propose again before approving.';
   end if;
+  -- Likewise when the governed requirement or version behind a return has
+  -- changed since the proposal (activated, superseded or retired).
+  if exists (
+    select 1 from public.client_compliance_universe_items item
+     left join lateral public.requirement_for_form(item.form_number) governed on true
+     where item.registration_unit_id = p_registration_unit_id
+       and (item.selection_status = 'candidate' or item.pending_decision in ('in_scope', 'out_of_scope'))
+       and (coalesce(item.pending_requirement_id, item.requirement_id), coalesce(item.pending_requirement_version_id, item.requirement_version_id))
+           is distinct from (governed.requirement_id, governed.requirement_version_id)
+  ) then
+    raise exception using errcode = '22023', message = 'A BIR requirement version changed since Expected Compliance was proposed; propose again before approving.';
+  end if;
 
   -- Proposed decisions take effect now, with their reasons.
   update public.client_compliance_universe_items item

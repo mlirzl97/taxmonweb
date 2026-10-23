@@ -76,6 +76,7 @@ describe("Expected Compliance and generation migration", () => {
 
   it("refuses a proposal made from a profile that is no longer active", () => {
     expect(migration).toContain("item.proposed_from_profile_id is distinct from (public.active_tax_profile_for_unit(p_registration_unit_id)).id");
+    expect(migration).toContain("'A BIR requirement version changed since Expected Compliance was proposed; propose again before approving.'");
   });
 
   it("proposes moving an approved return to a newer requirement version, applied only on approval", () => {

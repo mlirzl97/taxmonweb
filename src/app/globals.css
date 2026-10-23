@@ -3538,6 +3538,7 @@ button, input, select, textarea {
   }
 }
 
+.expected-compliance-unit { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
 .expected-compliance-row { align-items: center; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; padding: 8px 10px; }
 .expected-compliance-row__decision { align-items: center; display: flex; flex-wrap: wrap; gap: 6px; }
 .expected-compliance-row__decision select, .expected-compliance-row__decision input { font-size: 11px; max-width: 220px; }

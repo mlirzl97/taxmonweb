@@ -88,6 +88,17 @@ describe("return families", () => {
     expect(rows.map((candidate) => candidate.publishedOperationalDeadline)).toEqual(["2026-04-25"]);
   });
 
+  it("keeps a fiscal client's own quarters from rows entered in Deadline Control, by their structured period", () => {
+    const entered = (id: string, form: string, period: string, start: string, due: string) => ({ ...row(id, period, due), formNumber: form, periodStartDate: start });
+    const rows = [
+      entered("q1", "1702Q", "Q1 2026", "2026-01-01", "2026-05-30"),
+      entered("q2", "1702Q", "Q2 2026", "2026-04-01", "2026-08-29"),
+    ];
+    // June year-end: the quarter ending March is a fiscal 1702Q; the one ending June is the annual return's.
+    const fiscal = projectReturnFamilyCalendar(client({ taxYearBasis: "Fiscal year", fiscalYearEnd: "June 30" }), ["1702Q"], rows, 2026);
+    expect(fiscal.rows.map((candidate) => candidate.id)).toEqual(["q1:1702Q"]);
+  });
+
   it("follows a fiscal-year client's own quarters for corporate income tax", () => {
     const calendarQuarter = row("c", "BIR Form 1702Q (Quarterly Income Tax Return For Corporations) and SAWT - For the Quarter ending March 31, 2026", "2026-05-30");
     const fiscalJanuary = row("fj", "BIR Form 1702Q (Quarterly Income Tax Return For Corporations) and SAWT. Fiscal Quarter ending January 31, 2026", "2026-04-01");

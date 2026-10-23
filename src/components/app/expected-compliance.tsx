@@ -45,7 +45,10 @@ function generationSummary(generation: Generation) {
  * validated Tax Profile, decided per return, approved per Registration Unit.
  * Approval generates the Compliance Work; generating again never duplicates.
  */
-export function ExpectedComplianceSection({ clientId, registrationUnitId }: { clientId: string; registrationUnitId?: string }) {
+export function ExpectedComplianceSection({ clientId, registrationUnitId: initialUnitId, units = [] }: { clientId: string; registrationUnitId?: string; units?: readonly { id?: string; name: string; type: string }[] }) {
+  // Each Registration Unit has its own Expected Compliance; a branch is chosen here.
+  const selectableUnits = units.filter((unit): unit is { id: string; name: string; type: string } => Boolean(unit.id));
+  const [registrationUnitId, setRegistrationUnitId] = useState(initialUnitId);
   const [items, setItems] = useState<Item[]>([]);
   const [approval, setApproval] = useState<{ approvedAt: string; approvedBy: string } | null>(null);
   const [permissions, setPermissions] = useState<Permissions>({ canPropose: false, canApprove: false, canGenerate: false });
@@ -111,6 +114,7 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId }: { cl
 
   return <section className="dossier-section" id="client-expected-compliance">
     <SectionHeading detail="What this Registration Unit is expected to file, and whether TMF handles it. Approval generates the work; generating again never duplicates." title="Expected Compliance" />
+    {selectableUnits.length > 1 && <label className="expected-compliance-unit"><span className="meta-label">Registration Unit</span><select aria-label="Registration Unit" disabled={busy} onChange={(event) => { setRegistrationUnitId(event.target.value); setDrafts({}); setMessage(null); }} value={registrationUnitId ?? ""}>{selectableUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name} · {unit.type}</option>)}</select></label>}
     {state === "loading" && <div className="inline-empty" role="status">Loading Expected Compliance…</div>}
     {state === "error" && <div className="inline-empty" role="alert">Expected Compliance could not be loaded. Refresh to try again.</div>}
     {state === "ready" && <>

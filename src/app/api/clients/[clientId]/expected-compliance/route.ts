@@ -58,7 +58,7 @@ async function generate(portfolioClient: PortfolioClient, unitId: string) {
   const firstPeriod = approved?.firstPeriodToFile ?? "";
   const basis = approved?.taxYearBasis;
   const taxYearBasis: "Calendar year" | "Fiscal year" | undefined = basis === "Calendar year" || basis === "Fiscal year" ? basis : undefined;
-  const client = { ...unitClient, entities: unitClient.entities.map((entity) => ({ ...entity, profile: { ...entity.profile, firstPeriodToFile: firstPeriod || undefined, taxYearBasis, fiscalYearEnd: approved?.fiscalYearEnd ?? undefined } })) };
+  const client = { ...unitClient, entities: unitClient.entities.map((entity) => ({ ...entity, profile: { ...entity.profile, firstPeriodToFile: firstPeriod || undefined, taxYearBasis, fiscalYearEnd: approved?.fiscalYearEnd ?? undefined, goLiveDate: approved?.goLiveDate ?? undefined } })) };
   const currentYear = new Date().getUTCFullYear();
   const firstYear = /^\d{4}-\d{2}$/.test(firstPeriod) ? Math.min(Number(firstPeriod.slice(0, 4)), currentYear) : currentYear;
   const generationItems = [];
@@ -141,6 +141,9 @@ export async function POST(request: Request, context: RouteContext) {
     }
     if (error instanceof Error && /The Tax Profile changed since Expected Compliance was proposed/.test(error.message)) {
       return NextResponse.json({ error: "The Tax Profile changed since Expected Compliance was proposed. Use Propose from profile, review, then approve." }, { status: 409 });
+    }
+    if (error instanceof Error && /A BIR requirement version changed since Expected Compliance was proposed/.test(error.message)) {
+      return NextResponse.json({ error: "A BIR requirement version changed since Expected Compliance was proposed. Use Propose from profile, review, then approve." }, { status: 409 });
     }
     return apiErrorResponse(error, "Unable to apply the Expected Compliance command.", { status: inferredApiErrorStatus(error), logContext: "apply expected compliance command" });
   }

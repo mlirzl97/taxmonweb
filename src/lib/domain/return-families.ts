@@ -122,7 +122,8 @@ export function projectReturnFamilyCalendar(client: FixtureClient, candidateForm
     // plain period label ("April 2026", "Q2 2026", "FY 2026").
     const ownForm = row.formNumber?.trim().toUpperCase() ?? "";
     const named = formsNamedInLabel(label);
-    if (named.length === 0 && familyForForm(ownForm)) named.push(ownForm);
+    const enteredRow = named.length === 0 && Boolean(familyForForm(ownForm));
+    if (enteredRow) named.push(ownForm);
     if (named.length === 0) {
       passThrough.push(row);
       continue;
@@ -134,6 +135,15 @@ export function projectReturnFamilyCalendar(client: FixtureClient, candidateForm
       if ((family.id === "vat" || family.id === "percentage_tax") && !quarterAligned) continue;
       if (family.yearBasis === "calendar" || yearEndMonth === null) {
         if (fiscalLabel) continue;
+      } else if (enteredRow) {
+        // A Deadline Control row says which months it covers through its
+        // structured period, not its label; keep it only when those months
+        // are one of the client's own fiscal quarters or its fiscal year.
+        if (!row.periodStartDate) continue;
+        const startMonth = Number(row.periodStartDate.slice(5, 7)) - 1;
+        const annual = family.annual?.includes(form) ?? false;
+        const endMonth = (startMonth + (annual ? 11 : 2)) % 12;
+        if (annual ? endMonth !== yearEndMonth : endMonth === yearEndMonth || (yearEndMonth - endMonth + 12) % 3 !== 0) continue;
       } else {
         // A fiscal-year client keeps only its own fiscal quarters and year-end.
         if (!fiscalLabel) continue;

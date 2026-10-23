@@ -18,7 +18,7 @@ export type ExpectedComplianceApproval = {
   approvedBy: string;
   reason: string;
   /** Calendar-driving fields of the Tax Profile version the approval came from. */
-  profile: { firstPeriodToFile: string | null; taxYearBasis: string | null; fiscalYearEnd: string | null };
+  profile: { firstPeriodToFile: string | null; taxYearBasis: string | null; fiscalYearEnd: string | null; goLiveDate: string | null };
 };
 
 export type GenerationItem = {
@@ -54,11 +54,11 @@ export async function listExpectedCompliance(registrationUnitId: string) {
   ]);
   if (itemsError) throw new Error(`Unable to load Expected Compliance: ${itemsError.message}`);
   if (approvalsError) throw new Error(`Unable to load Expected Compliance approvals: ${approvalsError.message}`);
-  type ProfileData = { profile_data?: { firstPeriodToFile?: unknown; taxYearBasis?: unknown; fiscalYearEnd?: unknown } | null };
+  type ProfileData = { profile_data?: { firstPeriodToFile?: unknown; taxYearBasis?: unknown; fiscalYearEnd?: unknown; goLiveDate?: unknown } | null };
   const latest = approvals?.[0] as { approved_at: string; reason: string; app_users?: { display_name?: string } | { display_name?: string }[] | null; tax_profile_versions?: ProfileData | ProfileData[] | null } | undefined;
   const approver = Array.isArray(latest?.app_users) ? latest?.app_users[0] : latest?.app_users;
   const approvedProfile = Array.isArray(latest?.tax_profile_versions) ? latest?.tax_profile_versions[0] : latest?.tax_profile_versions;
-  const approvedField = (key: "firstPeriodToFile" | "taxYearBasis" | "fiscalYearEnd") => {
+  const approvedField = (key: "firstPeriodToFile" | "taxYearBasis" | "fiscalYearEnd" | "goLiveDate") => {
     const value = approvedProfile?.profile_data?.[key];
     return typeof value === "string" && value ? value : null;
   };
@@ -89,7 +89,7 @@ export async function listExpectedCompliance(registrationUnitId: string) {
       approvedAt: latest.approved_at,
       reason: latest.reason,
       approvedBy: approver?.display_name ?? "Recorded approver",
-      profile: { firstPeriodToFile: approvedField("firstPeriodToFile"), taxYearBasis: approvedField("taxYearBasis"), fiscalYearEnd: approvedField("fiscalYearEnd") },
+      profile: { firstPeriodToFile: approvedField("firstPeriodToFile"), taxYearBasis: approvedField("taxYearBasis"), fiscalYearEnd: approvedField("fiscalYearEnd"), goLiveDate: approvedField("goLiveDate") },
     } satisfies ExpectedComplianceApproval : null,
   };
 }
