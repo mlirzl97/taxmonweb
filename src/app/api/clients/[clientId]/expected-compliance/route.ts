@@ -53,8 +53,12 @@ async function generate(portfolioClient: PortfolioClient, unitId: string) {
   // Generation follows the approved Expected Compliance and the profile it was
   // approved from, not a newer profile whose changes await approval.
   const unitClient = clientForUnit(portfolioClientToFixtureClient(portfolioClient), unitId);
-  const firstPeriod = latestApproval?.firstPeriodToFile ?? "";
-  const client = { ...unitClient, entities: unitClient.entities.map((entity) => ({ ...entity, profile: { ...entity.profile, firstPeriodToFile: firstPeriod || undefined } })) };
+  // Every calendar-driving field comes from the approved profile version.
+  const approved = latestApproval?.profile;
+  const firstPeriod = approved?.firstPeriodToFile ?? "";
+  const basis = approved?.taxYearBasis;
+  const taxYearBasis: "Calendar year" | "Fiscal year" | undefined = basis === "Calendar year" || basis === "Fiscal year" ? basis : undefined;
+  const client = { ...unitClient, entities: unitClient.entities.map((entity) => ({ ...entity, profile: { ...entity.profile, firstPeriodToFile: firstPeriod || undefined, taxYearBasis, fiscalYearEnd: approved?.fiscalYearEnd ?? undefined } })) };
   const currentYear = new Date().getUTCFullYear();
   const firstYear = /^\d{4}-\d{2}$/.test(firstPeriod) ? Math.min(Number(firstPeriod.slice(0, 4)), currentYear) : currentYear;
   const generationItems = [];

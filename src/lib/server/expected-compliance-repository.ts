@@ -9,14 +9,16 @@ export type ExpectedComplianceItem = {
   decidedAt: string | null;
   pendingDecision: "in_scope" | "out_of_scope" | "not_applicable" | "unresolved" | null;
   pendingReason: string | null;
+  /** Open generated work for a return that is no longer approved In TMF Scope. */
+  openWorkOutOfScope: number;
 };
 
 export type ExpectedComplianceApproval = {
   approvedAt: string;
   approvedBy: string;
   reason: string;
-  /** First period to file on the Tax Profile version the approval came from (YYYY-MM). */
-  firstPeriodToFile: string | null;
+  /** Calendar-driving fields of the Tax Profile version the approval came from. */
+  profile: { firstPeriodToFile: string | null; taxYearBasis: string | null; fiscalYearEnd: string | null };
 };
 
 export type GenerationItem = {
@@ -52,11 +54,25 @@ export async function listExpectedCompliance(registrationUnitId: string) {
   ]);
   if (itemsError) throw new Error(`Unable to load Expected Compliance: ${itemsError.message}`);
   if (approvalsError) throw new Error(`Unable to load Expected Compliance approvals: ${approvalsError.message}`);
-  type ProfileData = { profile_data?: { firstPeriodToFile?: unknown } | null };
+  type ProfileData = { profile_data?: { firstPeriodToFile?: unknown; taxYearBasis?: unknown; fiscalYearEnd?: unknown } | null };
   const latest = approvals?.[0] as { approved_at: string; reason: string; app_users?: { display_name?: string } | { display_name?: string }[] | null; tax_profile_versions?: ProfileData | ProfileData[] | null } | undefined;
   const approver = Array.isArray(latest?.app_users) ? latest?.app_users[0] : latest?.app_users;
   const approvedProfile = Array.isArray(latest?.tax_profile_versions) ? latest?.tax_profile_versions[0] : latest?.tax_profile_versions;
-  const approvedFirstPeriod = approvedProfile?.profile_data?.firstPeriodToFile;
+  const approvedField = (key: "firstPeriodToFile" | "taxYearBasis" | "fiscalYearEnd") => {
+    const value = approvedProfile?.profile_data?.[key];
+    return typeof value === "string" && value ? value : null;
+  };
+  // Open work still running for a return that approval has since taken out of scope.
+  const { data: openWork, error: openWorkError } = await supabase.from("generated_compliance_work")
+    .select("source_context")
+    .eq("registration_unit_id", registrationUnitId)
+    .eq("engagement_status", "open");
+  if (openWorkError) throw new Error(`Unable to load open Compliance Work: ${openWorkError.message}`);
+  const openByForm = new Map<string, number>();
+  for (const work of openWork ?? []) {
+    const form = (work.source_context as { formNumber?: unknown } | null)?.formNumber;
+    if (typeof form === "string") openByForm.set(form, (openByForm.get(form) ?? 0) + 1);
+  }
   return {
     items: (items ?? []).map((item) => ({
       id: String(item.id),
@@ -67,12 +83,13 @@ export async function listExpectedCompliance(registrationUnitId: string) {
       decidedAt: (item.decided_at ?? null) as string | null,
       pendingDecision: (item.pending_decision ?? null) as ExpectedComplianceItem["pendingDecision"],
       pendingReason: (item.pending_reason ?? null) as string | null,
+      openWorkOutOfScope: item.selection_status === "approved" && item.service_scope === "in_scope" ? 0 : openByForm.get(String(item.form_number ?? "")) ?? 0,
     })) satisfies ExpectedComplianceItem[],
     latestApproval: latest ? {
       approvedAt: latest.approved_at,
       reason: latest.reason,
       approvedBy: approver?.display_name ?? "Recorded approver",
-      firstPeriodToFile: typeof approvedFirstPeriod === "string" ? approvedFirstPeriod : null,
+      profile: { firstPeriodToFile: approvedField("firstPeriodToFile"), taxYearBasis: approvedField("taxYearBasis"), fiscalYearEnd: approvedField("fiscalYearEnd") },
     } satisfies ExpectedComplianceApproval : null,
   };
 }

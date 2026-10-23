@@ -12,6 +12,7 @@ type Item = {
   reason: string | null;
   pendingDecision: "in_scope" | "out_of_scope" | "not_applicable" | "unresolved" | null;
   pendingReason: string | null;
+  openWorkOutOfScope: number;
 };
 
 type Permissions = { canPropose: boolean; canApprove: boolean; canGenerate: boolean };
@@ -118,7 +119,7 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId }: { cl
           const label = itemLabel(item);
           const draft = drafts[item.id];
           return <div className="expected-compliance-row" key={item.id}>
-            <div><strong>{item.formNumber}</strong> <span className={`status-pill status-pill--${label.tone}`}>{label.text}</span>{item.reason && <small className="status-label__detail"> · {item.reason}</small>}{item.pendingDecision && <small className="status-label__detail"> · Proposed change: {decisions.find((decision) => decision.value === item.pendingDecision)?.label}{item.pendingReason ? ` (${item.pendingReason})` : ""} — applies on approval</small>}</div>
+            <div><strong>{item.formNumber}</strong> <span className={`status-pill status-pill--${label.tone}`}>{label.text}</span>{item.reason && <small className="status-label__detail"> · {item.reason}</small>}{item.openWorkOutOfScope > 0 && <small className="status-label__detail" role="note"> · {item.openWorkOutOfScope} open work item{item.openWorkOutOfScope === 1 ? "" : "s"} still running for this return; needs a keep, cancel or supersede decision</small>}{item.pendingDecision && <small className="status-label__detail"> · Proposed change: {decisions.find((decision) => decision.value === item.pendingDecision)?.label}{item.pendingReason ? ` (${item.pendingReason})` : ""} — applies on approval</small>}</div>
             {permissions.canPropose && <div className="expected-compliance-row__decision">
               <select aria-label={`${item.formNumber} decision`} disabled={busy} onChange={(event) => setDrafts({ ...drafts, [item.id]: { decision: event.target.value, reason: draft?.reason ?? "" } })} value={draft?.decision ?? ""}>
                 <option value="">Change decision…</option>
