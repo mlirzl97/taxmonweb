@@ -857,6 +857,11 @@ begin
        and coalesce(approved_profile.profile_data -> 'deadlinePolicy' ->> 'tmfPackageLeadDays', '') ~ '^\d{1,3}$'
        and (approved_profile.profile_data -> 'deadlinePolicy' ->> 'tmfPackageLeadDays')::integer <= 365 then
       tmf_target := public.working_days_before(due_date, (approved_profile.profile_data -> 'deadlinePolicy' ->> 'tmfPackageLeadDays')::integer);
+    elsif approved_profile.profile_data -> 'deadlinePolicy' ->> 'mode' = 'client_defined' then
+      -- The client keeps its own operating dates but set no TMF package
+      -- target: none is invented for it.
+      skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The client''s operating dates set no TMF package target; set one on the Tax Profile.'));
+      continue;
     else
       tmf_target := coalesce(entry.tmf_package_target, due_date - 1);
     end if;
@@ -918,14 +923,23 @@ begin
          and (version.effective_to is null or version.effective_to >= current_date)
        order by version.effective_from desc limit 1;
     end if;
-    -- Whichever version the work lands on, it must have governed the period.
+    -- Whichever version the work lands on, it must have governed the period
+    -- and carried this form.
     if governed_version_id is null or not exists (
       select 1 from public.bir_requirement_versions version
        where version.id = governed_version_id
          and version.effective_from <= item_period_start
          and (version.effective_to is null or version.effective_to >= item_period_start)
+         and exists (
+           select 1 from public.requirement_version_forms relation
+           join public.bir_forms form on form.id = relation.form_id
+           where relation.requirement_version_id = version.id
+             and upper(form.form_number) = form_code
+             and (relation.relationship_type = 'primary_form'
+                  or position(form_code in upper(coalesce(entry.period_or_event, ''))) > 0)
+         )
     ) then
-      skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'No BIR requirement version on record governed this period; the Tax Team must review it.'));
+      skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'No BIR requirement version on record governed this period and carried this return; the Tax Team must review it.'));
       continue;
     end if;
 

@@ -139,6 +139,10 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toContain("tmf_target := public.working_days_before(due_date, (approved_profile.profile_data -> 'deadlinePolicy' ->> 'tmfPackageLeadDays')::integer);");
     expect(migration).toContain("or work.tmf_package_target is distinct from tmf_target");
     expect(migration).toContain("revoke execute on function public.working_days_before(date, integer) from public, anon, authenticated;");
+    // A client-defined policy with no TMF lead days invents no target.
+    expect(migration).toContain("'The client''s operating dates set no TMF package target; set one on the Tax Profile.'");
+    // The resolved version must itself carry the form.
+    expect(migration).toContain("where relation.requirement_version_id = version.id");
   });
 
   it("takes only requirement versions in force today", () => {
