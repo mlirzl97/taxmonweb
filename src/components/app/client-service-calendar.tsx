@@ -6,6 +6,7 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf
 import { fixtureClock, type FixtureClient, type FixtureTaxProfile } from "@/lib/fixtures";
 import { getClientServiceCalendarRows, readDeadlinePublicationOverrides, type ClientServiceCalendarRow, type DeadlineControlRow } from "@/lib/domain/deadline-control";
 import { normalizeClientDeadlinePolicy } from "@/lib/domain/client-deadline-policy";
+import { familyForForm } from "@/lib/domain/return-families";
 import { useWorkflow } from "@/lib/workflow-state";
 import { AntMark } from "../brand/ant-mark";
 import { SectionHeading } from "./workspace-components";
@@ -28,11 +29,17 @@ function formatCalendarDate(value: string) {
   return new Intl.DateTimeFormat("en-PH", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
-function serviceCalendarRow(item: ClientServiceCalendarRow): ServiceCalendarRow {
+/**
+ * One line is one return for one period: the month it is filed (activity),
+ * the period it covers (taxable) and the return with its family.
+ */
+export function serviceCalendarRow(item: ClientServiceCalendarRow): ServiceCalendarRow {
+  const family = familyForForm(item.formNumber)?.label ?? item.taxCategory;
+  const proof = /proof of filing/i.test(item.activityPeriod);
   return {
     activityMonth: item.activityMonth,
-    taxableMonth: item.taxablePeriod,
-    taxReturn: `${item.formNumber} · ${item.taxCategory}`,
+    taxableMonth: item.taxablePeriod.replace(/^\s*Month of\s+/i, ""),
+    taxReturn: `${item.formNumber}${proof ? " proof of filing" : ""} · ${family}`,
     clientProvideDate: formatCalendarDate(item.clientProvideDate),
     tmfCommitmentDate: formatCalendarDate(item.tmfPackageTarget ?? "Not configured"),
     clientApprovalDate: formatCalendarDate(item.clientApprovalDate),
