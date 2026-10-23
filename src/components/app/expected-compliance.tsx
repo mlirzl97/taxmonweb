@@ -50,7 +50,7 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId: initia
   const selectableUnits = units.filter((unit): unit is { id: string; name: string; type: string } => Boolean(unit.id));
   const [registrationUnitId, setRegistrationUnitId] = useState(initialUnitId);
   const [items, setItems] = useState<Item[]>([]);
-  const [approval, setApproval] = useState<{ approvedAt: string; approvedBy: string } | null>(null);
+  const [approval, setApproval] = useState<{ approvedAt: string; approvedBy: string; profileChanged?: boolean } | null>(null);
   const [permissions, setPermissions] = useState<Permissions>({ canPropose: false, canApprove: false, canGenerate: false });
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [busy, setBusy] = useState(false);
@@ -64,7 +64,7 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId: initia
     const query = registrationUnitId ? `?registrationUnitId=${encodeURIComponent(registrationUnitId)}` : "";
     void fetch(`/api/clients/${encodeURIComponent(clientId)}/expected-compliance${query}`, { headers: { accept: "application/json" }, cache: "no-store" })
       .then(async (response) => {
-        const payload = await response.json() as { data?: { items: Item[]; latestApproval: { approvedAt: string; approvedBy: string } | null }; permissions?: Permissions; error?: string };
+        const payload = await response.json() as { data?: { items: Item[]; latestApproval: { approvedAt: string; approvedBy: string; profileChanged?: boolean } | null }; permissions?: Permissions; error?: string };
         if (!response.ok || !payload.data) throw new Error(payload.error ?? "Expected Compliance could not be loaded.");
         if (!active) return;
         setItems(payload.data.items);
@@ -139,11 +139,11 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId: initia
           </div>;
         })}</div>}
       <div className="dossier-section__footer">
-        <div><span className="meta-label">Controlled action</span><strong>{approval ? `Approved by ${approval.approvedBy} · ${approval.approvedAt.slice(0, 10)}` : "Not yet approved"}</strong><small>{proposed > 0 ? `${proposed} proposed decision${proposed === 1 ? "" : "s"} waiting for approval.` : `${approvedInScope} return${approvedInScope === 1 ? "" : "s"} approved In TMF Scope.`}</small></div>
+        <div><span className="meta-label">Controlled action</span><strong>{approval ? `Approved by ${approval.approvedBy} · ${approval.approvedAt.slice(0, 10)}` : "Not yet approved"}</strong><small>{proposed > 0 ? `${proposed} proposed decision${proposed === 1 ? "" : "s"} waiting for approval.` : approval?.profileChanged ? "The validated Tax Profile changed since approval; approve to generate from it." : `${approvedInScope} return${approvedInScope === 1 ? "" : "s"} approved In TMF Scope.`}</small></div>
         <div className="dossier-section__actions">
           {permissions.canPropose && <button className="text-button" disabled={busy} onClick={() => void command({ action: "propose" }, (payload) => `${Number(payload.proposed ?? 0)} return${Number(payload.proposed ?? 0) === 1 ? "" : "s"} proposed from the Tax Profile.`)} type="button">Propose from profile</button>}
           {permissions.canGenerate && approvedInScope > 0 && <button className="text-button" disabled={busy} onClick={() => void command({ action: "generate" }, (payload) => `${generationSummary(payload.generation as Generation)}.`)} type="button">Generate work</button>}
-          {permissions.canApprove && proposed > 0 && <button className="button button--primary button--small" disabled={busy} onClick={() => void approve()} type="button">Approve &amp; generate work</button>}
+          {permissions.canApprove && (proposed > 0 || approval?.profileChanged) && <button className="button button--primary button--small" disabled={busy} onClick={() => void approve()} type="button">Approve &amp; generate work</button>}
         </div>
       </div>
       {message && <div className="saved-notice" role="status">{message}</div>}

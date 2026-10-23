@@ -20,6 +20,8 @@ export type ExpectedComplianceApproval = {
   reason: string;
   /** Calendar-driving fields of the Tax Profile version the approval came from. */
   profile: { firstPeriodToFile: string | null; taxYearBasis: string | null; fiscalYearEnd: string | null; goLiveDate: string | null };
+  /** A proposal from a newer validated Tax Profile is waiting for approval. */
+  profileChanged: boolean;
 };
 
 export type GenerationItem = {
@@ -43,12 +45,12 @@ export async function listExpectedCompliance(registrationUnitId: string) {
   const supabase = await client();
   const [{ data: items, error: itemsError }, { data: approvals, error: approvalsError }] = await Promise.all([
     supabase.from("client_compliance_universe_items")
-      .select("id, form_number, requirement_id, selection_status, service_scope, decision_reason, decided_at, pending_decision, pending_reason")
+      .select("id, form_number, requirement_id, selection_status, service_scope, decision_reason, decided_at, pending_decision, pending_reason, proposed_from_profile_id")
       .eq("registration_unit_id", registrationUnitId)
       .neq("selection_status", "superseded")
       .order("form_number"),
     supabase.from("expected_compliance_approvals")
-      .select("approved_at, reason, app_users!expected_compliance_approvals_approved_by_fkey(display_name), tax_profile_versions!expected_compliance_approvals_tax_profile_version_id_fkey(profile_data)")
+      .select("approved_at, reason, tax_profile_version_id, app_users!expected_compliance_approvals_approved_by_fkey(display_name), tax_profile_versions!expected_compliance_approvals_tax_profile_version_id_fkey(profile_data)")
       .eq("registration_unit_id", registrationUnitId)
       .order("approved_at", { ascending: false })
       .limit(1),
@@ -56,7 +58,7 @@ export async function listExpectedCompliance(registrationUnitId: string) {
   if (itemsError) throw new Error(`Unable to load Expected Compliance: ${itemsError.message}`);
   if (approvalsError) throw new Error(`Unable to load Expected Compliance approvals: ${approvalsError.message}`);
   type ProfileData = { profile_data?: { firstPeriodToFile?: unknown; taxYearBasis?: unknown; fiscalYearEnd?: unknown; goLiveDate?: unknown } | null };
-  const latest = approvals?.[0] as { approved_at: string; reason: string; app_users?: { display_name?: string } | { display_name?: string }[] | null; tax_profile_versions?: ProfileData | ProfileData[] | null } | undefined;
+  const latest = approvals?.[0] as { approved_at: string; reason: string; tax_profile_version_id: string | null; app_users?: { display_name?: string } | { display_name?: string }[] | null; tax_profile_versions?: ProfileData | ProfileData[] | null } | undefined;
   const approver = Array.isArray(latest?.app_users) ? latest?.app_users[0] : latest?.app_users;
   const approvedProfile = Array.isArray(latest?.tax_profile_versions) ? latest?.tax_profile_versions[0] : latest?.tax_profile_versions;
   const approvedField = (key: "firstPeriodToFile" | "taxYearBasis" | "fiscalYearEnd" | "goLiveDate") => {
@@ -92,6 +94,7 @@ export async function listExpectedCompliance(registrationUnitId: string) {
       reason: latest.reason,
       approvedBy: approver?.display_name ?? "Recorded approver",
       profile: { firstPeriodToFile: approvedField("firstPeriodToFile"), taxYearBasis: approvedField("taxYearBasis"), fiscalYearEnd: approvedField("fiscalYearEnd"), goLiveDate: approvedField("goLiveDate") },
+      profileChanged: (items ?? []).some((item) => item.proposed_from_profile_id && item.proposed_from_profile_id !== latest.tax_profile_version_id),
     } satisfies ExpectedComplianceApproval : null,
   };
 }

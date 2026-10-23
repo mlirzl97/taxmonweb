@@ -129,6 +129,11 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toMatch(/and item\.selection_status = 'unresolved'\s+and item\.pending_decision is null\s+-- No requirement, or one that is no longer in force/);
   });
 
+  it("generates only on a requirement version that governed the period, and approves a profile-only change", () => {
+    expect(migration).toContain("'No BIR requirement version on record governed this period; the Tax Team must review it.'");
+    expect(migration).toContain("and approval.tax_profile_version_id is not distinct from (public.active_tax_profile_for_unit(p_registration_unit_id)).id");
+  });
+
   it("takes only requirement versions in force today", () => {
     expect(migration).toContain("and version.effective_from <= current_date");
     expect(migration).toContain("and (requirement.effective_to is null or requirement.effective_to >= current_date)");

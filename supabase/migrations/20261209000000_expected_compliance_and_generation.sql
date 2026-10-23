@@ -574,8 +574,19 @@ begin
   get diagnostics candidate_count = row_count;
   approved_count := approved_count + candidate_count;
   -- A retry or a duplicate submission finds nothing left to approve and
-  -- records no second approval.
-  if approved_count = 0 and exists (select 1 from public.expected_compliance_approvals where registration_unit_id = p_registration_unit_id) then
+  -- records no second approval. A proposal from a newer validated profile is
+  -- still waiting even when no return changed: its approval binds generation
+  -- to that profile's dates.
+  if approved_count = 0 and exists (
+    select 1 from public.expected_compliance_approvals approval
+     where approval.registration_unit_id = p_registration_unit_id
+       and approval.tax_profile_version_id is not distinct from (public.active_tax_profile_for_unit(p_registration_unit_id)).id
+       and not exists (
+         select 1 from public.expected_compliance_approvals later
+          where later.registration_unit_id = p_registration_unit_id
+            and (later.approved_at, later.id) > (approval.approved_at, approval.id)
+       )
+  ) then
     raise exception using errcode = '22023', message = 'Nothing is waiting for approval.';
   end if;
   select coalesce(jsonb_agg(jsonb_build_object(
@@ -847,7 +858,24 @@ begin
         skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The calendar row is on a newer requirement version than the one approved; it needs an authorized impact decision before work moves to it.'));
         continue;
       end if;
-      governed_version_id := coalesce(governed_version_id, approved_item.requirement_version_id);
+      -- A row that cites no version lands on the approved version, or on the
+      -- earlier one that governed a backlog period.
+      if governed_version_id is null then
+        select version.id into governed_version_id
+          from public.bir_requirement_versions version
+          join public.bir_requirement_versions approved_version on approved_version.id = approved_item.requirement_version_id
+         where version.requirement_id = approved_item.requirement_id
+           and (version.id = approved_version.id
+                or (version.status in ('approved', 'superseded') and version.effective_from < approved_version.effective_from))
+           and version.effective_from <= item_period_start
+           and (version.effective_to is null or version.effective_to >= item_period_start)
+         order by version.effective_from desc
+         limit 1;
+        if governed_version_id is null then
+          skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'No BIR requirement version on record governed this period; the Tax Team must review it.'));
+          continue;
+        end if;
+      end if;
     end if;
     if governed_version_id is null then
       select version.id into governed_version_id from public.bir_requirement_versions version
@@ -855,6 +883,16 @@ begin
          and version.effective_from <= current_date
          and (version.effective_to is null or version.effective_to >= current_date)
        order by version.effective_from desc limit 1;
+    end if;
+    -- Whichever version the work lands on, it must have governed the period.
+    if governed_version_id is null or not exists (
+      select 1 from public.bir_requirement_versions version
+       where version.id = governed_version_id
+         and version.effective_from <= item_period_start
+         and (version.effective_to is null or version.effective_to >= item_period_start)
+    ) then
+      skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'No BIR requirement version on record governed this period; the Tax Team must review it.'));
+      continue;
     end if;
 
     key := 'generated:' || p_registration_unit_id::text || ':' || form_code || ':' || item_kind || ':' || to_char(item_period_start, 'YYYY-MM');
