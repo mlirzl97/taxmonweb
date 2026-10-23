@@ -116,7 +116,7 @@ describe("Expected Compliance and generation migration", () => {
   });
 
   it("turns an unresolved return into a candidate once a governed requirement is active", () => {
-    expect(migration).toMatch(/and item\.selection_status = 'unresolved'\s+and item\.requirement_id is null/);
+    expect(migration).toMatch(/and item\.selection_status = 'unresolved'\s+and item\.pending_decision is null\s+-- No requirement, or one that is no longer in force/);
   });
 
   it("takes only requirement versions in force today", () => {
