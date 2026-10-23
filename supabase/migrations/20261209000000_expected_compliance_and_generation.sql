@@ -610,6 +610,29 @@ $$;
 revoke execute on function public.approve_expected_compliance(uuid, text, boolean) from public, anon;
 grant execute on function public.approve_expected_compliance(uuid, text, boolean) to authenticated;
 
+-- The date a number of working days (Monday to Friday) before a date,
+-- mirroring workingDaysBefore in the app for client-defined timing.
+create or replace function public.working_days_before(p_date date, p_days integer)
+returns date
+language plpgsql
+immutable
+set search_path = public, pg_temp
+as $$
+declare
+  result date := p_date;
+  remaining integer := p_days;
+begin
+  while remaining > 0 loop
+    result := result - 1;
+    if extract(isodow from result) < 6 then
+      remaining := remaining - 1;
+    end if;
+  end loop;
+  return result;
+end;
+$$;
+revoke execute on function public.working_days_before(date, integer) from public, anon, authenticated;
+
 -- The first month a BIR calendar row's own wording says it covers, mirroring
 -- compliancePeriodStartFromLabel in the app: "Month of June 2026",
 -- "(Fiscal) Quarter ending September 30, 2026", "Fiscal Year ending May 31,
@@ -658,6 +681,7 @@ declare
   actor_id uuid := auth.uid();
   profile public.tax_profile_versions;
   approved_profile public.tax_profile_versions;
+  tmf_target date;
   first_period date;
   item jsonb;
   form_code text;
@@ -826,9 +850,19 @@ begin
       skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'This return needs a published calendar row.'));
       continue;
     end if;
+    -- The TMF package target follows the approved profile: a client with its
+    -- own operating dates counts its working days back from the published
+    -- date; otherwise the released row's target applies, or the day before.
+    if approved_profile.profile_data -> 'deadlinePolicy' ->> 'mode' = 'client_defined'
+       and coalesce(approved_profile.profile_data -> 'deadlinePolicy' ->> 'tmfPackageLeadDays', '') ~ '^\d{1,3}$'
+       and (approved_profile.profile_data -> 'deadlinePolicy' ->> 'tmfPackageLeadDays')::integer <= 365 then
+      tmf_target := public.working_days_before(due_date, (approved_profile.profile_data -> 'deadlinePolicy' ->> 'tmfPackageLeadDays')::integer);
+    else
+      tmf_target := coalesce(entry.tmf_package_target, due_date - 1);
+    end if;
     -- The internal target may never fall after the legal deadline.
     if coalesce(entry.adjusted_statutory_deadline, entry.base_statutory_deadline) is not null
-       and coalesce(entry.tmf_package_target, due_date - 1) > coalesce(entry.adjusted_statutory_deadline, entry.base_statutory_deadline) then
+       and tmf_target > coalesce(entry.adjusted_statutory_deadline, entry.base_statutory_deadline) then
       skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The published operational date is after the BIR deadline; the Tax Team must review it.'));
       continue;
     end if;
@@ -914,7 +948,7 @@ begin
          where work.generation_key = key
            and (work.base_statutory_deadline is distinct from entry.base_statutory_deadline
                 or work.adjusted_statutory_deadline is distinct from entry.adjusted_statutory_deadline
-                or work.tmf_package_target is distinct from coalesce(entry.tmf_package_target, due_date - 1)
+                or work.tmf_package_target is distinct from tmf_target
                 or (work.source_context ->> 'dueDate') is distinct from due_date::text)
       ) then
         skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'Work for this period already exists with earlier published dates; it needs a keep, rebase or supersede decision.'));
@@ -942,9 +976,8 @@ begin
       -- published operational due date is kept separately in source_context.
       entry.base_statutory_deadline,
       entry.adjusted_statutory_deadline,
-      -- The released target stands (e.g. a Tax Team override); one day before
-      -- the due date only when the row carries none.
-      coalesce(entry.tmf_package_target, due_date - 1),
+      -- The approved profile's client-defined target, else the released one.
+      tmf_target,
       'unresolved',
       preparer_id, checker_id, reviewer_id, preparer_id,
       'preparer',

@@ -50,7 +50,7 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId: initia
   const selectableUnits = units.filter((unit): unit is { id: string; name: string; type: string } => Boolean(unit.id));
   const [registrationUnitId, setRegistrationUnitId] = useState(initialUnitId);
   const [items, setItems] = useState<Item[]>([]);
-  const [approval, setApproval] = useState<{ approvedAt: string; approvedBy: string; profileChanged?: boolean } | null>(null);
+  const [approval, setApproval] = useState<{ approvedAt: string; approvedBy: string; profileChanged?: boolean; openWorkFromEarlierProfile?: number } | null>(null);
   const [permissions, setPermissions] = useState<Permissions>({ canPropose: false, canApprove: false, canGenerate: false });
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [busy, setBusy] = useState(false);
@@ -64,7 +64,7 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId: initia
     const query = registrationUnitId ? `?registrationUnitId=${encodeURIComponent(registrationUnitId)}` : "";
     void fetch(`/api/clients/${encodeURIComponent(clientId)}/expected-compliance${query}`, { headers: { accept: "application/json" }, cache: "no-store" })
       .then(async (response) => {
-        const payload = await response.json() as { data?: { items: Item[]; latestApproval: { approvedAt: string; approvedBy: string; profileChanged?: boolean } | null }; permissions?: Permissions; error?: string };
+        const payload = await response.json() as { data?: { items: Item[]; latestApproval: { approvedAt: string; approvedBy: string; profileChanged?: boolean; openWorkFromEarlierProfile?: number } | null }; permissions?: Permissions; error?: string };
         if (!response.ok || !payload.data) throw new Error(payload.error ?? "Expected Compliance could not be loaded.");
         if (!active) return;
         setItems(payload.data.items);
@@ -148,6 +148,7 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId: initia
           {permissions.canApprove && (proposed > 0 || approval?.profileChanged || firstApproval) && <button className="button button--primary button--small" disabled={busy} onClick={() => void approve()} type="button">Approve &amp; generate work</button>}
         </div>
       </div>
+      {(approval?.openWorkFromEarlierProfile ?? 0) > 0 && <div className="inline-empty" role="note">{approval?.openWorkFromEarlierProfile} open work item{approval?.openWorkFromEarlierProfile === 1 ? "" : "s"} came from an earlier Tax Profile version; each needs a keep, cancel or supersede decision before it is relied on.</div>}
       {message && <div className="saved-notice" role="status">{message}</div>}
     </>}
   </section>;

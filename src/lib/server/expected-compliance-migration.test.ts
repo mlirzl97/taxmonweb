@@ -43,7 +43,8 @@ describe("Expected Compliance and generation migration", () => {
   });
 
   it("keeps the calendar row's statutory dates as the legal deadline, apart from the operational due date", () => {
-    expect(migration).toMatch(/entry\.base_statutory_deadline,\s+entry\.adjusted_statutory_deadline,[\s\S]{0,200}coalesce\(entry\.tmf_package_target, due_date - 1\)/);
+    expect(migration).toMatch(/entry\.base_statutory_deadline,\s+entry\.adjusted_statutory_deadline,[\s\S]{0,200}tmf_target,/);
+    expect(migration).toContain("tmf_target := coalesce(entry.tmf_package_target, due_date - 1);");
     expect(migration).toContain("'The published operational date is after the BIR deadline; the Tax Team must review it.'");
   });
 
@@ -61,7 +62,7 @@ describe("Expected Compliance and generation migration", () => {
 
   it("keeps generated work on the approved requirement version and checks the base deadline when none is adjusted", () => {
     expect(migration).toContain("governed_version_id <> approved_item.requirement_version_id");
-    expect(migration).toContain("coalesce(entry.tmf_package_target, due_date - 1) > coalesce(entry.adjusted_statutory_deadline, entry.base_statutory_deadline)");
+    expect(migration).toContain("and tmf_target > coalesce(entry.adjusted_statutory_deadline, entry.base_statutory_deadline)");
   });
 
   it("generates only from the approved requirement and records no second approval on a retry", () => {
@@ -132,6 +133,12 @@ describe("Expected Compliance and generation migration", () => {
   it("generates only on a requirement version that governed the period, and approves a profile-only change", () => {
     expect(migration).toContain("'No BIR requirement version on record governed this period; the Tax Team must review it.'");
     expect(migration).toContain("and approval.tax_profile_version_id is not distinct from (public.active_tax_profile_for_unit(p_registration_unit_id)).id");
+  });
+
+  it("times a client-defined TMF package target in working days from the approved profile", () => {
+    expect(migration).toContain("tmf_target := public.working_days_before(due_date, (approved_profile.profile_data -> 'deadlinePolicy' ->> 'tmfPackageLeadDays')::integer);");
+    expect(migration).toContain("or work.tmf_package_target is distinct from tmf_target");
+    expect(migration).toContain("revoke execute on function public.working_days_before(date, integer) from public, anon, authenticated;");
   });
 
   it("takes only requirement versions in force today", () => {

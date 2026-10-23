@@ -22,6 +22,8 @@ export type ExpectedComplianceApproval = {
   profile: { firstPeriodToFile: string | null; taxYearBasis: string | null; fiscalYearEnd: string | null; goLiveDate: string | null };
   /** A proposal from a newer validated Tax Profile is waiting for approval. */
   profileChanged: boolean;
+  /** Open generated work created under an earlier Tax Profile than the one approved. */
+  openWorkFromEarlierProfile: number;
 };
 
 export type GenerationItem = {
@@ -72,9 +74,13 @@ export async function listExpectedCompliance(registrationUnitId: string) {
     .eq("engagement_status", "open");
   if (openWorkError) throw new Error(`Unable to load open Compliance Work: ${openWorkError.message}`);
   const openByForm = new Map<string, number>();
+  let openWorkFromEarlierProfile = 0;
   for (const work of openWork ?? []) {
-    const form = (work.source_context as { formNumber?: unknown } | null)?.formNumber;
+    const context = work.source_context as { formNumber?: unknown; creationMode?: unknown; taxProfileVersionId?: unknown } | null;
+    const form = context?.formNumber;
     if (typeof form === "string") openByForm.set(form, (openByForm.get(form) ?? 0) + 1);
+    // Its periods and dates came from a profile the latest approval replaced.
+    if (latest?.tax_profile_version_id && context?.creationMode === "generated" && typeof context.taxProfileVersionId === "string" && context.taxProfileVersionId !== latest.tax_profile_version_id) openWorkFromEarlierProfile += 1;
   }
   return {
     items: (items ?? []).map((item) => ({
@@ -95,6 +101,7 @@ export async function listExpectedCompliance(registrationUnitId: string) {
       approvedBy: approver?.display_name ?? "Recorded approver",
       profile: { firstPeriodToFile: approvedField("firstPeriodToFile"), taxYearBasis: approvedField("taxYearBasis"), fiscalYearEnd: approvedField("fiscalYearEnd"), goLiveDate: approvedField("goLiveDate") },
       profileChanged: (items ?? []).some((item) => item.proposed_from_profile_id && item.proposed_from_profile_id !== latest.tax_profile_version_id),
+      openWorkFromEarlierProfile,
     } satisfies ExpectedComplianceApproval : null,
   };
 }
