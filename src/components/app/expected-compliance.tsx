@@ -111,6 +111,8 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId: initia
 
   const proposed = items.filter((item) => item.status === "candidate" || item.pendingDecision).length;
   const approvedInScope = items.filter((item) => item.status === "approved" && item.serviceScope === "in_scope").length;
+  // The first approval records the universe even when every return is still unresolved.
+  const firstApproval = !approval && items.length > 0;
 
   return <section className="dossier-section" id="client-expected-compliance">
     <SectionHeading detail="What this Registration Unit is expected to file, and whether TMF handles it. Approval generates the work; generating again never duplicates." title="Expected Compliance" />
@@ -139,11 +141,11 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId: initia
           </div>;
         })}</div>}
       <div className="dossier-section__footer">
-        <div><span className="meta-label">Controlled action</span><strong>{approval ? `Approved by ${approval.approvedBy} · ${approval.approvedAt.slice(0, 10)}` : "Not yet approved"}</strong><small>{proposed > 0 ? `${proposed} proposed decision${proposed === 1 ? "" : "s"} waiting for approval.` : approval?.profileChanged ? "The validated Tax Profile changed since approval; approve to generate from it." : `${approvedInScope} return${approvedInScope === 1 ? "" : "s"} approved In TMF Scope.`}</small></div>
+        <div><span className="meta-label">Controlled action</span><strong>{approval ? `Approved by ${approval.approvedBy} · ${approval.approvedAt.slice(0, 10)}` : "Not yet approved"}</strong><small>{proposed > 0 ? `${proposed} proposed decision${proposed === 1 ? "" : "s"} waiting for approval.` : approval?.profileChanged ? "The validated Tax Profile changed since approval; approve to generate from it." : firstApproval ? `${items.length} return${items.length === 1 ? "" : "s"} proposed; approval records them, unresolved ones included.` : `${approvedInScope} return${approvedInScope === 1 ? "" : "s"} approved In TMF Scope.`}</small></div>
         <div className="dossier-section__actions">
           {permissions.canPropose && <button className="text-button" disabled={busy} onClick={() => void command({ action: "propose" }, (payload) => `${Number(payload.proposed ?? 0)} return${Number(payload.proposed ?? 0) === 1 ? "" : "s"} proposed from the Tax Profile.`)} type="button">Propose from profile</button>}
           {permissions.canGenerate && approvedInScope > 0 && <button className="text-button" disabled={busy} onClick={() => void command({ action: "generate" }, (payload) => `${generationSummary(payload.generation as Generation)}.`)} type="button">Generate work</button>}
-          {permissions.canApprove && (proposed > 0 || approval?.profileChanged) && <button className="button button--primary button--small" disabled={busy} onClick={() => void approve()} type="button">Approve &amp; generate work</button>}
+          {permissions.canApprove && (proposed > 0 || approval?.profileChanged || firstApproval) && <button className="button button--primary button--small" disabled={busy} onClick={() => void approve()} type="button">Approve &amp; generate work</button>}
         </div>
       </div>
       {message && <div className="saved-notice" role="status">{message}</div>}
