@@ -120,6 +120,11 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toContain("or (item.pending_source = 'manual' and item.pending_decision in ('in_scope', 'out_of_scope')));");
   });
 
+  it("requires an active Registration Unit in every command and binds a row's form to the version it cites", () => {
+    expect(migration.match(/message = 'The Registration Unit is not active\.'/g)?.length).toBe(4);
+    expect(migration).toContain("and (calendar_entry.requirement_version_id is null or version.id = calendar_entry.requirement_version_id)");
+  });
+
   it("turns an unresolved return into a candidate once a governed requirement is active", () => {
     expect(migration).toMatch(/and item\.selection_status = 'unresolved'\s+and item\.pending_decision is null\s+-- No requirement, or one that is no longer in force/);
   });

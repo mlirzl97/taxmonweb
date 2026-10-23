@@ -198,6 +198,10 @@ begin
     raise exception using errcode = '42501', message = 'The Registration Unit is outside the caller''s scope.';
   end if;
   perform 1 from public.registration_units where id = p_registration_unit_id for update;
+  -- Only an active Registration Unit carries Expected Compliance and work.
+  if not exists (select 1 from public.registration_units unit where unit.id = p_registration_unit_id and unit.active) then
+    raise exception using errcode = '22023', message = 'The Registration Unit is not active.';
+  end if;
   profile := public.active_tax_profile_for_unit(p_registration_unit_id);
   if profile.id is null then
     raise exception using errcode = '22023', message = 'Expected Compliance needs a validated, active Tax Profile.';
@@ -420,6 +424,10 @@ begin
   -- Same lock as approval, so a decision cannot land between approval's
   -- self-approval check and its update.
   perform 1 from public.registration_units where id = p_registration_unit_id for update;
+  -- Only an active Registration Unit carries Expected Compliance and work.
+  if not exists (select 1 from public.registration_units unit where unit.id = p_registration_unit_id and unit.active) then
+    raise exception using errcode = '22023', message = 'The Registration Unit is not active.';
+  end if;
   select * into item from public.client_compliance_universe_items where id = p_item_id for update;
   -- The item must belong to the Registration Unit the caller is looking at.
   if item.id is null or item.registration_unit_id is distinct from p_registration_unit_id
@@ -491,6 +499,10 @@ begin
     raise exception using errcode = '22023', message = 'A reason is required to approve Expected Compliance.';
   end if;
   perform 1 from public.registration_units where id = p_registration_unit_id for update;
+  -- Only an active Registration Unit carries Expected Compliance and work.
+  if not exists (select 1 from public.registration_units unit where unit.id = p_registration_unit_id and unit.active) then
+    raise exception using errcode = '22023', message = 'The Registration Unit is not active.';
+  end if;
   if (public.active_tax_profile_for_unit(p_registration_unit_id)).id is null then
     raise exception using errcode = '22023', message = 'Expected Compliance needs a validated, active Tax Profile.';
   end if;
@@ -671,6 +683,10 @@ begin
     raise exception using errcode = '22023', message = 'Generation items must be an array.';
   end if;
   perform 1 from public.registration_units where id = p_registration_unit_id for update;
+  -- Only an active Registration Unit carries Expected Compliance and work.
+  if not exists (select 1 from public.registration_units unit where unit.id = p_registration_unit_id and unit.active) then
+    raise exception using errcode = '22023', message = 'The Registration Unit is not active.';
+  end if;
   profile := public.active_tax_profile_for_unit(p_registration_unit_id);
   if profile.id is null then
     raise exception using errcode = '22023', message = 'Compliance Work needs a validated, active Tax Profile.';
@@ -781,6 +797,8 @@ begin
            join public.bir_forms form on form.id = relation.form_id
            join public.bir_requirement_versions version on version.id = relation.requirement_version_id
            where version.requirement_id = calendar_entry.requirement_id
+             -- The form must be carried by the version the row itself cites.
+             and (calendar_entry.requirement_version_id is null or version.id = calendar_entry.requirement_version_id)
              and upper(form.form_number) = form_code
              and (relation.relationship_type = 'primary_form'
                   or position(form_code in upper(coalesce(calendar_entry.period_or_event, ''))) > 0)
