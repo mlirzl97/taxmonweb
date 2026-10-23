@@ -211,10 +211,20 @@ begin
          pending_requirement_id = null, pending_requirement_version_id = null
    where item.registration_unit_id = p_registration_unit_id
      and item.pending_source in ('tax_profile', 'requirement_version');
+  -- A person's retained scope decision is re-pointed at the requirement and
+  -- version in force now, never at one carried over from before.
   update public.client_compliance_universe_items item
-     set pending_requirement_id = null, pending_requirement_version_id = null
-   where item.registration_unit_id = p_registration_unit_id
-     and item.pending_requirement_version_id is not null;
+     set pending_requirement_id = case when item.pending_decision in ('in_scope', 'out_of_scope')
+           and (item.requirement_id, item.requirement_version_id) is distinct from (governed_now.requirement_id, governed_now.requirement_version_id)
+           then governed_now.requirement_id end,
+         pending_requirement_version_id = case when item.pending_decision in ('in_scope', 'out_of_scope')
+           and (item.requirement_id, item.requirement_version_id) is distinct from (governed_now.requirement_id, governed_now.requirement_version_id)
+           then governed_now.requirement_version_id end
+    from public.client_compliance_universe_items source
+    left join lateral public.requirement_for_form(source.form_number) governed_now on true
+   where source.id = item.id
+     and item.registration_unit_id = p_registration_unit_id
+     and item.pending_source = 'manual';
   -- A person's decision recorded against an earlier profile is withdrawn when
   -- the profile changes; it must be recorded again against this one.
   update public.client_compliance_universe_items item
@@ -276,6 +286,23 @@ begin
       if found then
         proposed := proposed + 1;
       end if;
+    else
+      -- No governed requirement is in force any more (retired or expired):
+      -- an approved return is proposed back to Requires review for the Tax
+      -- Team, never left silently approved.
+      update public.client_compliance_universe_items item
+         set pending_decision = 'unresolved',
+             pending_reason = 'The governing BIR requirement is no longer in force; the Tax Team must review it.',
+             pending_by = auth.uid(),
+             pending_at = now(),
+             pending_source = 'requirement_version'
+       where item.registration_unit_id = p_registration_unit_id
+         and item.form_number = form_code
+         and item.selection_status = 'approved'
+         and item.pending_decision is null;
+      if found then
+        proposed := proposed + 1;
+      end if;
     end if;
     if exists (
       select 1 from public.client_compliance_universe_items item
@@ -329,7 +356,7 @@ begin
      and item.selection_status = 'excluded'
      and item.decision_reason = 'Removed from the validated Tax Profile.'
      and item.pending_decision is null
-     and item.requirement_id is not null
+     and (select governed_now.requirement_id from public.requirement_for_form(item.form_number) governed_now) is not null
      and item.form_number = any (
        select upper(trim(value)) from jsonb_array_elements_text(coalesce(profile.profile_data -> 'registeredReturnCodes', '[]'::jsonb)) as value
      );
@@ -691,6 +718,20 @@ begin
      order by candidate.effective_from desc limit 1;
     if approved_item.id is null then
       skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The return is not approved In TMF Scope.'));
+      continue;
+    end if;
+    -- The approved requirement and version must still be in force.
+    if not exists (
+      select 1 from public.bir_requirements requirement
+      join public.bir_requirement_versions version on version.requirement_id = requirement.id
+      where requirement.id = approved_item.requirement_id
+        and version.id = approved_item.requirement_version_id
+        and requirement.status = 'active' and version.status = 'approved'
+        and (requirement.effective_to is null or requirement.effective_to >= current_date)
+        and version.effective_from <= current_date
+        and (version.effective_to is null or version.effective_to >= current_date)
+    ) then
+      skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The approved BIR requirement is no longer in force; propose again for Tax Team review.'));
       continue;
     end if;
 

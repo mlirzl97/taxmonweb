@@ -104,6 +104,12 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toContain("is distinct from (governed_now.requirement_id, governed_now.requirement_version_id)");
   });
 
+  it("flags approvals whose governing requirement is retired, and restores requirement-less exclusions once governed", () => {
+    expect(migration).toContain("'The governing BIR requirement is no longer in force; the Tax Team must review it.'");
+    expect(migration).toContain("'The approved BIR requirement is no longer in force; propose again for Tax Team review.'");
+    expect(migration).toContain("and (select governed_now.requirement_id from public.requirement_for_form(item.form_number) governed_now) is not null");
+  });
+
   it("turns an unresolved return into a candidate once a governed requirement is active", () => {
     expect(migration).toMatch(/and item\.selection_status = 'unresolved'\s+and item\.requirement_id is null/);
   });
