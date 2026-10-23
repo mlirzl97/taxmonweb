@@ -303,11 +303,16 @@ begin
              pending_reason = 'The governing BIR requirement is no longer in force; the Tax Team must review it.',
              pending_by = auth.uid(),
              pending_at = now(),
-             pending_source = 'requirement_version'
+             pending_source = 'requirement_version',
+             pending_requirement_id = null,
+             pending_requirement_version_id = null
        where item.registration_unit_id = p_registration_unit_id
          and item.form_number = form_code
          and item.selection_status = 'approved'
-         and item.pending_decision is null;
+         -- A person's scope decision cannot stand without a governed
+         -- requirement; it gives way to Requires review.
+         and (item.pending_decision is null
+              or (item.pending_source = 'manual' and item.pending_decision in ('in_scope', 'out_of_scope')));
       if found then
         proposed := proposed + 1;
       end if;
@@ -806,11 +811,25 @@ begin
       continue;
     end if;
     if approved_item.requirement_version_id is not null then
-      if governed_version_id is not null and governed_version_id <> approved_item.requirement_version_id then
+      -- A backlog period may cite the earlier version that governed it: an
+      -- approved version of the same requirement that took effect before the
+      -- approved one and covers the period. A newer version still needs an
+      -- authorized move.
+      if governed_version_id is not null and governed_version_id <> approved_item.requirement_version_id
+         and not exists (
+           select 1 from public.bir_requirement_versions earlier
+           join public.bir_requirement_versions approved_version on approved_version.id = approved_item.requirement_version_id
+           where earlier.id = governed_version_id
+             and earlier.requirement_id = approved_item.requirement_id
+             and earlier.status in ('approved', 'superseded')
+             and earlier.effective_from < approved_version.effective_from
+             and earlier.effective_from <= item_period_start
+             and (earlier.effective_to is null or earlier.effective_to >= item_period_start)
+         ) then
         skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The calendar row is on a newer requirement version than the one approved; it needs an authorized impact decision before work moves to it.'));
         continue;
       end if;
-      governed_version_id := approved_item.requirement_version_id;
+      governed_version_id := coalesce(governed_version_id, approved_item.requirement_version_id);
     end if;
     if governed_version_id is null then
       select version.id into governed_version_id from public.bir_requirement_versions version

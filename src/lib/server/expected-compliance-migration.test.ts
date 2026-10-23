@@ -115,6 +115,11 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toContain("'No active, approved BIR requirement carries this return any more; the Tax Team must review it.'");
   });
 
+  it("accepts a backlog period on the earlier version that governed it, and replaces scope decisions when governance retires", () => {
+    expect(migration).toContain("and earlier.effective_from < approved_version.effective_from");
+    expect(migration).toContain("or (item.pending_source = 'manual' and item.pending_decision in ('in_scope', 'out_of_scope')));");
+  });
+
   it("turns an unresolved return into a candidate once a governed requirement is active", () => {
     expect(migration).toMatch(/and item\.selection_status = 'unresolved'\s+and item\.pending_decision is null\s+-- No requirement, or one that is no longer in force/);
   });

@@ -26,7 +26,8 @@ type RouteContext = { params: Promise<{ clientId: string }> };
  */
 function registrationUnitId(client: PortfolioClient, requested: unknown) {
   const units = client.taxpayer_entities.flatMap((entity) => entity.registration_units);
-  if (typeof requested === "string" && requested) return units.find((unit) => unit.id === requested)?.id ?? null;
+  // Only an active Registration Unit can propose, approve or generate.
+  if (typeof requested === "string" && requested) return units.find((unit) => unit.id === requested && unit.active)?.id ?? null;
   return (units.find((unit) => unit.active && unit.unit_kind === "head_office") ?? units.find((unit) => unit.active))?.id ?? null;
 }
 
