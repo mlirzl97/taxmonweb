@@ -126,7 +126,7 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId: initia
 
   return <section className="dossier-section" id="client-expected-compliance">
     <SectionHeading detail="What this Registration Unit is expected to file, and whether TMF handles it. Approval generates the work; generating again never duplicates." title="Expected Compliance" />
-    {selectableUnits.length > 1 && <label className="expected-compliance-unit"><span className="meta-label">Registration Unit</span><select aria-label="Registration Unit" disabled={busy} onChange={(event) => { setRegistrationUnitId(event.target.value); setItems([]); setState("loading"); setDrafts({}); setMessage(null); }} value={registrationUnitId ?? ""}>{selectableUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name} · {unit.type}</option>)}</select></label>}
+    {selectableUnits.length > 1 && <label className="expected-compliance-unit"><span className="meta-label">Registration Unit</span><select aria-label="Registration Unit" disabled={busy} onChange={(event) => { setRegistrationUnitId(event.target.value); setItems([]); setState("loading"); setDrafts({}); setMessage(null); setWaiting([]); }} value={registrationUnitId ?? ""}>{selectableUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name} · {unit.type}</option>)}</select></label>}
     {state === "loading" && <div className="inline-empty" role="status">Loading Expected Compliance…</div>}
     {state === "error" && <div className="inline-empty" role="alert">Expected Compliance could not be loaded. Refresh to try again.</div>}
     {state === "ready" && <>
