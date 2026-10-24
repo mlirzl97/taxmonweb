@@ -2,6 +2,8 @@ import type { FixtureDataReadiness, FixtureScope, FixtureStatus, FixtureWorkComp
 import type { LiveGeneratedWork } from "@/lib/server/generated-work-repository";
 import type { WorkflowArchiveFacts } from "@/lib/workflow-state";
 
+import { familyForForm } from "./return-families";
+
 type UserNameMap = ReadonlyMap<string, string>;
 
 function firstRelation<T>(value: T | T[] | null | undefined): T | null {
@@ -187,6 +189,7 @@ export function adaptLiveGeneratedWork(work: LiveGeneratedWork, userNames: UserN
     return { id: stepId, label, state, detail: "State is read from the governed compliance work record." };
   });
   const components = work.generated_compliance_work_components.map((component) => ({ label: componentLabel(component), state: componentState(component), deadline: component.statutory_deadline, detail: `${component.label}${component.statutory_deadline ? ` · statutory ${component.statutory_deadline}` : ""}` }));
+  const generatedForm = typeof work.source_context?.formNumber === "string" ? work.source_context.formNumber : undefined;
   const blocker = work.data_readiness === "not_ready" ? { category: "CLIENT DATA" as const, reason: "Data readiness is not confirmed." } : work.engagement_status === "open" && work.rag_status === "red" ? { category: "INTERNAL" as const, reason: "This work object is carrying a red control signal." } : undefined;
   return {
     id: work.id,
@@ -198,7 +201,9 @@ export function adaptLiveGeneratedWork(work: LiveGeneratedWork, userNames: UserN
     entity: entity?.display_name ?? "Taxpayer entity unresolved",
     registrationUnitId: unit?.id ?? work.registration_unit_id,
     registrationUnit: unit?.display_name ?? "Registration unit unresolved",
-    title: requirement ? `${requirement.requirement_code} · ${requirement.requirement_name}` : "Requirement unresolved",
+    // Generated work names its own return: one BIR requirement can carry
+    // several (e.g. 0619-E on the combined 1601-C calendar rows).
+    title: generatedForm ? `${generatedForm} · ${familyForForm(generatedForm)?.label ?? requirement?.requirement_name ?? "Return"}` : requirement ? `${requirement.requirement_code} · ${requirement.requirement_name}` : "Requirement unresolved",
     period: work.period_label,
     ...(work.period_key ? { periodKey: work.period_key } : {}),
     detail: work.engagement_status === "complete" ? "Complete" : work.lifecycle_stage.replaceAll("_", " "),
@@ -208,7 +213,8 @@ export function adaptLiveGeneratedWork(work: LiveGeneratedWork, userNames: UserN
     statusReason: work.statutory_deadline_missed ? "Statutory deadline missed." : work.internal_target_missed ? "TMF package target missed." : "Projected from the governed work state.",
     deadline: deadline.value,
     deadlineType: deadline.type,
-    dueDate: work.adjusted_statutory_deadline ?? work.base_statutory_deadline,
+    // An elected optional return has a TMF due date and no BIR deadline.
+    dueDate: work.adjusted_statutory_deadline ?? work.base_statutory_deadline ?? work.source_context?.dueDate ?? null,
     owner,
     assignedUsers: Object.fromEntries(([
       ["PREPARER", work.preparer_user_id],

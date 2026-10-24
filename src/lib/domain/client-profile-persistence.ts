@@ -152,6 +152,10 @@ function weightLabel(weight: number): string {
 }
 
 /** Use the assigned operating weight when a source reconciliation weight is unavailable. */
+function isPlaceholderLabel(value: unknown): boolean {
+  return typeof value !== "string" || /^\s*(unassigned|unresolved|needs review|not configured)?\s*$/i.test(value);
+}
+
 // A saved id wins. A label-only save inherits the current owner's id only when
 // it names that same person, so a stale label never borrows someone's id.
 function restoredUserId(savedUserId: unknown, savedLabel: unknown, baseLabel: string, baseUserId: string | undefined): string | undefined {
@@ -222,16 +226,19 @@ export function applyPersistedTaxProfileSnapshot(
     lastValidated: hasRecordedValidation ? snapshot.validatedAt ?? undefined : undefined,
     validator: hasRecordedValidation ? snapshot.validatedBy ?? undefined : undefined,
   };
+  // A placeholder in an older snapshot is the absence of a fact; it never
+  // hides the owner or placement currently in force.
+  const savedFact = (value: unknown) => (isPlaceholderLabel(value) ? undefined : value);
   const assignment: FixtureAssignment = {
     ...baseAssignment,
-    preparer: text(savedAssignment.preparer, baseAssignment.preparer),
-    checker: text(savedAssignment.checker, baseAssignment.checker),
-    reviewer: text(savedAssignment.reviewer, baseAssignment.reviewer),
-    preparerUserId: restoredUserId(savedAssignment.preparerUserId, savedAssignment.preparer, baseAssignment.preparer, baseAssignment.preparerUserId),
-    checkerUserId: restoredUserId(savedAssignment.checkerUserId, savedAssignment.checker, baseAssignment.checker, baseAssignment.checkerUserId),
-    reviewerUserId: restoredUserId(savedAssignment.reviewerUserId, savedAssignment.reviewer, baseAssignment.reviewer, baseAssignment.reviewerUserId),
-    tower: text(savedAssignment.tower, baseAssignment.tower),
-    cluster: text(savedAssignment.cluster, baseAssignment.cluster),
+    preparer: text(savedFact(savedAssignment.preparer), baseAssignment.preparer),
+    checker: text(savedFact(savedAssignment.checker), baseAssignment.checker),
+    reviewer: text(savedFact(savedAssignment.reviewer), baseAssignment.reviewer),
+    preparerUserId: restoredUserId(savedAssignment.preparerUserId, savedFact(savedAssignment.preparer), baseAssignment.preparer, baseAssignment.preparerUserId),
+    checkerUserId: restoredUserId(savedAssignment.checkerUserId, savedFact(savedAssignment.checker), baseAssignment.checker, baseAssignment.checkerUserId),
+    reviewerUserId: restoredUserId(savedAssignment.reviewerUserId, savedFact(savedAssignment.reviewer), baseAssignment.reviewer, baseAssignment.reviewerUserId),
+    tower: text(savedFact(savedAssignment.tower), baseAssignment.tower) as FixtureAssignment["tower"],
+    cluster: text(savedFact(savedAssignment.cluster), baseAssignment.cluster),
     effectiveFrom: text(savedAssignment.effectiveFrom, snapshot.effectiveFrom),
   };
   return { profile, assignment };

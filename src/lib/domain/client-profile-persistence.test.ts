@@ -38,6 +38,27 @@ describe("Tax Profile validation indicator", () => {
     expect(hasCredibleTaxProfileValidation(restored.profile)).toBe(false);
   });
 
+  it("never lets a placeholder in an older snapshot hide the owners and placement in force", () => {
+    const client = fixtureClients.find((item) => item.id === "fixture-client-04");
+    const profile = client?.entities[0]?.profile;
+    const assignment = client?.assignment;
+    expect(profile && assignment).toBeTruthy();
+    if (!profile || !assignment) return;
+    const live = { ...assignment, preparer: "Live Preparer", preparerUserId: "user-live-preparer", cluster: "Live Cluster" };
+
+    const restored = applyPersistedTaxProfileSnapshot(profile, live, {
+      state: "ready_for_validation",
+      effectiveFrom: "2026-10-21",
+      profile: {},
+      assignment: { preparer: "Unassigned", cluster: "Unresolved", tower: "Unresolved" },
+    });
+
+    expect(restored.assignment.preparer).toBe("Live Preparer");
+    expect(restored.assignment.preparerUserId).toBe("user-live-preparer");
+    expect(restored.assignment.cluster).toBe("Live Cluster");
+    expect(restored.assignment.tower).toBe(assignment.tower);
+  });
+
   it("round-trips governed tax type codes separately from source wording", () => {
     const client = fixtureClients.find((item) => item.id === "fixture-client-04");
     const profile = client?.entities[0]?.profile;
@@ -86,8 +107,9 @@ describe("Tax Profile validation indicator", () => {
     });
 
     expect(restored.assignment.preparerUserId).toBe("user-totoy-2");
-    expect(restored.assignment.checker).toBe("Unassigned");
-    expect(restored.assignment.checkerUserId).toBeUndefined();
+    // A saved "Unassigned" is a placeholder; it keeps the checker in force.
+    expect(restored.assignment.checker).toBe("Marites Chismosa");
+    expect(restored.assignment.checkerUserId).toBe("user-marites");
   });
 
   it("removes resolved setup and assignment issues from the attention projection", () => {

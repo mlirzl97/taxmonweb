@@ -25,7 +25,9 @@ export function MonthYearPicker({ label, value, onChange, minMonth }: { label: s
   const currentYear = new Date().getFullYear();
   const minYear = minMonth ? Number(minMonth.slice(0, 4)) : currentYear - 2;
   const firstYear = Math.min(minYear, selectedYear ? Number(selectedYear) : minYear);
-  const years = Array.from({ length: Math.max(currentYear + 2, firstYear) - firstYear + 1 }, (_, index) => String(firstYear + index));
+  // Offer at least five years past today, the go-live year and any saved year.
+  const lastYear = Math.max(currentYear + 5, minYear + 5, selectedYear ? Number(selectedYear) : 0);
+  const years = Array.from({ length: lastYear - firstYear + 1 }, (_, index) => String(firstYear + index));
   const isBeforeMin = (year: string, month: string) => Boolean(minMonth && year && `${year}-${month}` < minMonth);
 
   function choose(year: string, month: string) {
