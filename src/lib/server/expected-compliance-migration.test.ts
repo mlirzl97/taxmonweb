@@ -145,6 +145,13 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toContain("where relation.requirement_version_id = version.id");
   });
 
+  it("re-applies the approved profile's go-live and year basis at the command boundary", () => {
+    expect(migration).toContain("'The due date is on or before the go-live date.'");
+    expect(migration).toContain("'The period is not one of the client''s fiscal quarters or its fiscal year.'");
+    expect(migration).toContain("'A fiscal-period calendar row does not apply to this client''s year basis.'");
+    expect(migration).toContain("'The fiscal year does not end on a calendar quarter-end; VAT and percentage-tax dates need Tax Team review.'");
+  });
+
   it("takes only requirement versions in force today", () => {
     expect(migration).toContain("and version.effective_from <= current_date");
     expect(migration).toContain("and (requirement.effective_to is null or requirement.effective_to >= current_date)");

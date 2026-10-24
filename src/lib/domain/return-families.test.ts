@@ -69,6 +69,15 @@ describe("return families", () => {
     expect(byForm("0619-F")).toHaveLength(0);
   });
 
+  it("projects one row per candidate form for a multi-form requirement outside the families", () => {
+    const joined = { ...row("vt-pt", "Withholding of VAT and Percentage Tax. Month of May 2026", "2026-06-10"), formNumber: "1600-VT · 1600-PT" };
+    const { rows } = projectReturnFamilyCalendar(client(), ["1600-PT"], [joined], 2026);
+    expect(rows.map((candidate) => [candidate.id, candidate.formNumber])).toEqual([["vt-pt:1600-PT", "1600-PT"]]);
+    // A row for a form the client does not file passes through unchanged.
+    const other = { ...joined, id: "other" };
+    expect(projectReturnFamilyCalendar(client(), ["1601-C"], [other], 2026).rows.map((candidate) => candidate.formNumber)).toEqual(["1600-VT · 1600-PT"]);
+  });
+
   it("keeps a released TMF target, such as a Tax Team override, instead of recalculating it", () => {
     const overridden = { ...april[0], tmfPackageTarget: "2026-05-07" };
     const { rows } = projectReturnFamilyCalendar(client(), ["1601-C"], [overridden, april[1]], 2026);

@@ -125,7 +125,16 @@ export function projectReturnFamilyCalendar(client: FixtureClient, candidateForm
     const enteredRow = named.length === 0 && Boolean(familyForForm(ownForm));
     if (enteredRow) named.push(ownForm);
     if (named.length === 0) {
-      passThrough.push(row);
+      // A requirement that carries several forms outside the families
+      // (e.g. 1600-VT and 1600-PT) projects one row per candidate form, so
+      // each approved return finds its own row.
+      const joinedForms = (row.formNumber ?? "").split(" · ").map((form) => form.trim().toUpperCase()).filter(Boolean);
+      const candidateOwn = joinedForms.filter((form) => candidates.has(form));
+      if (joinedForms.length > 1 && candidateOwn.length > 0) {
+        for (const form of candidateOwn) passThrough.push({ ...row, id: `${row.id}:${form}`, formNumber: form });
+      } else {
+        passThrough.push(row);
+      }
       continue;
     }
     const fiscalLabel = /fiscal/i.test(label);

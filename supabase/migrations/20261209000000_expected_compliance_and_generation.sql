@@ -683,6 +683,9 @@ declare
   approved_profile public.tax_profile_versions;
   tmf_target date;
   first_period date;
+  go_live date;
+  fy_end_month integer;
+  period_end_month integer;
   item jsonb;
   form_code text;
   item_kind text;
@@ -740,6 +743,15 @@ begin
   if coalesce(approved_profile.profile_data ->> 'firstPeriodToFile', '') ~ '^\d{4}-(0[1-9]|1[0-2])$' then
     first_period := (approved_profile.profile_data ->> 'firstPeriodToFile' || '-01')::date;
   end if;
+  if coalesce(approved_profile.profile_data ->> 'goLiveDate', '') ~ '^\d{4}-\d{2}-\d{2}$' then
+    go_live := (approved_profile.profile_data ->> 'goLiveDate')::date;
+  end if;
+  -- A fiscal-year client's year-end month (1-12), as the Service Calendar reads it.
+  if approved_profile.profile_data ->> 'taxYearBasis' = 'Fiscal year' then
+    fy_end_month := array_position(
+      array['january','february','march','april','may','june','july','august','september','october','november','december'],
+      lower(substring(coalesce(approved_profile.profile_data ->> 'fiscalYearEnd', '') from '^\s*([A-Za-z]+)')));
+  end if;
 
   -- Owners in force today are the accountability snapshot.
   select assignment.user_id into preparer_id from public.registration_unit_team_assignments assignment
@@ -779,6 +791,25 @@ begin
     if first_period is not null and item_period_start < first_period then
       skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The period is before the first period to file.'));
       continue;
+    end if;
+    -- The approved profile's calendar rules hold here too, mirroring the
+    -- Service Calendar projection (return-families.ts): nothing due on or
+    -- before go-live, and the year basis decides which periods apply.
+    if go_live is not null and due_date <= go_live then
+      skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The due date is on or before the go-live date.'));
+      continue;
+    end if;
+    if fy_end_month is not null and form_code in ('2550M', '2550Q', '2551M', '2551Q') and fy_end_month % 3 <> 0 then
+      skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The fiscal year does not end on a calendar quarter-end; VAT and percentage-tax dates need Tax Team review.'));
+      continue;
+    end if;
+    if fy_end_month is not null and form_code in ('1702Q', '1702-RT', '1702-EX', '1702-MX') then
+      period_end_month := extract(month from item_period_start + case when form_code = '1702Q' then interval '2 months' else interval '11 months' end)::integer;
+      if (form_code = '1702Q' and (period_end_month = fy_end_month or (fy_end_month - period_end_month + 12) % 3 <> 0))
+         or (form_code <> '1702Q' and period_end_month <> fy_end_month) then
+        skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The period is not one of the client''s fiscal quarters or its fiscal year.'));
+        continue;
+      end if;
     end if;
 
     select * into approved_item from public.client_compliance_universe_items candidate
@@ -848,6 +879,12 @@ begin
       -- Every date, including an elected optional return's TMF due date, comes
       -- from a row the Tax Team has released; none is computed here.
       skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'This return needs a published calendar row.'));
+      continue;
+    end if;
+    -- A fiscal-period row applies only to a fiscal-year client's income tax.
+    if entry.period_or_event ~* 'fiscal'
+       and (fy_end_month is null or form_code not in ('1702Q', '1702-RT', '1702-EX', '1702-MX')) then
+      skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'A fiscal-period calendar row does not apply to this client''s year basis.'));
       continue;
     end if;
     -- The TMF package target follows the approved profile: a client with its

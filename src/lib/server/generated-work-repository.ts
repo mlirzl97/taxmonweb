@@ -315,7 +315,9 @@ export async function listLiveClientCalendarEntries(requirementIds: readonly str
       published_operational_deadline,
       publication_status,
       monthly_calendar_versions!inner(calendar_month, status),
-      bir_requirements!inner(requirement_code, requirement_name, operating_category, frequency_label),
+      bir_requirements!inner(requirement_code, requirement_name, operating_category, frequency_label,
+        bir_requirement_versions(status, requirement_version_forms(relationship_type, bir_forms(form_number)))
+      ),
       bir_requirement_versions(
         requirement_version_forms(
           relationship_type,
@@ -339,7 +341,16 @@ export async function listLiveClientCalendarEntries(requirementIds: readonly str
     // Forms hang off the requirement version; there is no direct calendar-entry link.
     const requirementVersion = Array.isArray(row.bir_requirement_versions) ? row.bir_requirement_versions[0] : row.bir_requirement_versions;
     const versionForms = requirementVersion && typeof requirementVersion === "object" ? (requirementVersion as { requirement_version_forms?: unknown }).requirement_version_forms : undefined;
-    const forms = Array.isArray(versionForms) ? versionForms : [];
+    // A row that cites no version takes its forms from the requirement's
+    // approved or superseded versions; generation re-checks the one that
+    // governed the period.
+    const requirementVersions = requirement && typeof requirement === "object" ? (requirement as { bir_requirement_versions?: unknown }).bir_requirement_versions : undefined;
+    const fallbackForms = typeof row.requirement_version_id === "string" || !Array.isArray(requirementVersions) ? [] : requirementVersions.flatMap((version) => {
+      if (!version || typeof version !== "object") return [];
+      const { status, requirement_version_forms: relations } = version as { status?: unknown; requirement_version_forms?: unknown };
+      return (status === "approved" || status === "superseded") && Array.isArray(relations) ? relations : [];
+    });
+    const forms = Array.isArray(versionForms) && versionForms.length > 0 ? versionForms : fallbackForms;
     const formNumbers = forms.flatMap((relation) => {
       if (!relation || typeof relation !== "object") return [];
       const form = (relation as { bir_forms?: unknown }).bir_forms;
