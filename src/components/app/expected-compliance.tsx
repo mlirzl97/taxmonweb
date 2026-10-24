@@ -16,7 +16,7 @@ type Item = {
 };
 
 type Permissions = { canPropose: boolean; canApprove: boolean; canGenerate: boolean };
-type Generation = { created: number; existing: number; skipped: { reason: string }[] };
+type Generation = { created: number; existing: number; skipped: { reason: string }[]; waiting?: { form: string; period: string; status: string }[] };
 
 const decisions = [
   { value: "in_scope", label: "Applicable · In TMF Scope" },
@@ -37,7 +37,12 @@ function generationSummary(generation: Generation) {
   const skipped = generation.skipped.length;
   return `${generation.created} work item${generation.created === 1 ? "" : "s"} generated` +
     (generation.existing > 0 ? ` · ${generation.existing} already existed` : "") +
-    (skipped > 0 ? ` · ${skipped} held back: ${[...new Set(generation.skipped.map((item) => item.reason))].join(" ")}` : "");
+    (skipped > 0 ? ` · ${skipped} held back: ${[...new Set(generation.skipped.map((item) => item.reason))].join(" ")}` : "") +
+    (waitingCount(generation) > 0 ? ` · ${waitingCount(generation)} waiting on the Tax Team calendar (listed below)` : "");
+}
+
+function waitingCount(generation: Generation) {
+  return generation.waiting?.length ?? 0;
 }
 
 /**
@@ -55,6 +60,8 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId: initia
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // Approved returns whose period the Tax Team has not published yet.
+  const [waiting, setWaiting] = useState<NonNullable<Generation["waiting"]>>([]);
   const [drafts, setDrafts] = useState<Record<string, { decision: string; reason: string }>>({});
 
   const [reloadKey, setReloadKey] = useState(0);
@@ -83,11 +90,14 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId: initia
   async function command(body: Record<string, unknown>, success: (payload: Record<string, unknown>) => string): Promise<{ error?: string }> {
     setBusy(true);
     setMessage(null);
+    setWaiting([]);
     try {
       const response = await fetch(`/api/clients/${encodeURIComponent(clientId)}/expected-compliance`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, registrationUnitId }) });
       const payload = await response.json() as Record<string, unknown> & { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "The command could not be applied.");
       setMessage(success(payload));
+      const generation = payload.generation as Generation | undefined;
+      setWaiting(generation?.waiting ?? []);
       return {};
     } catch (error) {
       const text = error instanceof Error ? error.message : "The command could not be applied.";
@@ -150,6 +160,7 @@ export function ExpectedComplianceSection({ clientId, registrationUnitId: initia
       </div>
       {(approval?.openWorkFromEarlierProfile ?? 0) > 0 && <div className="inline-empty" role="note">{approval?.openWorkFromEarlierProfile} open work item{approval?.openWorkFromEarlierProfile === 1 ? "" : "s"} came from an earlier Tax Profile version; each needs a keep, cancel or supersede decision before it is relied on.</div>}
       {message && <div className="saved-notice" role="status">{message}</div>}
+      {waiting.length > 0 && <div className="inline-empty" role="note"><strong>Waiting on the Tax Team calendar</strong> · no work is created until the due date is published. These are not missed; they are not yet scheduled.<ul>{waiting.map((row) => <li key={`${row.form}|${row.period}`}>{row.form} · {row.period} · {row.status === "unresolved" ? "deadline unresolved" : "awaiting Tax Team publication"}</li>)}</ul></div>}
     </>}
   </section>;
 }
