@@ -66,6 +66,8 @@ export const staffAccessProfiles: readonly StaffAccessProfileDefinition[] = [
       "MaintainDeadlineControl",
       "ManageWorkPeriodLock",
       "PerformWorkQA",
+      "ApproveComplianceUniverse",
+      "PerformElevatedOverride",
     ],
   },
 ] as const;

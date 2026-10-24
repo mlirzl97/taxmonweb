@@ -152,6 +152,10 @@ describe("Expected Compliance and generation migration", () => {
     expect(migration).toContain("'The fiscal year does not end on a calendar quarter-end; VAT and percentage-tax dates need Tax Team review.'");
   });
 
+  it("provisions the HOD bundle with Expected Compliance approval and Elevated Override", () => {
+    expect(migration).toContain("'MaintainGeneratedComplianceWork', 'MaintainDeadlineControl', 'ManageWorkPeriodLock', 'PerformWorkQA',\n      'ApproveComplianceUniverse', 'PerformElevatedOverride'");
+  });
+
   it("takes only requirement versions in force today", () => {
     expect(migration).toContain("and version.effective_from <= current_date");
     expect(migration).toContain("and (requirement.effective_to is null or requirement.effective_to >= current_date)");
