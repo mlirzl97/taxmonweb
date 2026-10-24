@@ -115,5 +115,5 @@ export async function loadClientServiceCalendar(client: FixtureClient, year: num
       .filter((row, index, all) => all.findIndex((other) => periodKey(other) === periodKey(row)) === index);
   }
   const projection = getClientServiceCalendarRows(client, year, {}, [...families.rows, ...heldRows]);
-  return { ...projection, notices };
+  return { ...projection, notices, heldUnavailable: heldPeriods === null };
 }

@@ -53,6 +53,7 @@ describe("client service calendar: periods waiting on the Tax Team", () => {
     expect(calendar.heldRows).toHaveLength(1);
     expect(calendar.heldRows[0]).toMatchObject({ formNumber: "1601-C", periodStartDate: "2026-09-01", publishedOperationalDeadline: null, adjustedStatutoryDeadline: null });
     expect(held).toHaveBeenCalledWith("unit-1", ["req-1601c"], 2026);
+    expect(calendar.heldUnavailable).toBe(false);
   });
 
   it("does not list a period as held when a published row already covers it", async () => {
@@ -75,5 +76,6 @@ describe("client service calendar: periods waiting on the Tax Team", () => {
     held.mockResolvedValue(null);
     const calendar = await loadClientServiceCalendar(client(), 2026, ["1601-C"]);
     expect(calendar.notices.join(" ")).toContain("cannot be listed until the latest database update is applied");
+    expect(calendar.heldUnavailable).toBe(true);
   });
 });

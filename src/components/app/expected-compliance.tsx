@@ -16,7 +16,7 @@ type Item = {
 };
 
 type Permissions = { canPropose: boolean; canApprove: boolean; canGenerate: boolean };
-type Generation = { created: number; existing: number; skipped: { reason: string }[]; waiting?: { form: string; period: string; status: string }[] };
+type Generation = { created: number; existing: number; skipped: { reason: string }[]; waiting?: { form: string; period: string; status: string }[]; waitingUnavailable?: boolean };
 
 const decisions = [
   { value: "in_scope", label: "Applicable · In TMF Scope" },
@@ -38,7 +38,8 @@ function generationSummary(generation: Generation) {
   return `${generation.created} work item${generation.created === 1 ? "" : "s"} generated` +
     (generation.existing > 0 ? ` · ${generation.existing} already existed` : "") +
     (skipped > 0 ? ` · ${skipped} held back: ${[...new Set(generation.skipped.map((item) => item.reason))].join(" ")}` : "") +
-    (waitingCount(generation) > 0 ? ` · ${waitingCount(generation)} waiting on the Tax Team calendar (listed below)` : "");
+    (waitingCount(generation) > 0 ? ` · ${waitingCount(generation)} waiting on the Tax Team calendar (listed below)` : "") +
+    (generation.waitingUnavailable ? " · Returns waiting on the Tax Team calendar could not be checked until the latest database update is applied" : "");
 }
 
 function waitingCount(generation: Generation) {
