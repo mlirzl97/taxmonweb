@@ -163,7 +163,7 @@ Future documents may refine configuration values, role-capability mappings, appr
 
 ## HOD operating decisions
 
-The HOD (domain owner) made these decisions on 2026-10-22 while reviewing the live prototype. They configure locked mechanisms; they do not reopen them.
+The HOD (domain owner) made these decisions from 2026-10-22, while reviewing the live prototype. They configure locked mechanisms; they do not reopen them.
 
 | ID | Area | Decision | Consequence |
 |---|---|---|---|
@@ -177,6 +177,12 @@ The HOD (domain owner) made these decisions on 2026-10-22 while reviewing the li
 | H-008 | Weekends and holidays | TMF dates never move for weekends or holidays. | The internal target is simply one day before the due date. |
 | H-009 | Year basis | Withholding, VAT and percentage tax follow calendar quarters. A fiscal-year client's VAT quarters coincide with calendar quarters when the fiscal year ends in March, June, September or December; any other year-end is held for Tax Team review. Corporate income tax follows the client's fiscal year: 1702Q 60 days after each of fiscal quarters 1–3, the annual 1702 on the 15th day of the 4th month after year-end. | The HOD confirmed VAT on calendar quarters from team experience. Regulation text (RR 16-2005 / RR 13-2018 §4.114-1) ties the VAT taxable quarter to the income-tax quarter; this agrees when the year-end is quarter-aligned. |
 | H-010 | Deadline release | A deadline is confirmed by one person and published by a different person. A published deadline changes only through Override: a superseding row with a required reason, keeping the original in history. A TMF override (e.g. the 10th moved to the 11th) is distinct from a BIR statutory date, which changes only with its BIR issuance as source. | The confirm/publish separation and Override are not yet built (calendar governance PR). |
+| H-011 | Elevated Override | Only the HOD holds Elevated Override (`PerformElevatedOverride`). It lets an approver approve decisions they recorded themselves, marked and audited; it never fabricates an external fact. | Decided 2026-10-23. Granted to the HOD sign-in "Liezl Maigue" only (see H-016). The HOD staff-provisioning bundle carries it. |
+| H-012 | Expected Compliance approval | Expected Compliance is approved by the HOD or any of the three cluster leaders (`ApproveComplianceUniverse`). Nobody approves decisions they recorded themselves, except by Elevated Override. | Decided 2026-10-23. Granted individually to the cluster leaders, not through the Team Lead bundle, because that bundle also covers tower leaders. |
+| H-013 | Changes to existing work | When a profile, requirement or scope change affects work already generated, the keep / cancel / rebase / supersede decision is made on its own screen in its own PR. Until then, affected work is flagged and held, never changed silently. | Decided 2026-10-23. Not yet built. |
+| H-014 | First period to file | A client that starts mid-quarter or mid-year files the whole period's return: a period is filed when it covers the first period to file, even if it starts earlier. A March start files that year's Q1 quarterly returns and annual returns. | Decided 2026-10-24. Monthly periods before the first period are still skipped. |
+| H-015 | Periods before TMF | Periods before TMF took the client over were filed by the client. Such work, if generated, is closed as "Filed outside TMF" with a reason and optional evidence, and never counts as late. | Decided 2026-10-24. The "Filed outside TMF" action comes with the H-013 screen. |
+| H-016 | One HOD sign-in | One HOD sign-in, "Liezl Maigue", holds the HOD's approval and override authority. The second sign-in keeps no such authority, so one person cannot act as two approvers. | Decided 2026-10-29. Its two grants were ended effective 2026-10-28 and audited as the HOD's action; the history is kept. |
 
 ## Deferred
 

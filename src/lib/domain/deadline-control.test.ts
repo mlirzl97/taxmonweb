@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { fixtureClients } from "@/lib/fixtures";
-import { buildDeadlineControlRows, compliancePeriodStartFromLabel, deadlineControlSummary, earliestApplicableDeadline, getClientServiceCalendarRows } from "./deadline-control";
+import { buildDeadlineControlRows, compliancePeriodLastMonth, compliancePeriodStartFromLabel, deadlineControlSummary, earliestApplicableDeadline, getClientServiceCalendarRows } from "./deadline-control";
 
 describe("deadline control projection", () => {
   it("generates a deterministic annual set with separate statutory and TMF dates", () => {
@@ -176,13 +176,40 @@ describe("deadline control projection", () => {
     expect(client).toBeDefined();
     expect(template).toBeDefined();
     const julyStart = { ...client!, entities: [{ ...client!.entities[0], profile: { ...client!.entities[0].profile, goLiveDate: "2026-01-01", firstPeriodToFile: " 2026-07 " } }] };
-    const released = (id: string, periodStartDate: string, deadline: string) => ({ ...template!, id, periodStartDate, publicationStatus: "published" as const, publishedOperationalDeadline: deadline, adjustedStatutoryDeadline: deadline });
+    // Monthly periods: a June period due in July is before a July start.
+    const released = (id: string, periodStartDate: string, deadline: string) => ({ ...template!, id, periodStartDate, cadence: "Monthly" as const, activityPeriod: periodStartDate ? `Month of ${periodStartDate}` : "Unknown", taxablePeriod: periodStartDate ? `Month of ${periodStartDate}` : "Unknown", publicationStatus: "published" as const, publishedOperationalDeadline: deadline, adjustedStatutoryDeadline: deadline });
     const projection = getClientServiceCalendarRows(julyStart, 2026, {}, [
       released("june-period-due-july", "2026-06-01", "2026-07-10"),
       released("july-period", "2026-07-01", "2026-08-10"),
       released("unknown-period", "", "2026-08-15"),
     ]);
     expect(projection.rows.map((row) => row.id)).toEqual(["july-period", "unknown-period"]);
+  });
+
+  it("files the whole quarter and year that cover the first period to file (H-014)", () => {
+    const client = fixtureClients.find((item) => item.id === "fixture-client-03");
+    const template = buildDeadlineControlRows(2026).find((row) => row.formNumber === "2550Q" && row.activityPeriod === "Q1 2026");
+    expect(client).toBeDefined();
+    expect(template).toBeDefined();
+    const marchStart = { ...client!, entities: [{ ...client!.entities[0], profile: { ...client!.entities[0].profile, goLiveDate: "2026-03-01", firstPeriodToFile: "2026-03" } }] };
+    const row = (id: string, label: string, periodStartDate: string, cadence: "Monthly" | "Quarterly" | "Annual", deadline: string) => ({ ...template!, id, activityPeriod: label, taxablePeriod: label, periodStartDate, cadence, publicationStatus: "published" as const, publishedOperationalDeadline: deadline, adjustedStatutoryDeadline: deadline });
+    const projection = getClientServiceCalendarRows(marchStart, 2026, {}, [
+      row("feb-month", "Month of February 2026", "2026-02-01", "Monthly", "2026-03-10"),
+      row("mar-month", "Month of March 2026", "2026-03-01", "Monthly", "2026-04-10"),
+      row("q1", "For the Quarter ending March 31, 2026", "2026-01-01", "Quarterly", "2026-04-25"),
+      row("q4-2025", "For the Quarter ending December 31, 2025", "2025-10-01", "Quarterly", "2026-04-26"),
+      row("year-2026", "Calendar Year 2026", "2026-01-01", "Annual", "2027-01-31"),
+    ]);
+    expect(projection.rows.map((candidate) => candidate.id).sort()).toEqual(["mar-month", "q1", "year-2026"]);
+  });
+
+  it("reads how long a compliance period is from its wording, else its cadence", () => {
+    const base = { periodStartDate: "2026-01-01", cadence: "Monthly" as const };
+    expect(compliancePeriodLastMonth({ ...base, activityPeriod: "1702Q", taxablePeriod: "For the Quarter ending March 31, 2026" })).toBe("2026-03-01");
+    expect(compliancePeriodLastMonth({ ...base, activityPeriod: "1604-C", taxablePeriod: "Calendar Year 2026" })).toBe("2026-12-01");
+    expect(compliancePeriodLastMonth({ ...base, activityPeriod: "Q1 2026", taxablePeriod: "Q1 2026" })).toBe("2026-03-01");
+    expect(compliancePeriodLastMonth({ ...base, activityPeriod: "1601-C", taxablePeriod: "Month of January 2026" })).toBe("2026-01-01");
+    expect(compliancePeriodLastMonth({ periodStartDate: "2025-06-01", cadence: "Annual", activityPeriod: "1702-RT", taxablePeriod: "2025" })).toBe("2026-05-01");
   });
 
   it("uses the earliest applicable component deadline as the master default", () => {
