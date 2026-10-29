@@ -7,22 +7,28 @@
 -- 2026 annual returns (1604-C, 1604-E, 1702-RT), although each covers March.
 -- A period is now skipped only when it ends before the first period to file.
 
--- How many months a calendar row's compliance period covers, read from its
--- own wording: "Quarter ending ..." is three months, a calendar, taxable or
--- fiscal year is twelve; anything else is one month.
-create or replace function public.compliance_period_months(p_label text)
+-- How many months a calendar row's compliance period covers, mirroring
+-- compliancePeriodLastMonth in the client calendar. The row's own wording comes
+-- first: "Quarter ending ..." or a Deadline Control label such as "Q1 2026" is
+-- three months; a year ending, calendar, taxable or fiscal year, or "FY 2026"
+-- is twelve; "Month of ..." is one. Otherwise the requirement's frequency
+-- decides, else one month.
+create or replace function public.compliance_period_months(p_label text, p_frequency text default null)
 returns integer
 language sql
 immutable
 set search_path = public, pg_temp
 as $$
   select case
-    when coalesce(p_label, '') ~* 'quarter ending' then 3
-    when coalesce(p_label, '') ~* '(year ending|calendar year|taxable year|fiscal year)' then 12
+    when coalesce(p_label, '') ~* '(quarter ending|\mQ[1-4]\M)' then 3
+    when coalesce(p_label, '') ~* '(year ending|calendar year|taxable year|fiscal year|\mFY\M)' then 12
+    when coalesce(p_label, '') ~* 'month of' then 1
+    when coalesce(p_frequency, '') ~* 'quarter' then 3
+    when coalesce(p_frequency, '') ~* 'annual' then 12
     else 1
   end;
 $$;
-revoke execute on function public.compliance_period_months(text) from public, anon, authenticated;
+revoke execute on function public.compliance_period_months(text, text) from public, anon, authenticated;
 
 create or replace function public.record_generated_compliance_work(p_registration_unit_id uuid, p_items jsonb)
 returns jsonb
@@ -234,7 +240,7 @@ begin
     -- starting in March files the Q1 quarterly return and that year's annual
     -- return. The period's length comes from the cited row's own wording.
     if first_period is not null
-       and (item_period_start + make_interval(months => public.compliance_period_months(entry.period_or_event) - 1))::date < first_period then
+       and (item_period_start + make_interval(months => public.compliance_period_months(entry.period_or_event, (select requirement.frequency_label from public.bir_requirements requirement where requirement.id = entry.requirement_id)) - 1))::date < first_period then
       skipped := skipped || jsonb_build_array(jsonb_build_object('item', item, 'reason', 'The period ends before the first period to file.'));
       continue;
     end if;

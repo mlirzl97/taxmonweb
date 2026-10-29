@@ -340,6 +340,7 @@ export function compliancePeriodLastMonth(row: Pick<DeadlineControlRow, "periodS
   const label = `${row.activityPeriod} ${row.taxablePeriod}`;
   const months = /quarter ending|\bQ[1-4]\b/i.test(label) ? 3
     : /year ending|calendar year|taxable year|fiscal year|\bFY\b/i.test(label) ? 12
+    : /month of/i.test(label) ? 1
     : row.cadence === "Quarterly" ? 3
     : row.cadence === "Annual" ? 12
     : 1;

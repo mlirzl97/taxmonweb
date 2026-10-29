@@ -210,6 +210,8 @@ describe("deadline control projection", () => {
     expect(compliancePeriodLastMonth({ ...base, activityPeriod: "Q1 2026", taxablePeriod: "Q1 2026" })).toBe("2026-03-01");
     expect(compliancePeriodLastMonth({ ...base, activityPeriod: "1601-C", taxablePeriod: "Month of January 2026" })).toBe("2026-01-01");
     expect(compliancePeriodLastMonth({ periodStartDate: "2025-06-01", cadence: "Annual", activityPeriod: "1702-RT", taxablePeriod: "2025" })).toBe("2026-05-01");
+    // A row that says "Month of" is one month even under a quarterly requirement.
+    expect(compliancePeriodLastMonth({ periodStartDate: "2026-01-01", cadence: "Quarterly", activityPeriod: "0619-E", taxablePeriod: "Month of January 2026" })).toBe("2026-01-01");
   });
 
   it("uses the earliest applicable component deadline as the master default", () => {
