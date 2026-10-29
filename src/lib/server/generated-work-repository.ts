@@ -448,3 +448,35 @@ export async function recordLiveGeneratedWorkCommand(workId: string, command: st
   if (error) throw new Error(`Unable to record generated compliance work command: ${error.message}`);
   return data as Record<string, unknown>;
 }
+
+export type HeldCalendarPeriod = {
+  entry_id: string;
+  requirement_id: string;
+  requirement_code: string;
+  requirement_name: string;
+  frequency_label: string;
+  operating_category: string;
+  period_or_event: string | null;
+  period_start: string | null;
+  calendar_month: string;
+  publication_status: "generated" | "needs_review" | "confirmed" | "unresolved";
+  form_numbers: string[];
+};
+
+/**
+ * Return periods of released calendar versions the Tax Team has not published
+ * yet. Only that the period exists and its status are returned, never an
+ * unpublished date. Null when the database does not offer the function yet.
+ */
+export async function listHeldCalendarPeriods(registrationUnitId: string, requirementIds: readonly string[], year: number): Promise<HeldCalendarPeriod[] | null> {
+  if (requirementIds.length === 0) return [];
+  const client = await createSupabaseServerClient();
+  if (!client) throw new Error("Supabase is not configured for this environment.");
+  const { data, error } = await client.rpc("held_calendar_periods", { p_registration_unit_id: registrationUnitId, p_requirement_ids: [...requirementIds], p_year: year });
+  if (error) {
+    // Before the migration is applied the function does not exist yet.
+    if (error.code === "PGRST202" || error.code === "42883") return null;
+    throw new Error(`Unable to load held calendar periods: ${error.message}`);
+  }
+  return (data ?? []) as HeldCalendarPeriod[];
+}

@@ -52,7 +52,7 @@ async function generate(portfolioClient: PortfolioClient, unitId: string) {
   const approvedItems = items.filter((item) => item.status === "approved" && item.serviceScope === "in_scope");
   const approvedForms = approvedItems.map((item) => item.formNumber);
   const approvedRequirementIds = [...new Set(approvedItems.flatMap((item) => item.requirementId ? [item.requirementId] : []))];
-  if (approvedForms.length === 0) return { created: 0, existing: 0, skipped: [] };
+  if (approvedForms.length === 0) return { created: 0, existing: 0, skipped: [], waiting: [], waitingUnavailable: false };
   // Generation follows the approved Expected Compliance and the profile it was
   // approved from, not a newer profile whose changes await approval.
   const unitClient = clientForUnit(portfolioClientToFixtureClient(portfolioClient), unitId);
@@ -65,11 +65,22 @@ async function generate(portfolioClient: PortfolioClient, unitId: string) {
   const currentYear = new Date().getUTCFullYear();
   const firstYear = /^\d{4}-\d{2}$/.test(firstPeriod) ? Math.min(Number(firstPeriod.slice(0, 4)), currentYear) : currentYear;
   const generationItems = [];
+  // Approved returns whose period the Tax Team has not published yet: no work
+  // is generated for them, and they are reported rather than left missing.
+  const approvedSet = new Set(approvedForms.map((form) => form.toUpperCase()));
+  const waiting: { form: string; period: string; status: string }[] = [];
+  // Before the held-periods migration is applied, waiting periods cannot be
+  // checked: say so rather than report an empty list.
+  let waitingUnavailable = false;
   for (let year = firstYear; year <= currentYear + 1; year += 1) {
-    const calendar = await loadClientServiceCalendar(client, year, approvedForms, approvedRequirementIds);
+    const calendar = await loadClientServiceCalendar(client, year, approvedForms, approvedRequirementIds, unitId);
     generationItems.push(...workGenerationItems(calendar.rows, approvedForms));
+    waitingUnavailable ||= calendar.heldUnavailable;
+    for (const row of calendar.heldRows) {
+      if (approvedSet.has(row.formNumber.toUpperCase())) waiting.push({ form: row.formNumber, period: row.taxablePeriod, status: row.publicationStatus });
+    }
   }
-  return recordGeneratedComplianceWork(unitId, generationItems);
+  return { ...(await recordGeneratedComplianceWork(unitId, generationItems)), waiting, waitingUnavailable };
 }
 
 export async function GET(request: Request, context: RouteContext) {
