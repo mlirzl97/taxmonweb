@@ -22,7 +22,7 @@ describe("work lifecycle controls migration", () => {
   });
 
   it("moves nothing after review until the Reviewer has approved", () => {
-    expect(migration).toContain("step_code = 'reviewer' and status = 'complete'");
+    expect(migration).toContain("step_code in ('preparer', 'checker', 'reviewer') and status = 'complete') < 3");
     expect(migration).toContain("'Preparation, checking and review must be complete first.'");
   });
 
