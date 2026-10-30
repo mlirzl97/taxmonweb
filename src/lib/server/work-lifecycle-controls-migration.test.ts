@@ -31,6 +31,22 @@ describe("work lifecycle controls migration", () => {
     expect(migration).toContain("'An override reason is required to correct a completed process step.'");
   });
 
+  it("keeps the gates in order even under override, and needs all three before any process step", () => {
+    expect(migration).toContain("'The Preparer must certify first.'");
+    expect(migration).toContain("'The Checker must certify first.'");
+    expect(migration).toContain("step_code in ('preparer', 'checker', 'reviewer') and status = 'complete') < 3");
+  });
+
+  it("closes work only by the assigned Reviewer, null-safely, never by whoever prepared or checked it", () => {
+    expect(migration).toContain("(not has_elevated_authority and (work.reviewer_user_id is null or actor_id is distinct from work.reviewer_user_id))");
+    expect(migration).toContain("attempt.role in ('preparer', 'checker') and attempt.decision <> 'return' and attempt.actor_id = auth.uid()");
+  });
+
+  it("lets only the assigned Preparer or Checker set the payment profile, before the Checker certifies", () => {
+    expect(migration).toContain("'Only the assigned Preparer or Checker sets the payment profile.'");
+    expect(migration).toContain("'The payment profile is fixed once the Checker has certified.'");
+  });
+
   it("keeps the client approval date, payment amount and eSubmission controls", () => {
     expect(migration).toContain("'Record the client approval date before completing client approval.'");
     expect(migration).toContain("'Record the amount to pay before certifying the Checker gate.'");

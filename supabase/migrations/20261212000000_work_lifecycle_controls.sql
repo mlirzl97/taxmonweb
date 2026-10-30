@@ -115,6 +115,16 @@ begin
         raise exception using errcode = '42501', message = 'The actual actor is not the assigned control role or fails segregation of duties.';
       end if;
     end if;
+    -- Gates are certified in order, even by override: no Checker sign-off
+    -- without a Preparer's, no Reviewer sign-off without a Checker's.
+    if decision_value <> 'return' and role_value in ('checker', 'reviewer')
+       and not exists (select 1 from public.generated_work_process_steps where generated_work_id = p_work_id and step_code = 'preparer' and status = 'complete') then
+      raise exception using errcode = '22023', message = 'The Preparer must certify first.';
+    end if;
+    if decision_value <> 'return' and role_value = 'reviewer'
+       and not exists (select 1 from public.generated_work_process_steps where generated_work_id = p_work_id and step_code = 'checker' and status = 'complete') then
+      raise exception using errcode = '22023', message = 'The Checker must certify first.';
+    end if;
     -- Who actually certified the earlier gates governs segregation of duties,
     -- whatever roles are assigned, and no override erases it.
     if decision_value <> 'return' and role_value in ('checker', 'reviewer') then
@@ -158,6 +168,15 @@ begin
     after_state := jsonb_build_object('role', role_value, 'decision', decision_value, 'note', note_value);
   elsif p_command = 'payment_profile' then
     if not has_elevated_authority and not public.has_active_capability('ExecuteGeneratedComplianceWork') then raise exception using errcode = '42501', message = 'Payment profile authority is not configured for the caller.'; end if;
+    -- Whether and how much to pay is set by the assigned Preparer or Checker
+    -- while the return is with them; after the Checker certifies it changes
+    -- only by reasoned override.
+    if not has_elevated_authority and (actor_id is distinct from work.preparer_user_id and actor_id is distinct from work.checker_user_id) then
+      raise exception using errcode = '42501', message = 'Only the assigned Preparer or Checker sets the payment profile.';
+    end if;
+    if not has_elevated_authority and work.current_gate is distinct from 'preparer' and work.current_gate is distinct from 'checker' then
+      raise exception using errcode = '42501', message = 'The payment profile is fixed once the Checker has certified.';
+    end if;
     if payment_applicability_value not in ('required', 'not_applicable', 'unresolved') then raise exception using errcode = '22023', message = 'Payment applicability is invalid.'; end if;
     if payment_applicability_value = 'not_applicable' then payment_amount_value := null; elsif payment_amount_value is not null and payment_amount_value < 0 then raise exception using errcode = '22023', message = 'Payment amount cannot be negative.'; end if;
     update public.generated_compliance_work
@@ -177,7 +196,7 @@ begin
     -- Preparation, checking and review come first (locked invariant):
     -- nothing after them moves until the Reviewer has approved.
     if status_value <> 'not_started' and (work.current_gate is not null
-       or not exists (select 1 from public.generated_work_process_steps where generated_work_id = p_work_id and step_code = 'reviewer' and status = 'complete')) then
+       or (select count(*) from public.generated_work_process_steps where generated_work_id = p_work_id and step_code in ('preparer', 'checker', 'reviewer') and status = 'complete') < 3) then
       raise exception using errcode = '22023', message = 'Preparation, checking and review must be complete first.';
     end if;
     select status into current_status
@@ -233,7 +252,15 @@ begin
     where id = p_work_id;
     after_state := jsonb_build_object('stepCode', step_code_value, 'status', status_value, 'evidenceReference', evidence_reference);
   elsif p_command = 'final_certification' then
-    if note_value is null or not has_elevated_authority and actor_id <> work.reviewer_user_id then raise exception using errcode = '42501', message = 'Only the assigned Reviewer or an authorized elevated actor can certify closure.'; end if;
+    -- Only the assigned Reviewer (or a reasoned override) closes the work,
+    -- and never whoever actually prepared or checked it.
+    if note_value is null or (not has_elevated_authority and (work.reviewer_user_id is null or actor_id is distinct from work.reviewer_user_id)) then
+      raise exception using errcode = '42501', message = 'Only the assigned Reviewer or an authorized elevated actor can certify closure.';
+    end if;
+    if exists (select 1 from public.generated_work_gate_attempts attempt
+                where attempt.generated_work_id = p_work_id and attempt.role in ('preparer', 'checker') and attempt.decision <> 'return' and attempt.actor_id = auth.uid()) then
+      raise exception using errcode = '42501', message = 'The same person cannot prepare, check and review one return.';
+    end if;
     if work.period_locked then raise exception using errcode = '42501', message = 'This period is locked by Tax Team.'; end if;
     if not exists (select 1 from public.generated_work_process_steps where generated_work_id = p_work_id and step_code = 'evidence' and status = 'complete') then raise exception using errcode = '22023', message = 'Archiving must be complete before final certification.'; end if;
     if is_elevated and override_reason is null then raise exception using errcode = '22023', message = 'An elevated override reason is required.'; end if;
