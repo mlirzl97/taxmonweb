@@ -331,6 +331,25 @@ export function compliancePeriodStartFromLabel(label: string | null | undefined)
   return null;
 }
 
+/**
+ * The first day of the last month a row's compliance period covers. A quarter
+ * covers three months and a year twelve, read from the row's own wording (or
+ * a Deadline Control label such as "Q2 2026" / "FY 2026"), else its cadence.
+ */
+export function compliancePeriodLastMonth(row: Pick<DeadlineControlRow, "periodStartDate" | "taxablePeriod" | "activityPeriod" | "cadence">): string {
+  const label = `${row.activityPeriod} ${row.taxablePeriod}`;
+  const months = /quarter ending|\bQ[1-4]\b/i.test(label) ? 3
+    : /year ending|calendar year|taxable year|fiscal year|\bFY\b/i.test(label) ? 12
+    : /month of/i.test(label) ? 1
+    : row.cadence === "Quarterly" ? 3
+    : row.cadence === "Annual" ? 12
+    : 1;
+  const start = new Date(`${row.periodStartDate}T00:00:00Z`);
+  if (Number.isNaN(start.getTime())) return row.periodStartDate;
+  start.setUTCMonth(start.getUTCMonth() + months - 1);
+  return start.toISOString().slice(0, 10);
+}
+
 export function getClientServiceCalendarRows(client: FixtureClient, year: number, overrides: Readonly<Record<string, DeadlinePublicationOverride>> = {}, governedRows?: readonly DeadlineControlRow[]): { rows: ClientServiceCalendarRow[]; heldRows: DeadlineControlRow[] } {
   const candidateForms = clientCandidateFormNumbers(client);
   const clientDeadlinePolicy = normalizeClientDeadlinePolicy(client.entities[0]?.profile.deadlinePolicy);
@@ -348,7 +367,9 @@ export function getClientServiceCalendarRows(client: FixtureClient, year: number
       if (goLiveYear === undefined || !Number.isFinite(goLiveYear) || !goLiveDate) return true;
       // A row whose compliance period is unknown stays visible rather than
       // being dropped or placed by its due month.
-      if (firstPeriodStart && row.periodStartDate && row.periodStartDate < firstPeriodStart) return false;
+      // A period that covers the first period to file is filed even when it
+      // starts earlier (HOD decision H-014): a March start files Q1 and the year.
+      if (firstPeriodStart && row.periodStartDate && compliancePeriodLastMonth(row) < firstPeriodStart) return false;
       const effectiveDeadline = row.publishedOperationalDeadline ?? row.adjustedStatutoryDeadline;
       if (effectiveDeadline) return effectiveDeadline > goLiveDate;
       // An unresolved rule has no due date to compare. Keep it visible as a
@@ -356,7 +377,7 @@ export function getClientServiceCalendarRows(client: FixtureClient, year: number
       // (for example, an annual period may be due in the following year).
       return row.calendarYear >= goLiveYear;
     })
-    .filter((row) => !firstPeriodStart || !row.periodStartDate || row.periodStartDate >= firstPeriodStart);
+    .filter((row) => !firstPeriodStart || !row.periodStartDate || compliancePeriodLastMonth(row) >= firstPeriodStart);
   const rows = candidateRows.filter((row) => row.publicationStatus === "published" && row.publishedOperationalDeadline).map((row) => ({
     ...row,
     clientId: client.id,
