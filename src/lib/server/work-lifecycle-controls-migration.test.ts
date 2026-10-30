@@ -2,13 +2,25 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
+import { roleQuestions } from "@/lib/workflow-rules";
+
 const migration = readFileSync(resolve(process.cwd(), "supabase/migrations/20261212000000_work_lifecycle_controls.sql"), "utf8");
 
 describe("work lifecycle controls migration", () => {
-  it("certifies a gate only when every yes/no question is answered yes", () => {
+  it("certifies a gate only when every question it asks is present and answered yes", () => {
     expect(migration).not.toContain("pair.value <> 'true')) then");
-    expect(migration).toContain("where jsonb_typeof(pair.value) = 'boolean' and pair.value <> 'true'::jsonb");
-    expect(migration).toContain("or not exists (select 1 from jsonb_each(coalesce(p_payload -> 'answers', '{}'::jsonb)) pair where jsonb_typeof(pair.value) = 'boolean')");
+    expect(migration).toContain("or exists (select 1 from unnest(public.gate_required_questions(role_value)) question");
+    expect(migration).toContain("where coalesce(p_payload -> 'answers' -> question, 'null'::jsonb) <> 'true'::jsonb)) then");
+    expect(migration).toContain("revoke execute on function public.gate_required_questions(text) from public, anon, authenticated;");
+  });
+
+  it("asks on the server exactly the questions the workflow screen asks", () => {
+    for (const [role, sqlRole] of [["PREPARER", "preparer"], ["CHECKER", "checker"], ["REVIEWER", "reviewer"]] as const) {
+      const line = migration.split("\n").find((candidate) => candidate.trim().startsWith(`when '${sqlRole}' then array[`));
+      expect(line, sqlRole).toBeDefined();
+      const sqlIds = [...(line ?? "").matchAll(/'([a-z-]+)'/g)].map((match) => match[1]).filter((id) => id !== sqlRole);
+      expect(sqlIds).toEqual(roleQuestions[role].map((question) => question.id));
+    }
   });
 
   it("lets only a reasoned Elevated Override act outside an assigned role", () => {

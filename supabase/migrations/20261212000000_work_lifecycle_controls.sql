@@ -18,6 +18,24 @@
 -- and is marked. Who actually prepared and checked a return can never
 -- review or check it, override or not.
 
+-- The questions each gate certifies, as the workflow screen asks them
+-- (roleQuestions in src/lib/workflow-rules.ts; a contract test keeps the two
+-- lists equal). Every one must be answered yes; none may be left out.
+create or replace function public.gate_required_questions(p_role text)
+returns text[]
+language sql
+immutable
+set search_path = public, pg_temp
+as $$
+  select case lower(p_role)
+    when 'preparer' then array['correct-context', 'data-reviewed', 'mapping-complete', 'documents-vouched', 'reconciled', 'working-paper-agrees', 'self-check-complete', 'issues-recorded']
+    when 'checker' then array['preparation-traceable', 'source-supports-return', 'mapping-reasonable', 'vouching-sufficient', 'tie-outs-satisfactory', 'exceptions-documented', 'tax-due-recorded', 'ready-for-review']
+    when 'reviewer' then array['independent-review', 'material-items-considered', 'judgments-addressed', 'risks-documented', 'client-output-complete', 'ready-for-client']
+    else array[]::text[]
+  end;
+$$;
+revoke execute on function public.gate_required_questions(text) from public, anon, authenticated;
+
 create or replace function public.record_generated_work_command(p_work_id uuid, p_command text, p_payload jsonb DEFAULT '{}'::jsonb, p_idempotency_key text DEFAULT NULL::text)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -98,11 +116,12 @@ begin
     if role_value not in ('preparer', 'checker', 'reviewer') or decision_value not in ('certify', 'approve', 'return') or note_value is null then
       raise exception using errcode = '22023', message = 'Gate role, decision, and note are required.';
     end if;
-    -- Certified only when every question is answered yes. Non-yes/no fields
-    -- carried with the answers (the Checker's tax due amount) are not questions.
+    -- Certified only when every question this gate asks is present and
+    -- answered yes (true). Other fields carried with the answers, such as the
+    -- Checker's tax due amount, are not questions.
     if decision_value <> 'return' and (jsonb_typeof(coalesce(p_payload -> 'answers', '{}'::jsonb)) <> 'object'
-       or not exists (select 1 from jsonb_each(coalesce(p_payload -> 'answers', '{}'::jsonb)) pair where jsonb_typeof(pair.value) = 'boolean')
-       or exists (select 1 from jsonb_each(coalesce(p_payload -> 'answers', '{}'::jsonb)) pair where jsonb_typeof(pair.value) = 'boolean' and pair.value <> 'true'::jsonb)) then
+       or exists (select 1 from unnest(public.gate_required_questions(role_value)) question
+                   where coalesce(p_payload -> 'answers' -> question, 'null'::jsonb) <> 'true'::jsonb)) then
       raise exception using errcode = '22023', message = 'Every applicable gate question must be certified.';
     end if;
     if not has_elevated_authority and work.current_gate is distinct from role_value then
