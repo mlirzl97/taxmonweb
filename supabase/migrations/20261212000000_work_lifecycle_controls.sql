@@ -65,8 +65,6 @@ declare
   -- marked on the record. Maintaining work is not an override.
   has_elevated_authority boolean := public.has_active_capability('PerformElevatedOverride') and nullif(trim(p_payload ->> 'overrideReason'), '') is not null;
   is_elevated boolean := has_elevated_authority;
-  prior_preparer uuid;
-  prior_checker uuid;
   payment_applicability_value text := lower(trim(coalesce(p_payload ->> 'paymentApplicability', '')));
   payment_amount_value numeric := nullif(trim(p_payload ->> 'paymentAmount'), '')::numeric;
   acknowledged_on_value date := nullif(trim(p_payload ->> 'acknowledgedOn'), '')::date;
@@ -146,16 +144,15 @@ begin
     end if;
     -- Who actually certified the earlier gates governs segregation of duties,
     -- whatever roles are assigned, and no override erases it.
-    if decision_value <> 'return' and role_value in ('checker', 'reviewer') then
-      select attempt.actor_id into prior_preparer from public.generated_work_gate_attempts attempt
-       where attempt.generated_work_id = p_work_id and attempt.role = 'preparer' and attempt.decision <> 'return'
-       order by attempt.recorded_at desc, attempt.id desc limit 1;
-      select attempt.actor_id into prior_checker from public.generated_work_gate_attempts attempt
-       where attempt.generated_work_id = p_work_id and attempt.role = 'checker' and attempt.decision <> 'return'
-       order by attempt.recorded_at desc, attempt.id desc limit 1;
-      if actor_id = prior_preparer or (role_value = 'reviewer' and actor_id = prior_checker) then
-        raise exception using errcode = '42501', message = 'The same person cannot prepare, check and review one return.';
-      end if;
+    if decision_value <> 'return' and role_value in ('checker', 'reviewer') and exists (
+      select 1 from public.generated_work_gate_attempts attempt
+       where attempt.generated_work_id = p_work_id
+         and attempt.decision <> 'return'
+         and attempt.actor_id = auth.uid()
+         -- Anyone who ever certified Preparation cannot check or review;
+         -- anyone who ever certified Checking cannot review.
+         and (attempt.role = 'preparer' or (role_value = 'reviewer' and attempt.role = 'checker'))) then
+      raise exception using errcode = '42501', message = 'The same person cannot prepare, check and review one return.';
     end if;
     if is_elevated and override_reason is null then raise exception using errcode = '22023', message = 'An elevated override reason is required.'; end if;
     if role_value = 'checker' and decision_value <> 'return' and work.payment_applicability = 'required' then

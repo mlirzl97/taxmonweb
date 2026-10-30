@@ -29,7 +29,9 @@ describe("work lifecycle controls migration", () => {
   });
 
   it("keeps actual-actor segregation of duties, which no override erases", () => {
-    expect(migration).toContain("if actor_id = prior_preparer or (role_value = 'reviewer' and actor_id = prior_checker) then");
+    // Every earlier certifier counts, not only the latest (a return and recertification cannot hide one).
+    expect(migration).toContain("and (attempt.role = 'preparer' or (role_value = 'reviewer' and attempt.role = 'checker'))) then");
+    expect(migration).not.toContain("limit 1;\n      if actor_id = prior_preparer");
     expect(migration).toContain("'The same person cannot prepare, check and review one return.'");
   });
 

@@ -145,4 +145,25 @@ begin
   raise notice 'ALL LIFECYCLE CONTROL TESTS PASSED';
 end $$;
 
+-- A return and recertification cannot hide an earlier preparer: the HOD
+-- prepares by override, the Checker returns it, the Preparer recertifies,
+-- and the HOD still cannot check it, override or not.
+do $$
+declare
+  second_work uuid;
+begin
+  insert into public.generated_compliance_work (registration_unit_id, requirement_id, requirement_version_id, generation_key, period_label,
+    preparer_user_id, checker_user_id, reviewer_user_id, current_owner_user_id, current_gate, lifecycle_stage, payment_applicability)
+  select work.registration_unit_id, work.requirement_id, work.requirement_version_id, 'lifecycle-test:' || gen_random_uuid(), 'Lifecycle test period 2',
+    work.preparer_user_id, work.checker_user_id, work.reviewer_user_id, work.preparer_user_id, 'preparer', 'preparation', 'not_applicable'
+  from public.generated_compliance_work work where work.id = pg_temp.work_id()
+  returning id into second_work;
+  update lifecycle_work set id = second_work;
+  perform pg_temp.ok('hod prepares by override', 'hod', 'gate_decision', jsonb_build_object('role', 'preparer', 'decision', 'certify', 'note', 'n', 'answers', pg_temp.answers('preparer'), 'overrideReason', 'Preparer on leave'));
+  perform pg_temp.ok('checker returns', 'checker', 'gate_decision', '{"role": "checker", "decision": "return", "note": "rework"}');
+  perform pg_temp.ok('preparer recertifies', 'preparer', 'gate_decision', jsonb_build_object('role', 'preparer', 'decision', 'certify', 'note', 'n', 'answers', pg_temp.answers('preparer')));
+  perform pg_temp.refused('earlier preparer checks by override', 'hod', 'gate_decision', jsonb_build_object('role', 'checker', 'decision', 'certify', 'note', 'n', 'answers', pg_temp.answers('checker', '{"taxDueAmount": 0}'), 'overrideReason', 'again'), 'The same person cannot prepare, check and review one return.');
+  raise notice 'RETURN-AND-RECERTIFY SEGREGATION TEST PASSED';
+end $$;
+
 rollback;
