@@ -25,6 +25,10 @@ describe("deadline release controls migration (H-010)", () => {
     // An Override changes only the TMF date, even if the waiting row was edited.
     expect(migration).toContain("'An Override cannot change the BIR statutory date.'");
     expect(migration).toContain("where supersedes_entry_id is not null and publication_status <> 'superseded';");
+    // It replaces the same return and period, with its target a day before its own date.
+    expect(migration).toContain("'An Override cannot change the return or period it replaces.'");
+    expect(migration).toContain("tmf_package_target = case when entry.supersedes_entry_id is not null then proposed_date - 1 else entry.tmf_package_target end,");
+    expect(migration).toContain("entry.tmf_package_target is distinct from entry.published_operational_deadline - 1");
   });
 
   it("never lets an operational date pass the statutory deadline, and keeps the internal target a day before", () => {

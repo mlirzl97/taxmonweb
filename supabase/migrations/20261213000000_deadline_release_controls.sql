@@ -83,6 +83,9 @@ begin
     update public.monthly_calendar_entries
        set publication_status = 'confirmed',
            published_operational_deadline = proposed_date,
+           -- An Override's internal target follows its own TMF date (H-008),
+           -- whatever an edit saved from the statutory date.
+           tmf_package_target = case when entry.supersedes_entry_id is not null then proposed_date - 1 else entry.tmf_package_target end,
            confirmed_by = auth.uid(),
            confirmed_at = now()
      where id = entry.id
@@ -118,6 +121,22 @@ begin
          and (replaced.base_statutory_deadline is distinct from entry.base_statutory_deadline
               or replaced.adjusted_statutory_deadline is distinct from entry.adjusted_statutory_deadline)) then
       raise exception using errcode = '22023', message = 'An Override cannot change the BIR statutory date.';
+    end if;
+    -- It replaces the same return for the same period, which work generation
+    -- matches on, so the original period never loses its published deadline.
+    if entry.supersedes_entry_id is not null and exists (
+      select 1 from public.monthly_calendar_entries replaced
+       where replaced.id = entry.supersedes_entry_id
+         and (replaced.calendar_version_id is distinct from entry.calendar_version_id
+              or replaced.requirement_id is distinct from entry.requirement_id
+              or replaced.requirement_version_id is distinct from entry.requirement_version_id
+              or replaced.period_or_event is distinct from entry.period_or_event
+              or replaced.period_start is distinct from entry.period_start
+              or replaced.period_end is distinct from entry.period_end)) then
+      raise exception using errcode = '22023', message = 'An Override cannot change the return or period it replaces.';
+    end if;
+    if entry.supersedes_entry_id is not null and entry.tmf_package_target is distinct from entry.published_operational_deadline - 1 then
+      raise exception using errcode = '22023', message = 'An Override''s internal target must be one day before its TMF date; confirm it again.';
     end if;
     update public.monthly_calendar_entries
        set publication_status = 'published',

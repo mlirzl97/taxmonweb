@@ -113,8 +113,11 @@ export async function listDeadlineControlRows(calendarYear: number) {
   return rows.map((row) => {
     const entry = byId.get(row.id);
     if (!entry) return row;
+    // An Override's internal target follows its own TMF date, not the statutory date.
+    const overrideTarget = entry.supersedesEntryId && row.publishedOperationalDeadline ? calculateInternalTarget(row.publishedOperationalDeadline) : null;
     return {
       ...row,
+      ...(overrideTarget ? { tmfPackageTarget: overrideTarget } : {}),
       confirmedBy: entry.confirmedBy ?? null,
       confirmedByViewer: Boolean(entry.confirmedById && state.viewerId && entry.confirmedById === state.viewerId),
       supersedesEntryId: entry.supersedesEntryId ?? null,

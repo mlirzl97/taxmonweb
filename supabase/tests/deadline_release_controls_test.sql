@@ -126,11 +126,21 @@ begin
   perform pg_temp.refused('second override while one waits', 'checker', format('select public.override_published_deadline(%s, %L, %L)', e, '2027-04-09', 'r'), 'An Override for this deadline is already waiting to be published.');
   -- Editing the waiting Override back to review cannot smuggle in a new
   -- statutory date, and no second Override starts meanwhile.
-  update public.monthly_calendar_entries set publication_status = 'needs_review', confirmed_by = null, confirmed_at = null, adjusted_statutory_deadline = '2027-04-20' where id = successor;
+  -- Saving recalculates the target from the statutory date (here the 19th).
+  update public.monthly_calendar_entries set publication_status = 'needs_review', confirmed_by = null, confirmed_at = null, adjusted_statutory_deadline = '2027-04-20', tmf_package_target = '2027-04-19' where id = successor;
   perform pg_temp.refused('second override while one is in review', 'checker', format('select public.override_published_deadline(%s, %L, %L)', e, '2027-04-09', 'r'), 'An Override for this deadline is already waiting to be published.');
   perform pg_temp.ok('maker re-confirms the edited override', 'maker', format('select public.transition_deadline_control_entry(%L, %L, %L, %L)', successor, 'confirmed', '2027-04-11', 'r'));
   perform pg_temp.refused('override changes the statutory date', 'checker', format('select public.transition_deadline_control_entry(%L, %L, null, %L)', successor, 'published', 'r'), 'An Override cannot change the BIR statutory date.');
   update public.monthly_calendar_entries set adjusted_statutory_deadline = '2027-04-12' where id = successor;
+  if (select tmf_package_target from public.monthly_calendar_entries where id = successor) <> '2027-04-10' then
+    raise exception 'FAIL reconfirm override: the target must follow the Override date, not the statutory date';
+  end if;
+  -- Nor can it move to another period, which generation matches on.
+  update public.monthly_calendar_entries set period_or_event = 'Release test. Month of April 2027' where id = successor;
+  perform pg_temp.refused('override changes the period', 'checker', format('select public.transition_deadline_control_entry(%L, %L, null, %L)', successor, 'published', 'r'), 'An Override cannot change the return or period it replaces.');
+  update public.monthly_calendar_entries set period_or_event = 'Release test. Month of March 2027', tmf_package_target = '2027-04-11' where id = successor;
+  perform pg_temp.refused('override target after its date', 'checker', format('select public.transition_deadline_control_entry(%L, %L, null, %L)', successor, 'published', 'r'), 'internal target must be one day before its TMF date');
+  update public.monthly_calendar_entries set tmf_package_target = '2027-04-10' where id = successor;
   perform pg_temp.refused('proposer publishes the override', 'maker', format('select public.transition_deadline_control_entry(%L, %L, null, %L)', successor, 'published', 'r'), 'The person who confirmed a deadline cannot publish it.');
   perform pg_temp.ok('checker publishes the override', 'checker', format('select public.transition_deadline_control_entry(%L, %L, null, %L)', successor, 'published', 'agreed'));
   if (select publication_status from public.monthly_calendar_entries where id = pg_temp.entry()) <> 'superseded'
