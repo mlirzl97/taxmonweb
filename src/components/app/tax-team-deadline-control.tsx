@@ -97,7 +97,8 @@ function effectiveRow(row: DeadlineControlRow, overrides: Readonly<Record<string
 }
 
 function withDerivedInternalTarget(row: DeadlineControlRow): DeadlineControlRow {
-  const deadline = row.earliestApplicableDeadline ?? row.adjustedStatutoryDeadline ?? row.baseStatutoryDeadline;
+  // An Override's target is a day before its own TMF date, not the statutory date.
+  const deadline = (row.supersedesEntryId ? row.publishedOperationalDeadline : null) ?? row.earliestApplicableDeadline ?? row.adjustedStatutoryDeadline ?? row.baseStatutoryDeadline;
   if (!deadline || !/^\d{4}-\d{2}-\d{2}$/.test(deadline)) return row;
   return { ...row, tmfPackageTarget: calculateInternalTarget(deadline) };
 }

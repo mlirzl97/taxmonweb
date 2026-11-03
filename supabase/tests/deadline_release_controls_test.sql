@@ -129,7 +129,13 @@ begin
   -- Saving recalculates the target from the statutory date (here the 19th).
   update public.monthly_calendar_entries set publication_status = 'needs_review', confirmed_by = null, confirmed_at = null, adjusted_statutory_deadline = '2027-04-20', tmf_package_target = '2027-04-19' where id = successor;
   perform pg_temp.refused('second override while one is in review', 'checker', format('select public.override_published_deadline(%s, %L, %L)', e, '2027-04-09', 'r'), 'An Override for this deadline is already waiting to be published.');
-  perform pg_temp.ok('maker re-confirms the edited override', 'maker', format('select public.transition_deadline_control_entry(%L, %L, %L, %L)', successor, 'confirmed', '2027-04-11', 'r'));
+  -- Sent back to review by transition, it keeps its proposed date, and a
+  -- confirmation without a date confirms that date, not the statutory one.
+  perform pg_temp.ok('override back to review', 'checker', format('select public.transition_deadline_control_entry(%L, %L, null, %L)', successor, 'needs_review', 'r'));
+  perform pg_temp.ok('maker re-confirms the edited override', 'maker', format('select public.transition_deadline_control_entry(%L, %L, null, %L)', successor, 'confirmed', 'r'));
+  if (select published_operational_deadline from public.monthly_calendar_entries where id = successor) <> '2027-04-11' then
+    raise exception 'FAIL reconfirm override: it must keep its proposed date';
+  end if;
   perform pg_temp.refused('override changes the statutory date', 'checker', format('select public.transition_deadline_control_entry(%L, %L, null, %L)', successor, 'published', 'r'), 'An Override cannot change the BIR statutory date.');
   update public.monthly_calendar_entries set adjusted_statutory_deadline = '2027-04-12' where id = successor;
   if (select tmf_package_target from public.monthly_calendar_entries where id = successor) <> '2027-04-10' then

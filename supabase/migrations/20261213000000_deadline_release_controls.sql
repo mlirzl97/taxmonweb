@@ -74,6 +74,10 @@ begin
     proposed_date := coalesce(p_published_operational_deadline,
                               case when entry.supersedes_entry_id is not null then entry.published_operational_deadline end,
                               control_deadline);
+    -- An Override confirms its own proposed date, never the statutory date.
+    if entry.supersedes_entry_id is not null and coalesce(p_published_operational_deadline, entry.published_operational_deadline) is null then
+      raise exception using errcode = '22023', message = 'An Override needs its proposed TMF date before it is confirmed.';
+    end if;
     if proposed_date is null then
       raise exception using errcode = '22023', message = 'A confirmed deadline requires an earliest statutory date or explicit operational date.';
     end if;
@@ -159,12 +163,13 @@ begin
   elsif p_to_status = 'superseded' then
     raise exception using errcode = '22023', message = 'A deadline is superseded only by publishing its Override.';
   else
-    -- Back to review: any confirmation lapses.
+    -- Back to review: any confirmation lapses. An Override keeps its proposed
+    -- TMF date, which is what it exists to change.
     update public.monthly_calendar_entries
        set publication_status = p_to_status,
            confirmed_by = null,
            confirmed_at = null,
-           published_operational_deadline = null
+           published_operational_deadline = case when entry.supersedes_entry_id is not null then entry.published_operational_deadline end
      where id = entry.id
     returning * into entry;
   end if;

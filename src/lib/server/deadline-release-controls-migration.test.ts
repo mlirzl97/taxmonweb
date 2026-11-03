@@ -29,6 +29,9 @@ describe("deadline release controls migration (H-010)", () => {
     expect(migration).toContain("'An Override cannot change the return or period it replaces.'");
     expect(migration).toContain("tmf_package_target = case when entry.supersedes_entry_id is not null then proposed_date - 1 else entry.tmf_package_target end,");
     expect(migration).toContain("entry.tmf_package_target is distinct from entry.published_operational_deadline - 1");
+    // Back in review, an Override keeps the date it proposes.
+    expect(migration).toContain("published_operational_deadline = case when entry.supersedes_entry_id is not null then entry.published_operational_deadline end");
+    expect(migration).toContain("'An Override needs its proposed TMF date before it is confirmed.'");
   });
 
   it("never lets an operational date pass the statutory deadline, and keeps the internal target a day before", () => {
