@@ -6,7 +6,7 @@ import { requireApiCapability } from "@/lib/server/api-authorization";
 import { requireSameOrigin } from "@/lib/server/request-origin";
 import { asRecord, isNonEmptyString } from "@/lib/server/request-input";
 import { isPrototypeDemoMode } from "@/lib/supabase/config";
-import { listDeadlineControlRows, saveDeadlineControlEntry, transitionDeadlineControlEntry, type DeadlineControlEntryInput } from "@/lib/server/deadline-control-repository";
+import { listDeadlineControlRows, overridePublishedDeadline, saveDeadlineControlEntry, transitionDeadlineControlEntry, type DeadlineControlEntryInput } from "@/lib/server/deadline-control-repository";
 
 function requestedYear(value: string | null) {
   const year = Number(value ?? "2026");
@@ -63,6 +63,14 @@ export async function POST(request: Request) {
         publishedOperationalDeadline: typeof input.publishedOperationalDeadline === "string" ? input.publishedOperationalDeadline : null,
         reason: input.reason,
       });
+      return NextResponse.json({ data });
+    }
+
+    if (input.action === "override") {
+      if (!isNonEmptyString(input.entryId) || !isNonEmptyString(input.operationalDeadline) || !/^\d{4}-\d{2}-\d{2}$/.test(input.operationalDeadline) || !isNonEmptyString(input.reason)) {
+        return NextResponse.json({ error: "Entry ID, the new operational date, and a reason are required." }, { status: 400 });
+      }
+      const data = await overridePublishedDeadline(input.entryId, input.operationalDeadline, input.reason);
       return NextResponse.json({ data });
     }
 

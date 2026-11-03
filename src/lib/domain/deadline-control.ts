@@ -51,6 +51,14 @@ export type DeadlineControlRow = {
   explanation: string;
   unresolvedReason?: string;
   history?: readonly DeadlineControlHistoryEvent[];
+  /** Who confirmed the date (H-010: a different person publishes it). */
+  confirmedBy?: string | null;
+  /** The viewer confirmed this row, so the viewer cannot publish it. */
+  confirmedByViewer?: boolean;
+  /** This row is an Override proposed for the given published row. */
+  supersedesEntryId?: string | null;
+  /** An Override of this published row is waiting to be published. */
+  pendingOverrideId?: string | null;
 };
 
 export type DeadlineControlHistoryEvent = {
