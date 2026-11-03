@@ -106,6 +106,13 @@ begin
     raise exception 'FAIL override: the original must stay published until the Override is published';
   end if;
   perform pg_temp.refused('second override while one waits', 'checker', format('select public.override_published_deadline(%s, %L, %L)', e, '2027-04-09', 'r'), 'An Override for this deadline is already waiting to be published.');
+  -- Editing the waiting Override back to review cannot smuggle in a new
+  -- statutory date, and no second Override starts meanwhile.
+  update public.monthly_calendar_entries set publication_status = 'needs_review', confirmed_by = null, confirmed_at = null, adjusted_statutory_deadline = '2027-04-20' where id = successor;
+  perform pg_temp.refused('second override while one is in review', 'checker', format('select public.override_published_deadline(%s, %L, %L)', e, '2027-04-09', 'r'), 'An Override for this deadline is already waiting to be published.');
+  perform pg_temp.ok('maker re-confirms the edited override', 'maker', format('select public.transition_deadline_control_entry(%L, %L, %L, %L)', successor, 'confirmed', '2027-04-11', 'r'));
+  perform pg_temp.refused('override changes the statutory date', 'checker', format('select public.transition_deadline_control_entry(%L, %L, null, %L)', successor, 'published', 'r'), 'An Override cannot change the BIR statutory date.');
+  update public.monthly_calendar_entries set adjusted_statutory_deadline = '2027-04-12' where id = successor;
   perform pg_temp.refused('proposer publishes the override', 'maker', format('select public.transition_deadline_control_entry(%L, %L, null, %L)', successor, 'published', 'r'), 'The person who confirmed a deadline cannot publish it.');
   perform pg_temp.ok('checker publishes the override', 'checker', format('select public.transition_deadline_control_entry(%L, %L, null, %L)', successor, 'published', 'agreed'));
   if (select publication_status from public.monthly_calendar_entries where id = pg_temp.entry()) <> 'superseded'

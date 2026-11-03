@@ -17,10 +17,10 @@ alter table public.monthly_calendar_entries
   add column if not exists supersedes_entry_id uuid references public.monthly_calendar_entries(id);
 create index if not exists monthly_calendar_entries_supersedes_idx
   on public.monthly_calendar_entries (supersedes_entry_id) where supersedes_entry_id is not null;
--- At most one successor stands for a row at a time.
+-- At most one successor stands for a row at a time, whatever its review state.
 create unique index if not exists monthly_calendar_entries_one_open_successor_idx
   on public.monthly_calendar_entries (supersedes_entry_id)
-  where supersedes_entry_id is not null and publication_status in ('confirmed', 'published');
+  where supersedes_entry_id is not null and publication_status <> 'superseded';
 
 create or replace function public.transition_deadline_control_entry(
   p_entry_id uuid,
@@ -93,6 +93,15 @@ begin
     end if;
     if control_deadline is not null and entry.published_operational_deadline > control_deadline then
       raise exception using errcode = '22023', message = 'The operational due date cannot be later than the earliest applicable statutory deadline.';
+    end if;
+    -- An Override changes the TMF date only: its statutory dates must still be
+    -- the original's, even if the waiting row was edited after it was proposed.
+    if entry.supersedes_entry_id is not null and exists (
+      select 1 from public.monthly_calendar_entries replaced
+       where replaced.id = entry.supersedes_entry_id
+         and (replaced.base_statutory_deadline is distinct from entry.base_statutory_deadline
+              or replaced.adjusted_statutory_deadline is distinct from entry.adjusted_statutory_deadline)) then
+      raise exception using errcode = '22023', message = 'An Override cannot change the BIR statutory date.';
     end if;
     update public.monthly_calendar_entries
        set publication_status = 'published',
@@ -178,7 +187,7 @@ begin
     raise exception using errcode = '22023', message = 'The operational due date cannot be later than the earliest applicable statutory deadline.';
   end if;
   if exists (select 1 from public.monthly_calendar_entries pending
-              where pending.supersedes_entry_id = entry.id and pending.publication_status = 'confirmed') then
+              where pending.supersedes_entry_id = entry.id and pending.publication_status <> 'superseded') then
     raise exception using errcode = '22023', message = 'An Override for this deadline is already waiting to be published.';
   end if;
 
@@ -240,7 +249,7 @@ begin
       join public.monthly_calendar_versions version on version.id = entry.calendar_version_id
       left join public.app_users confirmer on confirmer.id = entry.confirmed_by
       left join public.app_users publisher on publisher.id = entry.published_by
-      left join public.monthly_calendar_entries pending on pending.supersedes_entry_id = entry.id and pending.publication_status = 'confirmed'
+      left join public.monthly_calendar_entries pending on pending.supersedes_entry_id = entry.id and pending.publication_status <> 'superseded'
       where extract(year from version.calendar_month)::integer = p_calendar_year
         and version.status <> 'superseded'), '[]'::jsonb));
 end;

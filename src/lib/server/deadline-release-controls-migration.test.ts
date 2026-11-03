@@ -18,6 +18,9 @@ describe("deadline release controls migration (H-010)", () => {
     expect(migration).toContain("create or replace function public.override_published_deadline(");
     expect(migration).toContain("update public.monthly_calendar_entries set publication_status = 'superseded' where id = original.id;");
     expect(migration).toContain("'An Override for this deadline is already waiting to be published.'");
+    // An Override changes only the TMF date, even if the waiting row was edited.
+    expect(migration).toContain("'An Override cannot change the BIR statutory date.'");
+    expect(migration).toContain("where supersedes_entry_id is not null and publication_status <> 'superseded';");
   });
 
   it("never lets an operational date pass the statutory deadline, and keeps the internal target a day before", () => {
