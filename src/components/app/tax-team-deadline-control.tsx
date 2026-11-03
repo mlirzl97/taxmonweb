@@ -203,14 +203,14 @@ export function TaxTeamDeadlineControl() {
   const selectedConfirmRows = governed ? filteredRows.filter((row) => selectedRowIds.includes(row.id) && canConfirm(row)) : [];
   const allPublishableSelected = publishableRows.length > 0 && publishableRows.every((row) => selectedRowIds.includes(row.id));
 
-  async function transition(row: DeadlineControlRow, status: DeadlinePublicationStatus, publishedOperationalDeadline: string | null = null, providedReason?: string) {
+  async function transition(row: DeadlineControlRow, status: DeadlinePublicationStatus, publishedOperationalDeadline: string | null = null, providedReason?: string): Promise<boolean> {
     const reason = providedReason?.trim() || (source === "repository" ? window.prompt(`Reason for ${statusLabels[status].toLowerCase()}:`, "Tax Team control review")?.trim() : "Tax Team prototype review simulation");
-    if (!reason) return;
+    if (!reason) return false;
     if (source !== "repository") {
       if (status === "published") {
         if (!publishedOperationalDeadline) {
           setMessage(`${row.formNumber || row.requirementCode} cannot be published without an approved deadline.`);
-          return;
+          return false;
         }
         const nextOverrides = { ...overrides, [row.id]: { status: "published" as const, publishedOperationalDeadline } };
         writeDeadlinePublicationOverrides(window.localStorage, nextOverrides);
@@ -218,10 +218,10 @@ export function TaxTeamDeadlineControl() {
         const event = recordLocalHistory(row.id, "Deadline published", reason);
         setRows((current) => current.map((candidate) => candidate.id === row.id ? { ...candidate, publicationStatus: "published", publishedOperationalDeadline, verificationStatus: "verified", unresolvedReason: undefined, history: [event, ...(candidate.history ?? [])] } : candidate));
         setMessage(`${row.formNumber || row.requirementCode} published.`);
-        return;
+        return true;
       }
       setMessage("Save the statutory date before publishing.");
-      return;
+      return false;
     }
     setBusy(true); setMessage("");
     try {
@@ -229,8 +229,10 @@ export function TaxTeamDeadlineControl() {
       if (!response.ok) throw new Error((await response.json() as { error?: string }).error ?? "Unable to update the repository.");
       await loadRows();
       setMessage(`${statusLabels[status]} recorded.`);
+      return true;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to update the deadline.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -322,8 +324,7 @@ export function TaxTeamDeadlineControl() {
       const savedRow = { ...localRow, history: [event, ...(localRow.history ?? [])] };
       setRows((current) => mergeLocalRows(current, [savedRow]));
       if (canSaveAndPublish(savedRow)) {
-        await transition(savedRow, "published", savedRow.earliestApplicableDeadline, editingRow.notes.trim() || "Tax Team deadline update and publication");
-        setEditingRow(null);
+        if (await transition(savedRow, "published", savedRow.earliestApplicableDeadline, editingRow.notes.trim() || "Tax Team deadline update and publication")) setEditingRow(null);
       } else {
         const nextEditingRow = toEditable(savedRow);
         setEditingRow(nextEditingRow);
@@ -341,9 +342,13 @@ export function TaxTeamDeadlineControl() {
       const savedRow = nextRows.find((row) => row.id === (editingRow.id || savedPayload.data?.id));
       if (savedRow) {
         if (canConfirm(savedRow)) {
-          await transition(savedRow, "confirmed", null, editingRow.notes.trim() || "Tax Team deadline update and confirmation");
-          setEditingRow(null);
-          setMessage(`${savedRow.formNumber || savedRow.requirementCode} saved and confirmed. A different person publishes it.`);
+          // Saved, but not confirmed: keep the drawer open with the server's reason.
+          if (await transition(savedRow, "confirmed", null, editingRow.notes.trim() || "Tax Team deadline update and confirmation")) {
+            setEditingRow(null);
+            setMessage(`${savedRow.formNumber || savedRow.requirementCode} saved and confirmed. A different person publishes it.`);
+          } else {
+            setEditingRow(toEditable(savedRow));
+          }
         } else {
           const nextEditingRow = toEditable(savedRow);
           setEditingRow(nextEditingRow);
