@@ -63,7 +63,17 @@ begin
   end if;
 
   if p_to_status = 'confirmed' then
-    proposed_date := coalesce(p_published_operational_deadline, entry.published_operational_deadline, control_deadline);
+    -- One confirmation stands at a time: confirming again would hide the
+    -- first confirmer from the publish check. Send it back to review first.
+    if entry.publication_status = 'confirmed' then
+      raise exception using errcode = '22023', message = 'This deadline is already confirmed; send it back to review before confirming again.';
+    end if;
+    -- A new confirmation is of the date as saved now: the statutory date, or
+    -- for an Override its own proposed TMF date. An earlier confirmation's
+    -- date never carries over.
+    proposed_date := coalesce(p_published_operational_deadline,
+                              case when entry.supersedes_entry_id is not null then entry.published_operational_deadline end,
+                              control_deadline);
     if proposed_date is null then
       raise exception using errcode = '22023', message = 'A confirmed deadline requires an earliest statutory date or explicit operational date.';
     end if;
@@ -93,6 +103,12 @@ begin
     end if;
     if control_deadline is not null and entry.published_operational_deadline > control_deadline then
       raise exception using errcode = '22023', message = 'The operational due date cannot be later than the earliest applicable statutory deadline.';
+    end if;
+    -- An Override replaces a deadline that is still published, never a stale one.
+    if entry.supersedes_entry_id is not null and not exists (
+      select 1 from public.monthly_calendar_entries replaced
+       where replaced.id = entry.supersedes_entry_id and replaced.publication_status = 'published') then
+      raise exception using errcode = '22023', message = 'The deadline this Override replaces is no longer published.';
     end if;
     -- An Override changes the TMF date only: its statutory dates must still be
     -- the original's, even if the waiting row was edited after it was proposed.

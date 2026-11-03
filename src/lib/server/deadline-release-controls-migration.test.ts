@@ -10,6 +10,10 @@ describe("deadline release controls migration (H-010)", () => {
     expect(migration).toContain("if entry.confirmed_by = auth.uid() then");
     expect(migration).toContain("'The person who confirmed a deadline cannot publish it.'");
     expect(migration).toContain("'The publisher cannot change the confirmed date; confirm the new date first.'");
+    // One confirmation stands at a time, and it confirms the date as saved now.
+    expect(migration).toContain("'This deadline is already confirmed; send it back to review before confirming again.'");
+    expect(migration).toContain("case when entry.supersedes_entry_id is not null then entry.published_operational_deadline end,");
+    expect(migration).toContain("'The deadline this Override replaces is no longer published.'");
   });
 
   it("changes a published deadline only through an Override that supersedes it on publication", () => {

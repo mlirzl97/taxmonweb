@@ -88,12 +88,30 @@ begin
   perform pg_temp.refused('publish without confirmation', 'maker', format('select public.transition_deadline_control_entry(%s, %L, null, %L)', e, 'published', 'r'), 'A deadline is confirmed before it is published.');
   perform pg_temp.refused('confirm after the statutory date', 'maker', format('select public.transition_deadline_control_entry(%s, %L, %L, %L)', e, 'confirmed', '2027-04-13', 'r'), 'The operational due date cannot be later than the earliest applicable statutory deadline.');
   perform pg_temp.ok('maker confirms the 12th', 'maker', format('select public.transition_deadline_control_entry(%s, %L, null, %L)', e, 'confirmed', 'checked against the BIR calendar'));
+  perform pg_temp.refused('checker confirms again', 'checker', format('select public.transition_deadline_control_entry(%s, %L, null, %L)', e, 'confirmed', 'r'), 'This deadline is already confirmed; send it back to review before confirming again.');
   perform pg_temp.refused('confirmer publishes', 'maker', format('select public.transition_deadline_control_entry(%s, %L, null, %L)', e, 'published', 'r'), 'The person who confirmed a deadline cannot publish it.');
   perform pg_temp.refused('publisher changes the date', 'checker', format('select public.transition_deadline_control_entry(%s, %L, %L, %L)', e, 'published', '2027-04-11', 'r'), 'The publisher cannot change the confirmed date; confirm the new date first.');
   perform pg_temp.ok('checker publishes', 'checker', format('select public.transition_deadline_control_entry(%s, %L, null, %L)', e, 'published', 'second check'));
   if (select publication_status || '/' || published_operational_deadline from public.monthly_calendar_entries where id = pg_temp.entry()) <> 'published/2027-04-12' then
     raise exception 'FAIL publish: expected published on 2027-04-12';
   end if;
+
+  -- An edited statutory date is what a new confirmation confirms: on a scratch
+  -- row, confirm the 12th, edit to the 15th (back to review), confirm again.
+  declare
+    scratch uuid;
+  begin
+    insert into public.monthly_calendar_entries (calendar_version_id, requirement_id, external_requirement_label, period_or_event, comparison_status, publication_status, adjusted_statutory_deadline)
+      select calendar_version_id, requirement_id, 'Release test scratch', 'Release test scratch. Month of May 2027', 'match', 'needs_review', '2027-05-12'
+      from public.monthly_calendar_entries where id = pg_temp.entry() returning id into scratch;
+    perform pg_temp.ok('scratch confirmed', 'maker', format('select public.transition_deadline_control_entry(%L, %L, null, %L)', scratch, 'confirmed', 'r'));
+    -- What saving an edit does to a confirmed row: back to review, confirmer cleared, date changed.
+    update public.monthly_calendar_entries set publication_status = 'needs_review', confirmed_by = null, confirmed_at = null, adjusted_statutory_deadline = '2027-05-15' where id = scratch;
+    perform pg_temp.ok('scratch reconfirmed after edit', 'checker', format('select public.transition_deadline_control_entry(%L, %L, null, %L)', scratch, 'confirmed', 'r'));
+    if (select published_operational_deadline from public.monthly_calendar_entries where id = scratch) <> '2027-05-15' then
+      raise exception 'FAIL reconfirm after edit: the old date carried over';
+    end if;
+  end;
 
   -- Published dates change only through Override.
   perform pg_temp.refused('re-publish with a new date', 'checker', format('select public.transition_deadline_control_entry(%s, %L, %L, %L)', e, 'published', '2027-04-11', 'r'), 'A published deadline changes only through Override.');
@@ -122,6 +140,18 @@ begin
   if (select count(*) from public.deadline_publication_events where monthly_calendar_entry_id in (pg_temp.entry(), successor)) < 5 then
     raise exception 'FAIL history: every decision must be recorded';
   end if;
+  -- A stale Override, of a deadline already superseded, can never publish.
+  declare
+    stale uuid;
+  begin
+    update public.monthly_calendar_entries set supersedes_entry_id = null where id = successor;
+    insert into public.monthly_calendar_entries (calendar_version_id, requirement_id, external_requirement_label, period_or_event, comparison_status, publication_status,
+      base_statutory_deadline, adjusted_statutory_deadline, published_operational_deadline, confirmed_by, confirmed_at, supersedes_entry_id)
+    select calendar_version_id, requirement_id, external_requirement_label, period_or_event, comparison_status, 'confirmed',
+      base_statutory_deadline, adjusted_statutory_deadline, '2027-04-10', (select user_id from release_actors where role = 'maker'), now(), id
+    from public.monthly_calendar_entries where id = pg_temp.entry() returning id into stale;
+    perform pg_temp.refused('stale override publishes', 'checker', format('select public.transition_deadline_control_entry(%L, %L, null, %L)', stale, 'published', 'r'), 'The deadline this Override replaces is no longer published.');
+  end;
   raise notice 'ALL DEADLINE RELEASE CONTROL TESTS PASSED';
 end $$;
 
