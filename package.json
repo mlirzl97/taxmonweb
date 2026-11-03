@@ -14,7 +14,8 @@
     "fixtures:audit": "tsx scripts/import-sanitized-fixtures.ts --audit --include-tax-profiles",
     "migration:check": "node scripts/check-migration-versions.mjs",
     "test:watch": "vitest",
-    "verify": "npm run migration:check && npm run lint && npm run typecheck && npm run test && npm run build"
+    "verify": "npm run migration:check && npm run lint && npm run typecheck && npm run test && npm run build",
+    "test:db": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f supabase/tests/work_lifecycle_controls_test.sql"
   },
   "dependencies": {
     "@sentry/nextjs": "^11.6.0",
