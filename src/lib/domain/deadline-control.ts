@@ -55,6 +55,9 @@ export type DeadlineControlRow = {
   confirmedBy?: string | null;
   /** The viewer confirmed this row, so the viewer cannot publish it. */
   confirmedByViewer?: boolean;
+  /** The period dates exactly as stored (null when unset), so an edit saves them back unchanged. */
+  storedPeriodStart?: string | null;
+  storedPeriodEnd?: string | null;
   /** This row is an Override proposed for the given published row. */
   supersedesEntryId?: string | null;
   /** An Override of this published row is waiting to be published. */

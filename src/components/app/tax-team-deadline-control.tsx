@@ -80,10 +80,10 @@ function historyTimestamp(value: string) {
   return Number.isNaN(date.getTime()) ? "Time not recorded" : new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" }).format(date);
 }
 
-function toEditable(row: DeadlineControlRow): EditableRow {
+export function toEditable(row: DeadlineControlRow): EditableRow {
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
   const monthIndex = Math.max(0, months.indexOf(row.activityMonth));
-  return { ...row, taxCategory: categoryOption(row.taxCategory), calendarMonth: new Date(Date.UTC(row.calendarYear, monthIndex, 1)).toISOString().slice(0, 10), periodStart: row.periodStartDate, periodEnd: "", sourceLocator: "", notes: row.explanation.replace(obsoleteUnresolvedNote, "").trim() };
+  return { ...row, taxCategory: categoryOption(row.taxCategory), calendarMonth: new Date(Date.UTC(row.calendarYear, monthIndex, 1)).toISOString().slice(0, 10), periodStart: row.storedPeriodStart !== undefined ? row.storedPeriodStart ?? "" : row.periodStartDate, periodEnd: row.storedPeriodEnd ?? "", sourceLocator: "", notes: row.explanation.replace(obsoleteUnresolvedNote, "").trim() };
 }
 
 function emptyRow(year: number): EditableRow {

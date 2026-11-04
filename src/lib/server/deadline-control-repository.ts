@@ -67,6 +67,8 @@ function mapRepositoryRow(value: unknown): DeadlineControlRow {
     activityMonth: row.calendarMonth ? new Intl.DateTimeFormat("en-PH", { month: "long", timeZone: "Asia/Manila" }).format(new Date(`${String(row.calendarMonth)}T00:00:00Z`)) : "Unresolved",
     activityPeriod: String(row.periodOrEvent ?? "Unresolved"),
     periodStartDate: typeof row.periodStart === "string" ? row.periodStart : row.calendarMonth ? String(row.calendarMonth) : "",
+    storedPeriodStart: typeof row.periodStart === "string" ? row.periodStart : null,
+    storedPeriodEnd: typeof row.periodEnd === "string" ? row.periodEnd : null,
     taxablePeriod: String(row.periodOrEvent ?? "Unresolved"),
     baseStatutoryDeadline,
     adjustedStatutoryDeadline,
