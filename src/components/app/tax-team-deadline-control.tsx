@@ -225,7 +225,9 @@ export function TaxTeamDeadlineControl() {
     }
     setBusy(true); setMessage("");
     try {
-      const response = await fetch("/api/deadline-control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "transition", entryId: row.id, toStatus: status, publishedOperationalDeadline: status === "confirmed" ? publishedOperationalDeadline : null, reason }) });
+      const response = await fetch("/api/deadline-control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "transition", entryId: row.id, toStatus: status, // Publishing sends the confirmed date the publisher saw, so a reconfirmation
+      // made meanwhile is refused instead of published unseen.
+      publishedOperationalDeadline: status === "confirmed" ? publishedOperationalDeadline : status === "published" ? publishedOperationalDeadline ?? row.publishedOperationalDeadline : null, reason }) });
       if (!response.ok) throw new Error((await response.json() as { error?: string }).error ?? "Unable to update the repository.");
       await loadRows();
       setMessage(`${statusLabels[status]} recorded.`);
@@ -291,7 +293,7 @@ export function TaxTeamDeadlineControl() {
     try {
       const toStatus = bulkMode === "confirm" ? "confirmed" : "published";
       for (const row of selectedRows) {
-        const response = await fetch("/api/deadline-control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "transition", entryId: row.id, toStatus, publishedOperationalDeadline: null, reason }) });
+        const response = await fetch("/api/deadline-control", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "transition", entryId: row.id, toStatus, publishedOperationalDeadline: toStatus === "published" ? row.publishedOperationalDeadline : null, reason }) });
         if (!response.ok) throw new Error((await response.json() as { error?: string }).error ?? `Unable to ${bulkMode} the selected deadlines.`);
       }
       await loadRows();
