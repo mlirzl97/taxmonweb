@@ -67,6 +67,8 @@ function mapRepositoryRow(value: unknown): DeadlineControlRow {
     activityMonth: row.calendarMonth ? new Intl.DateTimeFormat("en-PH", { month: "long", timeZone: "Asia/Manila" }).format(new Date(`${String(row.calendarMonth)}T00:00:00Z`)) : "Unresolved",
     activityPeriod: String(row.periodOrEvent ?? "Unresolved"),
     periodStartDate: typeof row.periodStart === "string" ? row.periodStart : row.calendarMonth ? String(row.calendarMonth) : "",
+    storedPeriodStart: typeof row.periodStart === "string" ? row.periodStart : null,
+    storedPeriodEnd: typeof row.periodEnd === "string" ? row.periodEnd : null,
     taxablePeriod: String(row.periodOrEvent ?? "Unresolved"),
     baseStatutoryDeadline,
     adjustedStatutoryDeadline,
@@ -94,11 +96,44 @@ function requireClient() {
   });
 }
 
+type ReleaseState = { viewerId?: string | null; entries?: { id: string; confirmedById?: string | null; confirmedBy?: string | null; supersedesEntryId?: string | null; pendingOverrideId?: string | null }[] };
+
 export async function listDeadlineControlRows(calendarYear: number) {
   const client = await requireClient();
   const { data, error } = await client.rpc("get_deadline_control_repository", { p_calendar_year: calendarYear });
   if (error) throw new Error(`Unable to load the deadline repository: ${error.message}`);
-  return (Array.isArray(data) ? data : []).map(mapRepositoryRow);
+  const rows = (Array.isArray(data) ? data : []).map(mapRepositoryRow);
+  // Who confirmed each row and which Overrides wait (H-010). Before the
+  // release-controls migration is applied the function does not exist yet.
+  const { data: release, error: releaseError } = await client.rpc("get_deadline_release_state", { p_calendar_year: calendarYear });
+  if (releaseError) {
+    if (releaseError.code === "PGRST202" || releaseError.code === "42883") return rows;
+    throw new Error(`Unable to load who confirmed each deadline: ${releaseError.message}`);
+  }
+  const state = (release ?? {}) as ReleaseState;
+  const byId = new Map((state.entries ?? []).map((entry) => [entry.id, entry]));
+  return rows.map((row) => {
+    const entry = byId.get(row.id);
+    if (!entry) return row;
+    // An Override's internal target follows its own TMF date, not the statutory date.
+    const overrideTarget = entry.supersedesEntryId && row.publishedOperationalDeadline ? calculateInternalTarget(row.publishedOperationalDeadline) : null;
+    return {
+      ...row,
+      ...(overrideTarget ? { tmfPackageTarget: overrideTarget } : {}),
+      confirmedBy: entry.confirmedBy ?? null,
+      confirmedByViewer: Boolean(entry.confirmedById && state.viewerId && entry.confirmedById === state.viewerId),
+      supersedesEntryId: entry.supersedesEntryId ?? null,
+      pendingOverrideId: entry.pendingOverrideId ?? null,
+    } satisfies DeadlineControlRow;
+  });
+}
+
+/** Proposes a new TMF operational date for a published deadline; a different person publishes it. */
+export async function overridePublishedDeadline(entryId: string, operationalDeadline: string, reason: string) {
+  const client = await requireClient();
+  const { data, error } = await client.rpc("override_published_deadline", { p_entry_id: entryId, p_operational_deadline: operationalDeadline, p_reason: reason });
+  if (error) throw new Error(`Unable to propose the Override: ${error.message}`);
+  return data as { id: string; supersedes: string; publicationStatus: DeadlinePublicationStatus };
 }
 
 export async function saveDeadlineControlEntry(input: DeadlineControlEntryInput) {
