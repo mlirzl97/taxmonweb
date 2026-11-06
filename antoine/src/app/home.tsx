@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { Anay } from "@/components/Anay";
 import { AnthillScene } from "@/components/AnthillScene";
 import { CountUp } from "@/components/CountUp";
+import { Forage } from "@/components/Forage";
 import { useGame } from "@/components/GameProvider";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { StatusIcon } from "@/components/StatusIcon";
@@ -79,6 +80,8 @@ export function Home() {
             <span className="small" style={{ color: "var(--sand)", lineHeight: 1.35 }}>Filing by D-1 = a hit.{upcomingD1 && <> Next D-1: <b style={{ color: "var(--paper)" }}>{shortDate(upcomingD1)}</b> (sample)</>}</span>
           </div>
         </Link>
+
+        <Forage />
 
         <section className="card card--shadow card--pad rings" aria-label="Colony cycle rings">
           <svg width={104} height={104} viewBox="0 0 104 104" role="img" aria-label={`Filed on time ${rings.filed[0]} of ${rings.filed[1]}, evidence complete ${rings.evidence[0]} of ${rings.evidence[1]}, QA clean ${rings.qa[0]} of ${rings.qa[1]}`}>

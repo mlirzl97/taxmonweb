@@ -3,15 +3,18 @@
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
+import { Anay } from "@/components/Anay";
 import { Antoine } from "@/components/Antoine";
+import { play, type SoundName } from "@/lib/sound";
 import { defaultLook, type Look } from "@/lib/game/cosmetics";
 import { anayFor, antsFor, apply, needsMe, ownedItems, positiveXpFor, xpFor, type Action, type Award, type GameState } from "@/lib/game/engine";
 import { rankFor } from "@/lib/game/rules";
-import { baselines, initialState, ME, seniority } from "@/lib/game/world";
+import { baselines, initialState, ME, people, seniority } from "@/lib/game/world";
 
 const STORAGE_KEY = "antoine.sample.v1";
 const MOTION_KEY = "antoine.motion";
 const ONBOARD_KEY = "antoine.onboarded";
+const SOUND_KEY = "antoine.sound";
 
 export type MotionPref = "system" | "on" | "off";
 
@@ -51,6 +54,7 @@ type GameContext = {
   motion: { pref: MotionPref; phoneReduced: boolean; animate: boolean; setPref: (pref: MotionPref) => void };
   onboarded: boolean;
   finishOnboarding: () => void;
+  sound: { on: boolean; set: (on: boolean) => void; play: (name: SoundName) => void };
 };
 
 const Context = createContext<GameContext | null>(null);
@@ -65,6 +69,9 @@ const codeLabel: Record<Award["code"], string> = {
   BLOCKER_RAISED_EARLY: "blocker raised early",
   MISSED_D1: "missed D-1",
   MISSED_STATUTORY: "missed deadline",
+  MISSION: "mission complete",
+  MISSIONS_ALL: "all three missions",
+  ANAY_DEFEATED: "All Clear",
 };
 
 function load(): GameState | null {
@@ -91,6 +98,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const toastId = useRef(0);
   const [motionPref, setMotionPref] = useState<MotionPref>("system");
   const [onboarded, setOnboarded] = useState(true);
+  const [soundOn, setSoundOn] = useState(false);
+  const soundRef = useRef(false);
+  const sfx = useCallback((name: SoundName) => { if (soundRef.current) play(name); }, []);
   const phoneReduced = useSyncExternalStore(subscribeReduced, () => window.matchMedia("(prefers-reduced-motion: reduce)").matches, () => false);
   const animate = motionPref === "on" || (motionPref === "system" && !phoneReduced);
 
@@ -105,7 +115,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (stored) { setState(stored); stateRef.current = stored; }
     setMotionPref(readPref<MotionPref>(MOTION_KEY, "system"));
     setOnboarded(readPref<string>(ONBOARD_KEY, "") === "yes");
+    const sound = readPref<string>(SOUND_KEY, "off") === "on";
+    setSoundOn(sound);
+    soundRef.current = sound;
     setHydrated(true);
+  }, []);
+
+  // A soft tick on every tap when sound is on.
+  useEffect(() => {
+    const onTap = (event: MouseEvent) => {
+      if (soundRef.current && (event.target as Element | null)?.closest?.("button, a")) play("tap");
+    };
+    document.addEventListener("click", onTap, true);
+    return () => document.removeEventListener("click", onTap, true);
   }, []);
 
   const pushToast = useCallback((toast: Omit<Toast, "id">) => {
@@ -116,8 +138,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const dispatch = useCallback<GameContext["dispatch"]>((action) => {
     const before = stateRef.current;
-    const result = apply(before, action, seniority);
-    if (!result.ok) return result;
+    const first = apply(before, action, seniority);
+    if (!first.ok) { sfx("miss"); return first; }
+    let result = first;
+    // Anay at 0 HP: the whole colony earns All Clear, once per cycle.
+    if (anayFor(result.state, baselines.anay).hp === 0 && !result.state.awards.some((a) => a.code === "ANAY_DEFEATED")) {
+      const cleared = apply(result.state, { type: "all_clear", people: Object.keys(people) }, seniority);
+      if (cleared.ok) result = { ok: true, state: cleared.state, awards: [...result.awards, ...cleared.awards] };
+    }
     stateRef.current = result.state;
     setState(result.state);
     save(result.state);
@@ -126,9 +154,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const gained = mine.filter((a) => a.xp > 0).reduce((sum, a) => sum + a.xp, 0);
     if (gained > 0) {
       try { navigator.vibrate?.(35); } catch { /* not supported */ }
+      sfx(mine.some((a) => a.code === "ANAY_HIT") ? "hit" : "win");
       const labels = Array.from(new Set(mine.filter((a) => a.xp > 0).map((a) => codeLabel[a.code])));
       pushToast({ tone: "win", text: `+${gained} XP · +${gained} Ants`, detail: labels.join(" · ") });
     }
+    if (mine.some((a) => (a.code === "MISSED_D1" || a.code === "MISSED_STATUTORY") && !a.waivedBy)) sfx("miss");
+    if (result.awards.some((a) => a.code === "ANAY_DEFEATED")) sfx("fanfare");
     for (const miss of mine.filter((a) => a.code === "MISSED_D1" || a.code === "MISSED_STATUTORY")) {
       pushToast({ tone: miss.waivedBy ? "info" : "miss", text: miss.waivedBy ? `${codeLabel[miss.code]} · waived` : `${miss.xp} XP · ${codeLabel[miss.code]}`, detail: miss.waivedBy ?? "See Me for details" });
     }
@@ -138,7 +169,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const afterRank = rankFor(baselines.lifetimeXp + positiveXpFor(result.state, ME));
     if (afterRank.tier > beforeRank.tier) setRankUp(afterRank.name);
     return { ok: true, awards: result.awards };
-  }, [pushToast]);
+  }, [pushToast, sfx]);
 
   const reset = useCallback(() => {
     const fresh = initialState();
@@ -165,12 +196,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       motion: { pref: motionPref, phoneReduced, animate, setPref: (pref: MotionPref) => { setMotionPref(pref); writePref(MOTION_KEY, pref); } },
       onboarded,
       finishOnboarding: () => { setOnboarded(true); writePref(ONBOARD_KEY, "yes"); },
+      sound: { on: soundOn, set: (on: boolean) => { setSoundOn(on); soundRef.current = on; writePref(SOUND_KEY, on ? "on" : "off"); if (on) play("sparkle"); }, play: sfx },
     };
-  }, [state, hydrated, dispatch, reset, rankUp, motionPref, phoneReduced, animate, onboarded]);
+  }, [state, hydrated, dispatch, reset, rankUp, motionPref, phoneReduced, animate, onboarded, soundOn, sfx]);
 
   return (
     <Context.Provider value={value}>
       {children}
+      {hydrated && anayFor(state, baselines.anay).hp === 0 && !state.allClearSeen && <AllClear animate={animate} onDone={() => dispatch({ type: "seen_all_clear" })} />}
       {rankUp && <Link href="/rank-up" className="rankup-banner" onClick={() => setRankUp(null)}>Rank up! {rankUp} ka na <span aria-hidden>→</span></Link>}
       <div className="toasts" aria-live="polite" aria-atomic="false">
         {toasts.map((toast) => (
@@ -182,6 +215,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         ))}
       </div>
     </Context.Provider>
+  );
+}
+
+/** The All Clear cinematic: Anay goes down, the colony wins. */
+function AllClear({ animate, onDone }: { animate: boolean; onDone: () => void }) {
+  return (
+    <div className="allclear" role="dialog" aria-modal="true" aria-label="All Clear">
+      <div className="allclear__rays spin" aria-hidden />
+      {animate && <span className="confetti confetti--big" aria-hidden>{Array.from({ length: 28 }, (_, i) => <i key={i} style={{ ["--i" as string]: i } as React.CSSProperties} />)}</span>}
+      <div className="allclear__anay"><Anay mood="defeated" size={190} /></div>
+      <div className="allclear__stamp">All Clear!</div>
+      <p className="allclear__copy">Anay is down for the Nov cycle. <b>+50 XP for everyone</b> in the colony.</p>
+      <div className="allclear__team"><Antoine mood="cheer" size={110} animated={animate} /></div>
+      <button className="btn btn--honey btn--block" type="button" onClick={onDone} style={{ maxWidth: 360, minHeight: 56, fontFamily: "var(--display)", fontSize: 20 }}>Tuloy ang laban</button>
+    </div>
   );
 }
 

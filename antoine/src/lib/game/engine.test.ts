@@ -201,3 +201,43 @@ describe("wardrobe", () => {
     expect(apply(initialState(), { type: "equip", actor: ME, look: { ...defaultLook, hat: "crown" } }, seniority).ok).toBe(false);
   });
 });
+
+describe("forage missions", () => {
+  it("pick exactly three of today's five, once", async () => {
+    const { offeredOn } = await import("./missions");
+    const offered = offeredOn("2026-11-06").map((m) => m.id);
+    expect(offered).toHaveLength(5);
+    expect(apply(initialState(), { type: "pick_missions", actor: ME, ids: offered.slice(0, 2) }, seniority).ok).toBe(false);
+    expect(apply(initialState(), { type: "pick_missions", actor: ME, ids: ["nope", ...offered.slice(0, 2)] }, seniority).ok).toBe(false);
+    const s = ok(apply(initialState(), { type: "pick_missions", actor: ME, ids: offered.slice(0, 3) }, seniority));
+    expect(apply(s, { type: "pick_missions", actor: ME, ids: offered.slice(2, 5) }, seniority).ok).toBe(false);
+  });
+
+  it("missions complete only from verified work, and pay once", () => {
+    const base = initialState();
+    let s = ok(apply({ ...base, missions: { date: base.today, picked: ["check", "accept", "anay"], claimed: [] } }, { type: "advance_day" }, seniority));
+    s = { ...s, today: base.today, missions: { date: base.today, picked: ["check", "accept", "anay"], claimed: [] } };
+    expect(apply(s, { type: "claim_mission", actor: ME, id: "check" }, seniority).ok).toBe(false);
+    s = ok(apply(s, { type: "check_approve", taskId: "sampaguita", actor: ME }, seniority));
+    s = ok(apply(s, { type: "claim_mission", actor: ME, id: "check" }, seniority));
+    expect(apply(s, { type: "claim_mission", actor: ME, id: "check" }, seniority).ok).toBe(false);
+    s = ok(apply(s, { type: "record_filing", taskId: "alon", actor: ME, date: base.today, ref: "F" }, seniority));
+    s = ok(apply(s, { type: "record_acceptance", taskId: "alon", actor: ME, ackRef: "A" }, seniority));
+    s = ok(apply(s, { type: "claim_mission", actor: ME, id: "accept" }, seniority));
+    const last = apply(s, { type: "claim_mission", actor: ME, id: "anay" }, seniority);
+    expect(last.ok).toBe(true);
+    if (last.ok) expect(last.awards.map((a) => a.code).sort()).toEqual(["MISSION", "MISSIONS_ALL"]);
+  });
+});
+
+describe("All Clear", () => {
+  it("colony hits bring Anay to zero and All Clear pays everyone once", () => {
+    let s = initialState();
+    for (let i = 0; i < 4; i += 1) s = ok(apply(s, { type: "colony_rush", hits: 5 }, seniority));
+    expect(anayFor(s, baselines.anay).hp).toBe(0);
+    s = ok(apply(s, { type: "all_clear", people: ["BS", "JR"] }, seniority));
+    expect(s.awards.filter((a) => a.code === "ANAY_DEFEATED")).toHaveLength(2);
+    s = ok(apply(s, { type: "all_clear", people: ["BS", "JR"] }, seniority));
+    expect(s.awards.filter((a) => a.code === "ANAY_DEFEATED")).toHaveLength(2);
+  });
+});

@@ -22,8 +22,9 @@ export function Wardrobe() {
 }
 
 function WardrobeEditor() {
-  const { look, owned, dispatch, motion } = useGame();
+  const { look, owned, dispatch, motion, sound } = useGame();
   const [draft, setDraft] = useState<Look>(look);
+  const [glow, setGlow] = useState(0);
   const [slot, setSlot] = useState<Slot>("hat");
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const changed = (Object.keys(draft) as Slot[]).some((key) => draft[key] !== look[key]);
@@ -32,9 +33,10 @@ function WardrobeEditor() {
   return (
     <section id="wardrobe" className="wardrobe" aria-label="Your ant">
       <div className="section-head"><h2 className="display-m">Your ant</h2><span className="small muted" style={{ fontWeight: 700 }}>Wardrobe</span></div>
-      <div className="wardrobe__stage">
+      <div className={glow ? "wardrobe__stage wardrobe__stage--glow" : "wardrobe__stage"} key={`stage-${glow}`} data-glow={glow > 0 ? "on" : undefined}>
         <span className="ground" aria-hidden />
-        <Antoine key={JSON.stringify(draft)} mood="wave" size={150} look={draft} animated={motion.animate} />
+        {glow > 0 && motion.animate && <span className="wardrobe__sparkles" aria-hidden>{Array.from({ length: 10 }, (_, i) => <i key={i} style={{ ["--i" as string]: i } as React.CSSProperties} />)}</span>}
+        <Antoine key={JSON.stringify(draft)} mood={glow ? "cheer" : "wave"} size={150} look={draft} animated={motion.animate} />
       </div>
       <div className="pill-row" role="group" aria-label="Wardrobe slot">
         {slots.map((key) => <button key={key} className="pill" type="button" aria-pressed={slot === key} onClick={() => setSlot(key)}>{slotLabels[key]}</button>)}
@@ -76,6 +78,7 @@ function WardrobeEditor() {
         <button className="btn btn--primary" type="button" disabled={!changed} onClick={() => {
           const result = dispatch({ type: "equip", actor: "BS", look: draft });
           setMessage(result.ok ? { tone: "ok", text: "Looking good! Your ant is updated everywhere." } : { tone: "error", text: result.error });
+          if (result.ok) { setGlow((n) => n + 1); sound.play("sparkle"); }
         }}>Wear this look</button>
       </div>
     </section>
@@ -107,6 +110,18 @@ export function Inventory() {
 }
 
 const motionOptions: Array<[MotionPref, string]> = [["system", "Follow phone"], ["on", "On"], ["off", "Off"]];
+
+export function SoundSetting() {
+  const { sound } = useGame();
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, padding: "12px 14px", borderTop: "1px solid var(--rule)" }}>
+      <span style={{ display: "flex", flexDirection: "column", gap: 2 }}><b style={{ fontSize: 15 }}>Sound</b><span className="small muted">Taps, wins, Anay hits and fanfares</span></span>
+      <button type="button" role="switch" aria-checked={sound.on} aria-label="Sound" onClick={() => sound.set(!sound.on)} style={{ flex: "none", width: 58, height: 34, borderRadius: 999, border: "2px solid var(--ink)", background: sound.on ? "var(--ant-red)" : "var(--rule)", padding: 0, cursor: "pointer", position: "relative" }}>
+        <span style={{ position: "absolute", top: 3, left: sound.on ? 28 : 3, width: 24, height: 24, borderRadius: 999, background: "var(--card)", border: "2px solid var(--ink)", transition: "left 140ms ease" }} />
+      </button>
+    </div>
+  );
+}
 
 export function MotionSetting() {
   const { motion } = useGame();

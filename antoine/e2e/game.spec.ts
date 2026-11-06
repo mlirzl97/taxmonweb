@@ -275,3 +275,66 @@ test("rank-up moment renders", async ({ page }) => {
   await page.goto("/rank-up");
   await expect(page.getByRole("heading", { name: /Soldier Ant/ })).toBeVisible();
 });
+
+test("sound is off by default and the setting is remembered", async ({ page }) => {
+  await page.goto("/me");
+  const toggle = page.getByRole("switch", { name: "Sound" });
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await page.reload();
+  await expect(page.getByRole("switch", { name: "Sound" })).toHaveAttribute("aria-checked", "true");
+});
+
+test("daily forage: pick three, complete with verified work, claim XP", async ({ page }) => {
+  await page.goto("/");
+  const forage = page.getByRole("region", { name: "Today's forage" });
+  const offers = forage.getByRole("group", { name: "Missions to pick" }).getByRole("button");
+  await expect(offers).toHaveCount(5);
+  await expect(forage.getByRole("button", { name: "Pick 3 more" })).toBeDisabled();
+  const titles = await offers.locator("b").allTextContents();
+  // Pick the acceptance mission if offered, plus two others.
+  const wanted = titles.includes("Land an acceptance") ? ["Land an acceptance", ...titles.filter((t) => t !== "Land an acceptance").slice(0, 2)] : titles.slice(0, 3);
+  for (const title of wanted) await offers.filter({ hasText: title }).click();
+  await forage.getByRole("button", { name: "Start foraging" }).click();
+  await expect(forage.getByRole("listitem")).toHaveCount(3);
+  if (wanted[0] === "Land an acceptance") {
+    await expect(forage.getByRole("button", { name: "0/1" }).first()).toBeDisabled();
+    const sheet = await openTask(page, "mabini");
+    await sheet.getByLabel("Acknowledgement reference").fill("ACK-F-1");
+    await sheet.getByRole("button", { name: "Record acceptance", exact: true }).click();
+    await page.goto("/");
+    await forage.getByRole("button", { name: "Claim" }).first().click();
+    await expect(toast(page)).toContainText("mission complete");
+  }
+});
+
+test("All Clear: when Anay hits zero the colony wins together", async ({ page }) => {
+  await page.goto("/me");
+  for (let i = 0; i < 4; i += 1) await page.getByRole("button", { name: /Colony rush/ }).click();
+  const cinematic = page.getByRole("dialog", { name: "All Clear" });
+  await expect(cinematic).toBeVisible();
+  await expect(cinematic).toContainText("+50 XP for everyone");
+  await cinematic.getByRole("button", { name: "Tuloy ang laban" }).click();
+  await expect(cinematic).toHaveCount(0);
+  await page.goto("/");
+  await expect(page.locator(".boss")).toContainText("All Clear!");
+  await page.reload();
+  await expect(page.getByRole("dialog", { name: "All Clear" })).toHaveCount(0);
+});
+
+test("season finale reveals the podium and your finish", async ({ page }) => {
+  await page.goto("/finale");
+  await expect(page.getByRole("region", { name: "Your finish" })).toBeVisible({ timeout: 8000 });
+  await expect(page.getByRole("region", { name: "Final top three" })).toContainText("Mika");
+  await expect(page.getByRole("region", { name: "Your finish" })).toContainText("of 10");
+});
+
+test("equipping a new look plays the glow", async ({ page }) => {
+  await page.goto("/me#wardrobe");
+  const wardrobe = page.getByRole("region", { name: "Your ant" });
+  await wardrobe.getByRole("button", { name: "Hat", exact: true }).click();
+  await wardrobe.getByRole("button", { name: "Site visit hat" }).click();
+  await wardrobe.getByRole("button", { name: "Wear this look" }).click();
+  await expect(wardrobe.locator("[data-glow=on]")).toHaveCount(1);
+});

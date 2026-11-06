@@ -59,7 +59,7 @@ export function Leaderboard() {
   return (
     <main className="app">
       <header style={{ background: "var(--soil)", color: "var(--paper)", padding: "18px 16px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 10 }}>
           <div>
             <span className="eyebrow eyebrow--honey">Colony</span>
             <h1 className="display-l" style={{ fontSize: 30 }}>Leaderboards</h1>
@@ -67,6 +67,7 @@ export function Leaderboard() {
           <nav aria-label="Colony sections" style={{ display: "flex", gap: 6 }}>
             <Link href="/anay" className="chip" style={{ borderColor: "var(--paper)", color: "var(--paper)", textDecoration: "none", padding: "6px 10px" }}>Anay</Link>
             <Link href="/store" className="chip chip--honey" style={{ textDecoration: "none", padding: "6px 10px" }}>Store</Link>
+            <Link href="/finale" className="chip" style={{ borderColor: "var(--honey)", color: "var(--honey)", textDecoration: "none", padding: "6px 10px" }}>Finale</Link>
           </nav>
         </div>
         <div className="seg" role="group" aria-label="Board">

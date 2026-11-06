@@ -9,6 +9,7 @@
  */
 import { addDays, nextWorkingDay, workingDaysBefore, type IsoDate } from "./calendar";
 import { lookErrors, oneTimeItems, type Look } from "./cosmetics";
+import { ALL_THREE_BONUS, MISSION_XP, MISSIONS, offeredOn, progressOf } from "./missions";
 import { BLOCKER_EARLY_DAYS, EXTERNAL_BLOCKERS, XP } from "./rules";
 
 export type PersonId = string;
@@ -41,7 +42,8 @@ export type Task = {
 
 export type AwardCode =
   | "FIRST_PASS" | "CHECK_ON_TIME" | "REVIEW_ON_TIME" | "FILED_ACCEPTED" | "ANAY_HIT"
-  | "PAID_CONFIRMED" | "BLOCKER_RAISED_EARLY" | "MISSED_D1" | "MISSED_STATUTORY";
+  | "PAID_CONFIRMED" | "BLOCKER_RAISED_EARLY" | "MISSED_D1" | "MISSED_STATUTORY"
+  | "MISSION" | "MISSIONS_ALL" | "ANAY_DEFEATED";
 
 export type Award = {
   key: string;
@@ -65,6 +67,12 @@ export type GameState = {
   purchases: Purchase[];
   /** The player's ant. Missing on saves from before the wardrobe existed. */
   look?: Look;
+  /** Today's Forage missions. */
+  missions?: { date: IsoDate; picked: string[]; claimed: string[] };
+  /** Sample only: Anay hits landed by the rest of the colony in this session. */
+  colonyHits?: number;
+  /** The All Clear cinematic has been watched this cycle. */
+  allClearSeen?: boolean;
 };
 
 export type Action =
@@ -78,7 +86,12 @@ export type Action =
   | { type: "resolve_blocker"; taskId: string; actor: PersonId }
   | { type: "advance_day" }
   | { type: "buy"; actor: PersonId; itemId: string; price: number; kind: "digital" | "real"; balance: number }
-  | { type: "equip"; actor: PersonId; look: Look };
+  | { type: "equip"; actor: PersonId; look: Look }
+  | { type: "pick_missions"; actor: PersonId; ids: string[] }
+  | { type: "claim_mission"; actor: PersonId; id: string }
+  | { type: "colony_rush"; hits: number }
+  | { type: "all_clear"; people: PersonId[] }
+  | { type: "seen_all_clear" };
 
 export type Result = { ok: true; state: GameState; awards: Award[] } | { ok: false; error: string };
 
@@ -149,6 +162,37 @@ export function apply(state: GameState, action: Action, seniority: Seniority): R
     const next = { ...state, today };
     const fresh = evaluateMisses(next, seniority);
     return { ok: true, state: { ...next, awards: [...next.awards, ...fresh] }, awards: fresh };
+  }
+  if (action.type === "pick_missions") {
+    if (state.missions?.date === state.today && state.missions.picked.length > 0) return refuse("You already picked today's missions.");
+    const offered = new Set(offeredOn(state.today).map((m) => m.id));
+    const ids = Array.from(new Set(action.ids));
+    if (ids.length !== 3 || ids.some((id) => !offered.has(id))) return refuse("Pick three of today's five missions.");
+    return { ok: true, state: { ...state, missions: { date: state.today, picked: ids, claimed: [] } }, awards: [] };
+  }
+  if (action.type === "claim_mission") {
+    const day = state.missions?.date === state.today ? state.missions : undefined;
+    const mission = MISSIONS.find((m) => m.id === action.id);
+    if (!day || !mission || !day.picked.includes(action.id)) return refuse("That isn't one of today's missions.");
+    if (day.claimed.includes(action.id)) return refuse("Already claimed.");
+    if (progressOf(mission, state.awards, action.actor, state.today) < mission.target) return refuse("Not done yet. Missions count verified work only.");
+    const fresh: Award[] = [];
+    award(state, fresh, { person: action.actor, code: "MISSION", role: "owner", xp: MISSION_XP, taskId: `mission-${state.today}-${action.id}`, note: mission.title });
+    const claimed = [...day.claimed, action.id];
+    if (claimed.length === 3) award(state, fresh, { person: action.actor, code: "MISSIONS_ALL", role: "owner", xp: ALL_THREE_BONUS, taskId: `missions-${state.today}`, note: "All three missions" });
+    return { ok: true, state: { ...state, missions: { ...day, claimed }, awards: [...state.awards, ...fresh] }, awards: fresh };
+  }
+  if (action.type === "colony_rush") {
+    return { ok: true, state: { ...state, colonyHits: (state.colonyHits ?? 0) + Math.max(0, action.hits) }, awards: [] };
+  }
+  if (action.type === "all_clear") {
+    const fresh: Award[] = [];
+    const cycle = `cycle-${state.today.slice(0, 7)}`;
+    for (const person of action.people) award(state, fresh, { person, code: "ANAY_DEFEATED", role: "owner", xp: XP.ANAY_DEFEATED, taskId: cycle, note: "All Clear: Anay defeated" });
+    return { ok: true, state: { ...state, awards: [...state.awards, ...fresh] }, awards: fresh };
+  }
+  if (action.type === "seen_all_clear") {
+    return { ok: true, state: { ...state, allClearSeen: true }, awards: [] };
   }
   if (action.type === "equip") {
     const problem = lookErrors(action.look, ownedItems(state));
@@ -329,7 +373,7 @@ export function antsFor(state: GameState, person: PersonId, base: number) {
 export function anayFor(state: GameState, base: { maxHp: number; hits: number; heals: number }) {
   const hitTasks = new Set(state.awards.filter((a) => a.code === "ANAY_HIT").map((a) => a.taskId));
   const healTasks = new Set(state.awards.filter((a) => a.code === "MISSED_STATUTORY").map((a) => a.taskId));
-  const hits = base.hits + hitTasks.size;
+  const hits = base.hits + hitTasks.size + (state.colonyHits ?? 0);
   const heals = base.heals + healTasks.size;
   return { maxHp: base.maxHp, hits, heals, hp: Math.max(0, base.maxHp - hits + heals) };
 }

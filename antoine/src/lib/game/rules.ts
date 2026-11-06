@@ -9,6 +9,7 @@ export const XP = {
   FILED_ACCEPTED: { preparer: 40, checker: 15, reviewer: 15 },
   ANAY_HIT: 20,
   PAID_CONFIRMED: 20,
+  ANAY_DEFEATED: 50,
   BLOCKER_RAISED_EARLY: 10,
   MISSED_D1: { senior: -10, other: -5 },
   MISSED_STATUTORY: { senior: -100, other: -50 },

@@ -8,7 +8,7 @@ import { CountUp } from "@/components/CountUp";
 import { useGame } from "@/components/GameProvider";
 import { PlayerAvatar } from "@/components/PlayerAvatar";
 
-import { Inventory, MotionSetting, Wardrobe } from "./wardrobe";
+import { Inventory, MotionSetting, SoundSetting, Wardrobe } from "./wardrobe";
 import { shortDate } from "@/lib/game/calendar";
 import { baselines, ME, people } from "@/lib/game/world";
 
@@ -127,6 +127,7 @@ export function Profile() {
               <p style={{ margin: "0 0 4px", background: "var(--paper)", border: "2px solid var(--ink)", borderRadius: "12px 12px 12px 4px", padding: "8px 10px", fontSize: 13, fontWeight: 600, lineHeight: 1.35 }}>Ay, sassy na tayo? Sige. {me.streak} clean cycles… sayang naman kung masisira, &apos;di ba?</p>
             </div>
           )}
+          <SoundSetting />
           <MotionSetting />
         </section>
 
@@ -137,6 +138,8 @@ export function Profile() {
             <button className="btn" type="button" onClick={() => { if (window.confirm("Reset the sample game to the start?")) game.reset(); }}>Reset sample</button>
             <button className="btn btn--honey" type="button" onClick={() => game.dispatch({ type: "advance_day" })}>Next working day →</button>
           </div>
+          <button className="btn btn--block" type="button" onClick={() => game.dispatch({ type: "colony_rush", hits: 5 })}>Colony rush · teammates land 5 hits on Anay</button>
+          <Link href="/finale" className="btn btn--block">Preview the season finale</Link>
         </section>
 
         <p className="small muted" style={{ textAlign: "center", margin: 0 }}>Clients, BIR Center and Team open in TaxMonWeb.</p>
