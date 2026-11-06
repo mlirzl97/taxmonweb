@@ -19,5 +19,6 @@ export default defineConfig([
     "coverage/**",
     "test-results/**",
     "next-env.d.ts",
+    "antoine/**",
   ]),
 ]);

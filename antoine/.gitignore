@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+.env*.local
+
+# The repository ignores *.png to keep documents and screenshots out of Git.
+# Antoine's own generated app icons are the only exception.
+!public/icon-192.png
+!public/icon-512.png
+!public/icon-512-maskable.png
+!src/app/apple-icon.png
