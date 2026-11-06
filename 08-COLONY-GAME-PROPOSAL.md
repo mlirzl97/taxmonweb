@@ -46,6 +46,11 @@ Spine position: `… → Completion → Independent QA → (Colony projection)`.
 | Intake 9 | HOD answer | **Sassy mode** is opt-in, off by default |
 | Intake 10 | HOD answer | Adopt the recommended features from the game study (§4.9) |
 | Intake 11 | HOD answer | Approve the design language after seeing the mockup |
+| Follow-up 1 | HOD answer | **D-1 = one working day** before the adjusted statutory deadline (weekends and `holiday_master` holidays skipped) |
+| Follow-up 2 | HOD answer | A miss gives the demerit to **every staff member who touched that work item** |
+| Follow-up 3 | HOD answer | **One store**, run by **Lourdes** as first Store Manager. **Leaders can give merit points** |
+| Follow-up 4 | HOD answer | **HOD can seed Ants.** Player transfers are built, but **locked for most players** by a background setting |
+| Follow-up 5 | HOD answer | Store Managers compete on the boards |
 | Pending | Needs HOD sign-off | Mobile design language (amends "corporate and controlled" in `05` for mobile/game surfaces) |
 
 ---
@@ -112,6 +117,7 @@ Values are starting proposals, calibrated in shadow mode (§9, G1).
 | `STEWARD_ALL_CLEAR` | Steward | Every item on their clients this cycle filed by D-1 | 50 |
 | `ANAY_DEFEATED` | Every competing player | Colony beats Anay this cycle (§4.5) | 50 |
 | `CLEAN_STREAK` | Person | Consecutive cycles with zero misses and zero QA demerits | 50 × streak (cap 5) |
+| `LEADER_MERIT` | Any player | A leader gives merit from their allowance, with a category and reason (§4.10) | 10–100 per award |
 
 Nothing is awarded for submission alone (Submitted ≠ Accepted), filing without
 required payment (Filed ≠ Paid), payment initiation (initiated ≠ confirmed),
@@ -121,10 +127,12 @@ raw item count without a quality condition, or overrides (§6).
 
 | Code | Who | Trigger | XP |
 |---|---|---|---|
-| `MISSED_D1` | Holder of the open step at D-1 | Not filed by D-1 | −10 |
-| `MISSED_STATUTORY` | Holder of the open step at the deadline | `statutory_deadline_missed` becomes true | −100 |
+| `MISSED_D1` | **Everyone who touched the item** | Not filed by D-1 | −10 each |
+| `MISSED_STATUTORY` | **Everyone who touched the item** | `statutory_deadline_missed` becomes true | −100 each |
 | `QA_LOW` / `QA_MEDIUM` / `QA_HIGH` / `QA_MATERIAL` | Accountable user on the QA finding | Finding recorded | −10 / −30 / −60 / −150 |
 | `STREAK_BROKEN` | Person | No XP loss; the streak resets | 0 |
+
+**"Touched"** = anyone recorded as actor on that work item's gate attempts, evidence or work events during the cycle (actual-actor history, not assignment). Shared demerits make the item everyone's problem: a preparer has a reason to chase a slow reviewer and vice versa.
 
 **Waiver (fairness):** a miss demerit is **waived** if an external blocker
 (client data, client approval, payment funding or BIR system) was logged
@@ -160,7 +168,7 @@ late filings and penalties.
 - **Victory:** HP reaches 0 by the cycle's last D-1 → **All Clear**, `ANAY_DEFEATED` for every competing player, and a podium of top hitters.
 - **Defeat:** Anay "survives" the cycle. No group penalty. Next cycle is a new fight.
 - The Anay bar is shown on the Anthill home screen, on the Tower and in Tower TV mode.
-- **D-1 definition:** see open question Q1 (calendar day vs. working day).
+- **D-1 = one working day** before the adjusted statutory deadline. Weekends and holidays in `holiday_master` are skipped (e.g. a Monday deadline → D-1 is the previous Friday, or earlier if that Friday is a holiday). If the holiday calendar for that date is unresolved, D-1 shows as unresolved and no `ANAY_HIT` or `MISSED_D1` is decided until it's resolved.
 
 ### 4.6 Ant colony ranks (lifetime XP)
 
@@ -216,11 +224,18 @@ ever created or destroyed off the books.
 - **Separation:** a Store Manager can't buy from a store they manage or fulfil their own order. Another manager or a committee member must act.
 - **Conversion to real value happens outside the app** (committee decision). Inside the app it is always tracked as an order with a peso snapshot.
 
-**Transfers:**
+**Seed money (HOD):**
 
-- **No player-to-player transfers** in this version. That prevents points-for-cash side deals, pressure on juniors and collusion.
-- **Kudos** (free, positive, no XP) is the social gesture instead.
-- The only way Ants leave a player is a demerit or a purchase.
+- The HOD (capability `colony.seed_grant`) can mint Ants from the Treasury into a player or store wallet: welcome grants, event prizes, a store float.
+- Every seed needs a reason, appears in the economy view and counts toward the committee's liability.
+- An optional co-approval threshold (off by default) can require a committee member to approve seeds above a set amount.
+
+**Transfers (built, locked):**
+
+- The ledger supports player-to-player transfers as a feature.
+- A background setting (`colony_economy_settings`) controls it: **off for everyone by default**, with an allowlist of who may send, per-transfer and daily caps, and whether a reason is required. Only Super Admin / HOD can change it; changes are audited.
+- While locked, players don't see a transfer button at all. **Kudos** (free, positive, no XP) remains the everyday gesture.
+- Why locked: transfers make points-for-cash side deals, pressure on juniors and collusion possible. Open it deliberately, e.g. for a specific event, with caps.
 
 **Committee economy view:**
 
@@ -236,6 +251,16 @@ committee should watch it each quarter.
 - **Tonyo** is the mascot. He's warm, cheeky and proud of the colony. Character guide goes in `09`.
 - **Sassy mode:** Duolingo-style teasing reminders. Each player opts in themselves; off by default.
 - **Anay** is the shared villain (§4.5). No real person is ever a character or villain.
+
+### 4.10 Leader merit points
+
+Leaders (`role_key = leader`, capability `colony.merit_give`) can recognise things the system can't see: helping a teammate, client praise, mentoring, going beyond.
+
+- **Allowance:** each leader gets a merit allowance per cycle (proposal: 300 XP). Unused allowance doesn't roll over.
+- **Per award:** 10–100 XP (and the same Ants), a **category** (Helped a teammate · Client praise · Mentoring · Went beyond · Other) and a **reason** of at least a sentence.
+- **Limits:** never to yourself; at most 100 XP from one leader to one person per cycle.
+- **Visibility:** the recipient sees who gave it and why. Merits show in the Colony Feed as "Recognised by {leader}" (opt-out respected). The HOD gets a monthly merit report per leader and recipient, to spot favoritism.
+- Merit is never used to cancel a demerit. Recognition and accountability stay separate.
 
 ### 4.9 Adopted features (from `10` §6)
 
@@ -263,7 +288,8 @@ through `security definer` commands. Balances, standings, ranks and Anay HP are
 `joined_at`, `updated_at`, `updated_by`.
 
 New capability keys in `capabilities`: `colony.rules_draft`, `colony.rules_approve`,
-`colony.store_manage`, `colony.economy_view`, `colony.season_admin`.
+`colony.store_manage`, `colony.economy_view`, `colony.season_admin`,
+`colony.merit_give`, `colony.seed_grant`, `colony.economy_settings`.
 
 ### 5.2 Configuration (effective-dated, maker-checker)
 
@@ -293,8 +319,9 @@ requester, and show as "Adjusted" in history.
 
 ### 5.5 Ant ledger (double-entry, append-only)
 
+- **`colony_economy_settings`**: effective-dated, one live row. `transfers_enabled` (default false), `transfer_allowed_capability` (who may send), `transfer_max_per_txn`, `transfer_max_per_day`, `transfer_reason_required`, `seed_coapproval_threshold` (nullable = off), `reference_peso_per_10k_ants` (default 100), `changed_by`, `changed_at`, `change_reason`.
 - **`colony_wallets`**: `id`, `kind` (`player` / `store` / `treasury`), `user_id` (player), `store_id` (store). Exactly one treasury.
-- **`colony_ant_transactions`**: `id`, `kind` (`mint` / `burn` / `purchase_hold` / `purchase_retire` / `purchase_refund` / `adjust`), `xp_event_id`, `order_id`, `idempotency_key` unique, `reason`, `created_by`, `created_at`.
+- **`colony_ant_transactions`**: `id`, `kind` (`mint` / `burn` / `seed` / `transfer` / `purchase_hold` / `purchase_retire` / `purchase_refund` / `adjust`), `initiated_by`, `coapproved_by`, `xp_event_id`, `order_id`, `idempotency_key` unique, `reason`, `created_by`, `created_at`.
 - **`colony_ant_entries`**: `transaction_id`, `wallet_id`, `amount` (±). A deferred constraint ensures each transaction sums to zero.
 - **Views:** `colony_wallet_balances`, `colony_economy_summary` (minted, burned, retired, circulating, liability).
 
@@ -305,6 +332,11 @@ requester, and show as "Adjusted" in history.
 - **`colony_store_items`**: `id`, `store_id` (null = Treasury digital store), `kind` (`digital` / `real`), `digital_item_code` (skins, frames, titles, `streak_freeze`), `label`, `ant_price`, `peso_value` (nullable), `stock` (nullable = unlimited), `effective_from/to`, `created_by`, `approved_by`. A price change supersedes the row instead of editing it.
 - **`colony_orders`**: `id`, `buyer_user_id`, `store_id`, `store_item_id`, `ant_price_snapshot`, `peso_value_snapshot`, `status` (`pending` / `fulfilled` / `rejected` / `cancelled`), `hold_transaction_id`, `settle_transaction_id`, `decided_by` (≠ buyer; not a manager of a store they bought from for their own order), `decided_at`, `handover_note` (never a gift-card code or PIN), `version` (optimistic concurrency), `created_at`. Status changes are also written to `audit_events`.
 - **`colony_inventory`**: `user_id`, `digital_item_code`, `order_id`, `acquired_at`, `equipped` (bool). Cosmetics a player owns.
+
+### 5.6a Merit
+
+- **`colony_merit_allowances`**: `leader_user_id`, `season_id`, `allowance_xp`, `set_by`. Unique per leader and season.
+- Merit awards are rows in `colony_xp_events` with `award_code = LEADER_MERIT`, `source_kind = merit`, plus `merit_category` and `given_by`. Remaining allowance is a derived view.
 
 ### 5.7 Later-Lego tables (reserved, not built now)
 
@@ -336,7 +368,8 @@ heals), `colony_wallet_balances`, `colony_economy_summary`.
 11. **No public bottom.** Top 10 plus your own position only. Demerits are visible to the player and authorized managers, never on a public board.
 12. **No real person as a character or villain.** No subjective ratings of BIR officers anywhere (existing rule).
 13. **Real items stay inside the committee's budget and process.** The app records orders and handovers; it never stores gift-card codes or PINs.
-14. **No player-to-player Ant transfers** in this version.
+14. **Transfers stay locked** unless deliberately enabled with caps; seed grants always carry a reason.
+15. **Merit is capped, reasoned and reported.** It never offsets a demerit and can't be self-given.
 
 ---
 
@@ -361,6 +394,9 @@ heals), `colony_wallet_balances`, `colony_economy_summary`.
 | Manual XP or Ant adjustment | Requested by HOD / Super Admin, approved by a second authorized person, never self-targeted |
 | Create and run stores, fulfil orders | `colony.store_manage`, assigned to the store, never for own orders |
 | Economy view | `colony.economy_view` (committee, HOD) |
+| Give merit | `colony.merit_give` (leaders), within allowance, never to self |
+| Seed Ants | `colony.seed_grant` (HOD), reason required |
+| Change economy settings (transfers, caps, rate) | `colony.economy_settings` (HOD / Super Admin), audited |
 
 Enforced server-side and by RLS. UI visibility is never the control.
 
@@ -376,14 +412,14 @@ on sanitized data.
 | **G1 Shadow scoring** | Rule sets, award rules (incl. demerits and waivers), seasons, XP ledger, projector. HOD-only calibration report |
 | **G2 Live boards + Anay** | Player profiles, role classes, live standings, Anay live HP, Anthill home, Tonyo |
 | **G3 Seasons + ranks** | Season close, final standings, Colony Cup, Hall, lifetime and seasonal ranks, streaks, MVP and medals |
-| **G4 Ant wallet** | Double-entry ledger, minting and burning, balances, committee economy view |
+| **G4 Ant wallet** | Double-entry ledger, minting and burning, seed grants, locked transfers + economy settings, leader merit, committee economy view |
 | **G5 Stores** | Store Manager capability, stores, items, orders, fulfilment, digital inventory (cosmetics, streak freeze) |
 | **G6 Live-ops** | Forage Missions, Colony Pass, Rush Events, Badge Album, kudos, Tower TV mode |
 
 Tests for every Lego, positive and negative: idempotent re-projection;
 duplicate commands; no XP for self-review or override; demerit waiver only
 with a prior external blocker; double-entry balance always zero; purchase
-blocked on negative balance; Store Manager can't fulfil own order; refunds on
+blocked on negative balance; transfer refused while locked or over cap; merit over allowance or to self refused; D-1 skips weekends and holidays; shared demerit reaches every actor; Store Manager can't fulfil own order; refunds on
 rejection; RLS denial of others' detail; final standings immutable; Colony
 outage doesn't affect work commands.
 
@@ -391,8 +427,6 @@ outage doesn't affect work commands.
 
 ## 10. Open questions for the HOD
 
-1. **D-1:** one **calendar** day before the adjusted statutory deadline, or one **working** day before?
-2. **Demerit owner:** the holder of the open step when the miss happens (recommended), or the portfolio owner, or shared?
-3. **Who are the first Store Managers,** and is there one store (Culture & Values Store) or several?
-4. **Reference rate:** keep 10,000 Ants ≈ ₱100 for the committee's liability view, or let the committee set it?
-5. **Should Store Managers compete** on the boards? Recommended: yes, with the self-dealing rules above.
+1. **Merit allowance:** 300 XP per leader per cycle, 10–100 per award, to start?
+2. **Seed co-approval:** keep off, or require a committee member above a set amount?
+3. **Shared demerit size:** everyone gets the full −10 / −100 (current), or the person holding the open step gets the full amount and others a smaller share?
