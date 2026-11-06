@@ -283,3 +283,10 @@ These are general design principles, not claims about how those characters were 
 - Minimum display size 32px. Below that, use the TaxMonWeb ant mark instead.
 - Never place Tonyo on a control fact or over a status; he sits beside content.
 - Reduced motion: poses switch without animation.
+
+### 8.3 Chosen direction (HOD, 2026-11-06): Option B, bold sticker
+
+- **Tonyo:** TaxMonWeb red (`antRed`) body, 5px `ink` outline, white sticker edge, honey-gold scarf and antenna tips, `ink` limbs. Head ≈ 50% of height. Moods: Hello (wave), Cheer, Proud (hands on hips), Calm (clipboard), Rest (asleep).
+- **Anay:** same sticker system for a matched pair. Pale cream abdomen, caramel head, dark mandibles, angular brows. Moods: Angry, Smug, Defeated.
+- **Red-on-red rule:** Tonyo never sits beside an urgent/red status or alert. On red surfaces (the Now button) his white sticker edge separates him from the background.
+- **App icon / small sizes (≤ 32px):** use the TaxMonWeb ant mark, not Tonyo.
