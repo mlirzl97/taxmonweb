@@ -161,3 +161,50 @@ Games tune their economy constantly with telemetry. Colony's equivalent:
 | L | Welcome-back boost, rookie bracket | Comeback | **Yes** | G3 |
 | M | Squads / clan wars | Clans | **Later**, needs clustering | — |
 | — | Login rewards, energy, gacha, demotion, conduct score, pay-to-win | — | **No** | — |
+
+---
+
+## 7. Beyond RPGs: apps that make real-life work feel like a game
+
+Same caution as above: general knowledge, illustrative, not current product facts.
+
+| App | Category | The one idea worth stealing | Colony translation |
+|---|---|---|---|
+| **Habitica** | Habit tracker as RPG | Your real to-dos *are* the game: completing tasks damages a boss your party fights together | Closest analog to Colony. Validates **Anay**: real work items deal the damage |
+| **Finch** | Self-care pet | A pet that grows because *you* took care of yourself; gentle, never guilt-trips | **Gamgam grows and gains outfits** with the colony's clean work; kind tone by default |
+| **Forest** | Focus timer | A tree grows while you focus; your forest is a visible history of effort | The **Anthill**: chambers get dug as cycles are completed clean; your history is something you can look at |
+| **GCash GForest** | Fintech habit (PH) | Small everyday actions earn energy that plants real trees | Local proof that Filipinos love "small actions → visible, real-world result". The committee's real prizes play the same role |
+| **Pokémon GO / Pikmin Bloom** | Real-world play | Everyday movement becomes collection and discovery | **Collect** badges and ant skins through normal work, no extra effort |
+| **Strava** | Fitness social | Segments (local leaderboards), kudos, clubs | **Micro-leaderboards** per client or form type; **kudos** between colleagues (free, positive only) |
+| **Apple Fitness rings** | Daily goals | Three simple rings to "close" each day; trivial to understand | **Three cycle rings**: Filed on time · Evidence complete · QA clean. Close all three = Perfect Cycle |
+| **GitHub contribution graph** | Developer habit | A calendar heat map of activity; people protect their streak | **Colony calendar** of verified work days (private to you) |
+| **Duolingo** | Learning | Mascot personality, streaks, leagues, celebrations | Already adopted: Gamgam voice, streak freeze, promotion-only leagues, Sassy mode |
+| **Salesforce Trailhead** | Workplace learning | Ranks + badges for real skills; adults happily collect them at work | **Skill badges** for mastering return types or tools; proof that serious professionals engage with badges |
+| **Sales leaderboards / live TV boards** | Workplace competition | Live boards on a screen in the office; short "contests" | **Tower TV mode**: the live board and Anay's HP on an office screen during peak cycles |
+| **Starbucks / Grab rewards** | Loyalty | Stars → tiers → redemption; the wallet always shows "X to your next reward" | **Ant wallet** shows the next reward within reach |
+| **Clash of Clans** | Base-building | A home base you upgrade and show off; clan wars | The **Anthill is the home screen**: your colony's base, upgraded by clean cycles |
+
+### 7.1 What this changes
+
+The strongest pattern across these apps is **a living thing that grows because
+of what you actually did**: Forest's trees, Finch's bird, GForest's real trees,
+Clash's village. That suggests one new idea for Colony:
+
+**The Anthill as home base.** On mobile, the first screen is a living anthill
+cross-section, not a dashboard:
+
+- **Chambers are dug** as cycles finish clean (history you can see).
+- **Ant workers move** in proportion to work in progress.
+- **Anay's tunnels** creep in from the edge as items go overdue, and are pushed back as they're cleared.
+- **Gamgam** stands at the entrance with today's line ("3 need you today. Kaya natin 'to.").
+- **Tap anywhere real**: a tunnel opens the overdue items, a chamber opens that cycle's record. Every visual is backed by an operational record (one truth, no decorative fiction).
+
+The control facts don't disappear. They're one tap away and exact. But the
+emotional first impression is "our colony", not "my task list".
+
+### 7.2 Guardrail for "game more than ERP"
+
+Colony should feel like a game **whose moves are real compliance work**. The
+game can never invent progress, hide a real deadline or status, or make a
+control step skippable. The Anthill can be playful precisely because every
+pixel of it is derived from verified facts.
