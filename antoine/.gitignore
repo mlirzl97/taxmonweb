@@ -12,3 +12,5 @@ next-env.d.ts
 !public/icon-512.png
 !public/icon-512-maskable.png
 !src/app/apple-icon.png
+test-results/
+playwright-report/
