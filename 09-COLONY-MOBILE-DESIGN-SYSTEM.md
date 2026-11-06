@@ -253,7 +253,7 @@ Rules:
 
 ---
 
-## 8. Mascot construction rules (Tonyo and Anay)
+## 8. Mascot construction rules (Antoine aka Tonyo, and Anay)
 
 Basis: long-established character-design practice and what the most recognisable
 mascots have in common (e.g. Mickey Mouse, Pikachu, Kirby, Duolingo's owl, Jollibee).
@@ -285,6 +285,9 @@ These are general design principles, not claims about how those characters were 
 - Reduced motion: poses switch without animation.
 
 ### 8.3 Chosen direction (HOD, 2026-11-06): Option B, bold sticker
+
+**Name and story:** Antoine, aka Tonyo. Known back home as Tonyo; worked in New York and came back as Antoine; still Tonyo to the colony. Copy may use either name: "Antoine" for the game and formal moments, "Tonyo" when he's being kuya-casual.
+
 
 - **Tonyo:** TaxMonWeb red (`antRed`) body, 5px `ink` outline, white sticker edge, honey-gold scarf and antenna tips, `ink` limbs. Head ≈ 50% of height. Moods: Hello (wave), Cheer, Proud (hands on hips), Calm (clipboard), Rest (asleep).
 - **Anay:** same sticker system for a matched pair. Pale cream abdomen, caramel head, dark mandibles, angular brows. Moods: Angry, Smug, Defeated.

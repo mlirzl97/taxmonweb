@@ -1,4 +1,6 @@
-# 08 — Colony: Gamification, Leaderboards and the Ant Economy
+# 08 — Antoine: Gamification, Leaderboards and the Ant Economy
+
+Game name: **Antoine** (the mascot, aka Tonyo). **Colony** is the world inside the game and the working name used for its tables (`colony_*`).
 
 Status: **PROPOSAL v2.** L-107 (individual leaderboards) and L-108 (rewards
 governed by the Culture and Values Committee) are approved and recorded in
@@ -42,6 +44,7 @@ Spine position: `… → Completion → Independent QA → (Colony projection)`.
 | Intake 5 | HOD answer | **Real names** on boards |
 | Intake 6 | HOD answer | An **in-app economy**: a **Store Manager** role runs stores. Players pay Ants into a store. Real items are handed over outside the app, and the handover is tracked inside it |
 | Intake 7 | HOD answer | Mascot: **Tonyo** |
+| Naming | HOD answer | **Game name: Antoine.** The mascot is **Antoine, aka Tonyo**. "Colony" stays as the world inside the game (Colony Cup, Colony Arcade). Tagline: **"Antoine — wag kang pahuhuli!"** (internal use) |
 | Intake 8 | HOD answer | **Anay** pushes filing **one day before** the deadline (D-1) |
 | Intake 9 | HOD answer | **Sassy mode** is opt-in, off by default |
 | Intake 10 | HOD answer | Adopt the recommended features from the game study (§4.10) |
@@ -280,7 +283,8 @@ can never become gambling with real-value prizes.
 
 ### 4.8 Personality
 
-- **Tonyo** is the mascot. He's warm, cheeky and proud of the colony. Character guide goes in `09`.
+- **Antoine, aka Tonyo**, is the mascot and gives the game its name. Backstory: back home everyone knew him as Tonyo; then he worked in New York and came back as *Antoine*. To the colony he's still Tonyo. Warm, cheeky, proud of the team. Character guide in `09` §8.
+- **Tagline:** "Antoine — wag kang pahuhuli!" Inside the app only: *huli* also means "caught", so keep it off anything shown to clients, auditors or the BIR.
 - **Sassy mode:** Duolingo-style teasing reminders. Each player opts in themselves; off by default.
 - **Anay** is the shared villain (§4.5). No real person is ever a character or villain.
 
