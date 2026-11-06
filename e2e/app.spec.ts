@@ -421,11 +421,34 @@ test("client overview Attention opens the first resolvable control", async ({ pa
   await expect(setupDrawer.getByLabel("Preparer")).toBeVisible();
 });
 
+test("quick client setup asks four questions and saves a resumable intake", async ({ page }) => {
+  await page.goto("/app/clients");
+  await page.getByRole("button", { name: "Add client", exact: true }).click();
+  const drawer = page.getByRole("dialog");
+  await expect(drawer.getByRole("heading", { name: "Add client" })).toBeVisible();
+  await drawer.getByRole("button", { name: "Add client", exact: true }).click();
+  await expect(drawer.getByText("Enter the client name.")).toBeVisible();
+  await expect(drawer.getByText("Choose the first month to file.")).toBeVisible();
+  await drawer.getByLabel("Client name *").fill("Quick Setup Sample Co.");
+  await drawer.getByLabel("CRM no. *").fill("CRM-QS-001");
+  await drawer.getByLabel("Type a return to add").fill("1601-C");
+  await drawer.getByText("Fiscal year", { exact: true }).click();
+  await drawer.getByLabel("Year-end month *").selectOption("June");
+  await drawer.getByLabel("Day *").selectOption("30");
+  const firstMonth = drawer.locator(".quick-setup__question").nth(3).locator("select");
+  await firstMonth.nth(0).selectOption({ index: 12 });
+  await firstMonth.nth(1).selectOption({ index: 3 });
+  await drawer.getByRole("button", { name: "Add client", exact: true }).click();
+  await expect(page.getByText("Client CRM-QS-001 added.")).toBeVisible();
+  await page.getByRole("button", { name: "Resume setup for Quick Setup Sample Co." }).click();
+  await expect(page.getByRole("dialog").getByLabel("CRM no. / client code")).toHaveValue("CRM-QS-001");
+});
+
 test("client required fields are visibly blocked", async ({ page }) => {
   await page.goto("/app/clients");
-  await page.getByRole("button", { name: "Start client setup", exact: true }).click();
+  await page.getByRole("button", { name: "Full setup", exact: true }).click();
   const drawer = page.getByRole("dialog");
-  for (const label of ["CRM no. / client code", "Client / account name", "Registered taxpayer name", "Go-live date"]) {
+  for (const label of ["CRM no. / client code", "Client / account name", "Registered taxpayer name", "Go-live date", "Permanent file location"]) {
     await expect(drawer.getByLabel(label)).toHaveCSS("border-color", "rgb(163, 43, 45)");
   }
   await drawer.locator("button.onboarding-step").nth(1).click();
@@ -436,7 +459,6 @@ test("client required fields are visibly blocked", async ({ page }) => {
   await expect(drawer.getByLabel("eNATE setup")).toHaveCSS("border-color", "rgb(163, 43, 45)");
   await expect(drawer.getByLabel("Payment route")).toHaveCSS("border-color", "rgb(163, 43, 45)");
   await drawer.locator("button.onboarding-step").nth(3).click();
-  await expect(drawer.getByLabel("Permanent SharePoint file")).toHaveCSS("border-color", "rgb(163, 43, 45)");
   await expect(drawer.locator(".onboarding-document--invalid select").first()).toHaveCSS("border-color", "rgb(163, 43, 45)");
   await drawer.getByLabel("BIR Form 2303 / Certificate of Registration status").selectOption("unknown");
   await expect(drawer.getByLabel("BIR Form 2303 / Certificate of Registration rationale")).toHaveCSS("border-color", "rgb(163, 43, 45)");

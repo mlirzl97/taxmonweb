@@ -19,6 +19,7 @@ import { DetailDrawer, FixturePageFrame, isInScope, ScopeSwitcher, SectionHeadin
 import { CrfRepositoryView } from "@/components/app/crf-repository";
 import { ClientCsvImportDrawer } from "@/components/app/client-csv-import";
 import { ReturnTaxSelector } from "@/components/app/return-tax-selector";
+import { QuickClientSetupDrawer } from "@/components/app/quick-client-setup";
 import { MonthYearPicker } from "@/components/app/month-year-picker";
 
 type AttentionFilter = "all" | "attention" | "clear";
@@ -98,6 +99,7 @@ export default function ClientsPage() {
   const [audit, setAudit] = useState<AuditFilter>(() => readEnumParam("audit", "all", auditFilterOptions));
   const [sort, setSort] = useState<SortKey>(() => readEnumParam("sort", "taxpayer", sortOptions));
   const [setupDrawerOpen, setSetupDrawerOpen] = useState(false);
+  const [quickSetupOpen, setQuickSetupOpen] = useState(false);
   const [draftToEdit, setDraftToEdit] = useState<ClientSetupDraft | null>(null);
   const [setupDrafts, setSetupDrafts] = useState<ClientSetupDraft[]>([]);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
@@ -230,7 +232,7 @@ export default function ClientsPage() {
     <FixturePageFrame>
       <header className="module-header">
         <div><h1>Clients</h1><p className="module-header__description">Taxpayers, registration, and servicing context.</p></div>
-        <div className="module-header__right"><div className="module-count"><strong>{clientRegistryState === "loading" ? "Loading client repository…" : resultCount}</strong><small>{clientRegistryState === "error" ? "Repository unavailable" : `${visibleKnownWeight} assessed weight · ${prototypeMode ? "sanitized fixtures" : "live repository"}`}</small></div><div className="module-actions"><button aria-label="Export current client list as CSV" className="button button--quiet button--small" disabled={clientRegistryState === "loading" || visibleClients.length === 0} onClick={() => downloadClientRegistryCsv(visibleClients, rdoReference)} type="button">Export CSV</button>{canManageClientRecords && <>{prototypeMode && <button className="button button--quiet button--small" onClick={() => { setSetupMessage(null); setCsvImportOpen(true); }} type="button">Import CSV</button>}<button className="button button--primary button--small" onClick={() => { setSetupMessage(null); setDraftToEdit(null); setSetupDrawerOpen(true); }} type="button">Start client setup</button></>}<Link className="button button--quiet button--small" href="/app/team">Manage people in Team</Link></div></div>
+        <div className="module-header__right"><div className="module-count"><strong>{clientRegistryState === "loading" ? "Loading client repository…" : resultCount}</strong><small>{clientRegistryState === "error" ? "Repository unavailable" : `${visibleKnownWeight} assessed weight · ${prototypeMode ? "sanitized fixtures" : "live repository"}`}</small></div><div className="module-actions"><button aria-label="Export current client list as CSV" className="button button--quiet button--small" disabled={clientRegistryState === "loading" || visibleClients.length === 0} onClick={() => downloadClientRegistryCsv(visibleClients, rdoReference)} type="button">Export CSV</button>{canManageClientRecords && <>{prototypeMode && <button className="button button--quiet button--small" onClick={() => { setSetupMessage(null); setCsvImportOpen(true); }} type="button">Import CSV</button>}<button className="button button--quiet button--small" onClick={() => { setSetupMessage(null); setDraftToEdit(null); setSetupDrawerOpen(true); }} type="button">Full setup</button><button className="button button--primary button--small" onClick={() => { setSetupMessage(null); setQuickSetupOpen(true); }} type="button">Add client</button></>}<Link className="button button--quiet button--small" href="/app/team">Manage people in Team</Link></div></div>
       </header>
 
       {setupMessage && <div className="saved-notice" role="status">{setupMessage}</div>}
@@ -274,12 +276,13 @@ export default function ClientsPage() {
             <thead><tr><th scope="col">Taxpayer</th><th scope="col">TIN</th><th scope="col">RDO</th><th scope="col">Filing</th><th scope="col">Team</th><th scope="col">Weight</th><th scope="col">Payment</th><th scope="col">Audit</th><th scope="col">Attention</th></tr></thead>
             <tbody>{visibleClients.map((client) => <TaxpayerRow client={client} key={client.id} rdoOptions={rdoReference} />)}</tbody>
           </table>
-          {visibleClients.length === 0 && <div className="inline-empty">{clientRegistryState === "empty" ? "No taxpayers are configured yet. Start client setup to add the first record." : clientRegistryState === "error" ? "The client repository could not be loaded. Refresh or contact an administrator." : "No taxpayers match these filters. Try clearing a filter or searching a different identifier."}</div>}
+          {visibleClients.length === 0 && <div className="inline-empty">{clientRegistryState === "empty" ? "No taxpayers are configured yet. Use Add client to add the first record." : clientRegistryState === "error" ? "The client repository could not be loaded. Refresh or contact an administrator." : "No taxpayers match these filters. Try clearing a filter or searching a different identifier."}</div>}
         </div>
       </section>
 
       {prototypeMode && setupDrafts.some((draft) => draft.status !== "submitted") && <section aria-label="Setup drafts" className="panel panel--table registry-panel setup-drafts-panel"><SectionHeading title="Setup drafts" /><div aria-label="Client setup drafts" className="setup-draft-list">{setupDrafts.filter((draft) => draft.status !== "submitted").map((draft) => <button aria-label={`Resume setup for ${draft.client.clientDisplayName}`} className="setup-draft-row" key={draft.client.clientReferenceCode} onClick={() => { setSetupMessage(null); setDraftToEdit(draft); setSetupDrawerOpen(true); }} type="button"><span><strong>{draft.client.clientDisplayName}</strong><small>Last saved · {draft.createdAt}</small></span><span className="setup-draft-row__action">Resume →</span></button>)}</div></section>}
 
+      {quickSetupOpen && <QuickClientSetupDrawer onClose={() => setQuickSetupOpen(false)} onOpenFullSetup={() => { setQuickSetupOpen(false); setDraftToEdit(null); setSetupDrawerOpen(true); }} onSaved={(referenceCode) => { setQuickSetupOpen(false); setSetupDrafts(readSetupDrafts()); setSetupMessage(`Client ${referenceCode} added. Finish the rest in full setup when ready.`); refreshClientRegistry().catch(() => undefined); }} prototypeMode={prototypeMode} />}
       {setupDrawerOpen && <ClientSetupDrawer initialDraft={draftToEdit} onClose={() => { setSetupDrawerOpen(false); setDraftToEdit(null); }} onSaved={(referenceCode, mode) => { setSetupDrawerOpen(false); setDraftToEdit(null); setSetupDrafts(readSetupDrafts()); setSetupMessage(mode === "submitted" ? `Setup ${referenceCode} submitted.` : `Setup draft ${referenceCode} saved.`); refreshClientRegistry().catch(() => undefined); }} prototypeMode={prototypeMode} rdoOptions={rdoOptions} />}
       {csvImportOpen && <ClientCsvImportDrawer onClose={() => setCsvImportOpen(false)} onImported={(message) => { setCsvImportOpen(false); setSetupMessage(message); }} />}
       </></div>
