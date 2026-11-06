@@ -2,13 +2,14 @@
   "name": "antoine",
   "version": "0.1.0",
   "private": true,
-  "description": "Antoine — the TaxMon Colony game. Reads TaxMonWeb's verified work facts; never a second tracker.",
+  "description": "Antoine \u2014 the TaxMon Colony game. Reads TaxMonWeb's verified work facts; never a second tracker.",
   "scripts": {
     "dev": "next dev -p 3200",
     "build": "next build",
     "start": "next start -p 3200",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "next": "16.3.8",
@@ -21,7 +22,8 @@
     "@types/react-dom": "19.3.0",
     "eslint": "9.39.5",
     "eslint-config-next": "16.3.8",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "5.0.3"
   },
   "engines": {
     "node": ">=22"

@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { useGame } from "@/components/GameProvider";
+import { xpByClass } from "@/lib/game/engine";
 import { players, rankFloors, rankTiers, type Player } from "@/lib/sample-data";
 
 type Board = "live" | "cup" | "hall";
@@ -25,15 +27,22 @@ function tierOf(xp: number) {
 export function Leaderboard() {
   const [board, setBoard] = useState<Board>("live");
   const [role, setRole] = useState<Role>("overall");
+  const { state } = useGame();
 
-  const ranked = useMemo(() => players
+  // Live board = sample baseline plus everything earned in this session (people are keyed by initials).
+  const live = useMemo(() => players.map((player) => {
+    const earned = xpByClass(state, player.initials);
+    return { ...player, f: player.f + earned.f, s: player.s + earned.s, e: player.e + earned.e };
+  }), [state]);
+
+  const ranked = useMemo(() => (board === "live" ? live : players)
     .map((player, index) => {
       const base = role === "overall" ? total(player) : player[role];
       const multiplier = board === "live" ? 1 : board === "cup" ? player.cup : player.hall;
       return { player, index, xp: base * multiplier, tier: tierOf(total(player) * player.hall) };
     })
     .filter((entry) => entry.xp > 0)
-    .sort((a, b) => b.xp - a.xp || b.player.clean - a.player.clean), [board, role]);
+    .sort((a, b) => b.xp - a.xp || b.player.clean - a.player.clean), [board, role, live]);
 
   const podium = ranked.slice(0, 3);
   const rows = ranked.slice(3, 8);

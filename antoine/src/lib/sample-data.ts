@@ -8,53 +8,12 @@
 
 export const SAMPLE = true;
 
-export const me = {
-  name: "Bea Santos",
-  first: "Bea",
-  initials: "BS",
-  classes: "Forager · Sentinel",
-  title: "Blocker Buster",
-  rank: { tier: 4, name: "Tunneler", next: "Soldier Ant", lifetimeXp: 4700, floor: 4000, ceiling: 8000 },
-  streak: 4,
-  freezes: 1,
-  ants: 2640,
-  antsOnHold: 1000,
-  cleanRate: 97,
-  anayHits: 4,
-};
-
-export const today = { label: "Fri 6 Nov", sync: "9:41" };
-
 export const cycle = {
   label: "Nov cycle",
   anay: { hp: 18, maxHp: 41, hits: 23, heals: 2, workingDaysLeft: 9, nextD1: "Wed 11 Nov" },
   rings: { filed: [23, 41], evidence: [19, 23], qa: [6, 6] },
   chambers: { done: ["SEP", "OCT"], digging: "NOV", progress: "23/41" },
   late: 2,
-};
-
-export type NeedItem = { id: string; client: string; title: string; status: string; tone: "risk" | "blocked"; reward?: number };
-
-export const needsYou: NeedItem[] = [
-  { id: "alon", client: "Alon Logistics", title: "VAT return", status: "Ready to file", tone: "risk", reward: 60 },
-  { id: "kalye", client: "Kalye Café", title: "Withholding return", status: "Blocked · client approval", tone: "blocked" },
-  { id: "bukid", client: "Bukid Agri", title: "Income tax return", status: "Waiting for a reviewer", tone: "risk" },
-];
-
-export const match = {
-  client: "Alon Logistics",
-  category: "VAT / PT",
-  title: "VAT return · October period",
-  deadline: "Thu 12 Nov",
-  d1: "Wed 11 Nov",
-  chain: [
-    { who: "JR", label: "Prepared", done: true },
-    { who: "AP", label: "Checked", done: true },
-    { who: "KR", label: "Reviewed", done: true },
-    { who: "✓", label: "Client OK", done: true, ok: true },
-    { who: "You", label: "Filing", current: true },
-  ],
-  loot: { xp: 40, anay: 20, ants: 60 },
 };
 
 export type Player = { name: string; initials: string; f: number; s: number; e: number; st: number; move: number; clean: number; cup: number; hall: number; me?: boolean };

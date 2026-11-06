@@ -1,17 +1,50 @@
+"use client";
+
 import Link from "next/link";
+import { useSyncExternalStore } from "react";
 
 import { Antoine } from "@/components/Antoine";
 
 const INK = "#1d1d1b";
+const TUNNELS = {
+  left: "M195 80 L195 148 Q195 168 175 176 L124 194",
+  right: "M195 150 Q200 168 228 175 L282 188",
+  down: "M195 150 L195 232 Q195 250 182 262",
+  surface: "M404 123 C340 123 290 123 262 116 C240 108 222 92 202 79",
+};
 
-/** Every element links to a real record class; nothing here is decorative fiction about progress. */
+function subscribeMotion(callback: () => void) {
+  const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+  query.addEventListener("change", callback);
+  return () => query.removeEventListener("change", callback);
+}
+
+/** True when the viewer asked for less motion; false during server render. */
+export function useReducedMotion() {
+  return useSyncExternalStore(subscribeMotion, () => window.matchMedia("(prefers-reduced-motion: reduce)").matches, () => false);
+}
+
+/** A worker ant walking a tunnel and back; static when motion is reduced. */
+function Walker({ path, dur, begin, carry = false, there = true, still }: { path: keyof typeof TUNNELS; dur: number; begin: number; carry?: boolean; there?: boolean; still: string }) {
+  const reduced = useReducedMotion();
+  if (reduced) return <use href={carry ? "#antc" : "#ant"} transform={still} />;
+  return (
+    <use href={carry ? "#antc" : "#ant"}>
+      <animateMotion dur={`${dur}s`} begin={`${-begin}s`} repeatCount="indefinite" rotate="auto" keyPoints={there ? "0;1;1;0;0" : "1;0;0;1;1"} keyTimes="0;0.45;0.5;0.95;1" calcMode="linear">
+        <mpath href={`#tunnel-${path}`} />
+      </animateMotion>
+    </use>
+  );
+}
+
+/** Every label links to a real record class; the picture only ever reflects tracked facts. */
 export function AnthillScene({ needCount, chambers, late }: { needCount: number; chambers: { done: string[]; digging: string; progress: string }; late: number }) {
   return (
     <section className="anthill" aria-label="Your colony this cycle">
       <svg className="scene" viewBox="0 0 390 330" fill="none" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label={`Anthill: ${chambers.done.join(" and ")} chambers cleared, ${chambers.digging} being dug, Anay tunnelling in from the right`}>
         <defs>
           <g id="ant">
-            <path d="M3 1 L1 5 M5.2 1.2 L5 5.6 M7 1 L9.5 4.6 M3 -1 L1 -5 M5.2 -1.2 L5 -5.6 M7 -1 L9.5 -4.6" stroke={INK} strokeWidth={1.1} />
+            <path d="M3 1 L1 5 M5.2 1.2 L5 5.6 M7 1 L9.5 4.6 M3 -1 L1 -5 M5.2 -1.2 L5 -5.6 M7 -1 L9.5 -4.6" stroke={INK} strokeWidth={1.1} className="ant-legs" />
             <path d="M10.6 -1.4 L13.6 -4.4 M10.6 1.4 L13.6 4.4" stroke={INK} strokeWidth={1} />
             <ellipse cx={0} cy={0} rx={3.2} ry={2.6} fill="#e31e24" stroke={INK} strokeWidth={0.8} />
             <circle cx={5.2} cy={0} r={1.9} fill="#e31e24" stroke={INK} strokeWidth={0.8} />
@@ -21,9 +54,13 @@ export function AnthillScene({ needCount, chambers, late }: { needCount: number;
             <use href="#ant" />
             <rect x={6} y={-9.5} width={7} height={5.5} rx={1} fill="#fffaf0" stroke={INK} strokeWidth={1.1} />
           </g>
+          {Object.entries(TUNNELS).map(([key, d]) => <path key={key} id={`tunnel-${key}`} d={d} />)}
         </defs>
-        <circle cx={342} cy={40} r={24} fill="#f7d27a" />
-        <circle cx={342} cy={40} r={32} fill="#f7d27a" opacity={0.35} />
+
+        <g className="sun">
+          <circle cx={342} cy={40} r={32} fill="#f7d27a" opacity={0.35} className="sun__halo" />
+          <circle cx={342} cy={40} r={24} fill="#f7d27a" />
+        </g>
         <path d="M0 112 C60 98 110 106 160 100 C220 92 280 104 390 96 L390 128 L0 128 Z" fill="#ece0c4" />
         <rect x={0} y={128} width={390} height={202} fill="#dcbd84" />
         <path d="M0 214 C80 206 140 224 220 216 C300 208 340 220 390 214 L390 330 L0 330 Z" fill="#cfa86c" />
@@ -37,50 +74,56 @@ export function AnthillScene({ needCount, chambers, late }: { needCount: number;
         <ellipse cx={195} cy={74} rx={11} ry={5} fill={INK} />
         <path d="M0 128 L390 128" stroke={INK} strokeWidth={2.5} />
         <g stroke="#1f6b45" strokeWidth={2}>
-          <path d="M18 128 l3 -9 M23 128 l0 -11 M28 128 l-3 -8 M64 128 l2 -7 M68 128 l0 -10 M72 128 l-2 -6 M318 128 l3 -9 M323 128 l0 -12 M328 128 l-3 -8 M368 128 l2 -7 M372 128 l0 -9" />
+          {[[18, 0], [64, 0.6], [318, 1.1], [368, 0.3]].map(([x, delay]) => (
+            <g key={x} className="grass" style={{ transformOrigin: `${x! + 5}px 128px`, animationDelay: `${delay}s` }}>
+              <path d={`M${x} 128 l3 -9 M${x! + 5} 128 l0 -11 M${x! + 10} 128 l-3 -8`} />
+            </g>
+          ))}
         </g>
-        <use href="#antc" transform="translate(338 122) scale(-1 1)" />
-        <use href="#antc" transform="translate(362 122) scale(-1 1)" />
-        <use href="#ant" transform="translate(240 112) rotate(40)" />
-        <g stroke={INK} strokeWidth={17}>
-          <path d="M195 80 L195 148 Q195 168 175 176 L124 194 M195 150 Q200 168 228 175 L282 188 M195 150 L195 232 Q195 250 182 262" />
-        </g>
-        <g stroke="#f6efe0" strokeWidth={12.5}>
-          <path d="M195 80 L195 148 Q195 168 175 176 L124 194 M195 150 Q200 168 228 175 L282 188 M195 150 L195 232 Q195 250 182 262" />
-        </g>
+
+        <g stroke={INK} strokeWidth={17}><path d={`${TUNNELS.left} ${TUNNELS.right} ${TUNNELS.down}`} /></g>
+        <g stroke="#f6efe0" strokeWidth={12.5}><path d={`${TUNNELS.left} ${TUNNELS.right} ${TUNNELS.down}`} /></g>
         <ellipse cx={92} cy={203} rx={37} ry={21} fill="#f6efe0" stroke={INK} strokeWidth={2.5} />
         <ellipse cx={313} cy={197} rx={35} ry={20} fill="#f6efe0" stroke={INK} strokeWidth={2.5} />
         <ellipse cx={160} cy={277} rx={46} ry={23} fill="#f6efe0" stroke={INK} strokeWidth={2.5} />
-        <ellipse cx={160} cy={277} rx={40} ry={18} stroke="#e31e24" strokeWidth={1.8} strokeDasharray="4 5" />
+        <ellipse cx={160} cy={277} rx={40} ry={18} stroke="#e31e24" strokeWidth={1.8} strokeDasharray="4 5" className="dig" />
         <g fill="#f0b429" stroke={INK} strokeWidth={1.3}>
           {[[70, 214], [81, 214], [92, 214], [103, 214], [114, 214], [75.5, 205], [86.5, 205], [97.5, 205], [108.5, 205], [81, 196], [92, 196], [103, 196],
             [292, 207], [303, 207], [314, 207], [325, 207], [336, 207], [297.5, 198], [308.5, 198], [319.5, 198], [330.5, 198], [314, 189],
             [133, 289], [144, 289], [155, 289], [138.5, 280]].map(([x, y]) => <circle key={`${x}-${y}`} cx={x} cy={y} r={5} />)}
         </g>
-        <use href="#ant" transform="translate(195 104) rotate(90)" />
-        <use href="#antc" transform="translate(195 132) rotate(-90)" />
-        <use href="#ant" transform="translate(152 184) rotate(160)" />
-        <use href="#antc" transform="translate(246 179) rotate(14)" />
-        <use href="#ant" transform="translate(195 212) rotate(90)" />
-        <use href="#antc" transform="translate(172 279) rotate(190)" />
-        <use href="#ant" transform="translate(178 268) rotate(-30)" />
+
+        {/* the colony at work */}
+        <Walker path="surface" dur={11} begin={0} carry still="translate(338 122) scale(-1 1)" />
+        <Walker path="surface" dur={11} begin={4.2} carry still="translate(362 122) scale(-1 1)" />
+        <Walker path="left" dur={7} begin={0} carry still="translate(152 184) rotate(160)" />
+        <Walker path="left" dur={7} begin={3.5} still="translate(195 104) rotate(90)" />
+        <Walker path="right" dur={8} begin={1.2} carry still="translate(246 179) rotate(14)" />
+        <Walker path="down" dur={6} begin={0.6} carry still="translate(195 212) rotate(90)" />
+        <Walker path="down" dur={6} begin={3.6} still="translate(195 132) rotate(-90)" />
+        <use href="#antc" transform="translate(172 279) rotate(190)" className="digger" />
+        <use href="#ant" transform="translate(178 268) rotate(-30)" className="digger digger--b" />
+
+        {/* Anay tunnelling in */}
         <path d="M392 304 L374 298 L362 307 L349 300 L336 309 L322 303" stroke={INK} strokeWidth={13} />
         <path d="M392 304 L374 298 L362 307 L349 300 L336 309 L322 303" stroke="#3b2a1e" strokeWidth={9} />
         <g transform="translate(316 303)">
-          <path d="M-9 -4 L-15 -8 M-9 4 L-15 8" stroke="#5a2e14" strokeWidth={2.4} />
-          <ellipse cx={0} cy={0} rx={8} ry={6} fill="#c8702f" stroke={INK} strokeWidth={1.8} />
-          <circle cx={-3} cy={0.4} r={1.4} fill="#fff" />
+          <g className="termite">
+            <path d="M-9 -4 L-15 -8 M-9 4 L-15 8" stroke="#5a2e14" strokeWidth={2.4} className="termite__jaws" />
+            <ellipse cx={0} cy={0} rx={8} ry={6} fill="#c8702f" stroke={INK} strokeWidth={1.8} />
+            <circle cx={-3} cy={0.4} r={1.4} fill="#fff" />
+          </g>
         </g>
         <path d="M0 330 L0 322 Q12 314 24 322 T48 322 T72 322 T96 322 T120 322 T144 322 T168 322 T192 322 T216 322 T240 322 T264 322 T288 322 T312 322 T336 322 T360 322 T384 322 T408 322 L390 330 Z" fill="#f6efe0" />
       </svg>
 
-      <div className="tonyo"><Antoine mood="wave" size={62} decorative /></div>
-      <p className="speech" role="note">{needCount} need you today.<strong>Kaya natin &apos;to!</strong></p>
+      <div className="tonyo"><Antoine mood="wave" size={62} decorative animated /></div>
+      <p className="speech" role="note">{needCount === 0 ? "Wala nang kailangan." : `${needCount} need you today.`}<strong>{needCount === 0 ? "Pahinga muna!" : "Kaya natin 'to!"}</strong></p>
 
       <Link className="tag" href="/me" style={{ left: "15%", top: "50%" }}><Check />{chambers.done[0]} · CLEAR</Link>
       <Link className="tag" href="/me" style={{ left: "72%", top: "49%" }}><Check />{chambers.done[1]} · CLEAR</Link>
-      <Link className="tag tag--now" href="/now" style={{ left: "28%", top: "72.5%" }}>{chambers.digging} · DIGGING {chambers.progress}</Link>
-      <Link className="tag tag--anay" href="/anay" style={{ left: "74%", top: "82%" }}>ANAY · {late} LATE</Link>
+      <Link className="tag tag--now" href="/work" style={{ left: "28%", top: "72.5%" }}>{chambers.digging} · DIGGING {chambers.progress}</Link>
+      <Link className="tag tag--anay" href="/anay" style={{ left: "70%", top: "82%" }}>ANAY · {late} LATE</Link>
     </section>
   );
 }

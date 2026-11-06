@@ -25,13 +25,17 @@ const INK = "#1d1d1b";
 const RED = "#e31e24";
 const HONEY = "#f0b429";
 
-export function Antoine({ mood = "wave", size = 160, decorative = false, className }: { mood?: AntoineMood; size?: number; decorative?: boolean; className?: string }) {
+export function Antoine({ mood = "wave", size = 160, decorative = false, animated = false, className }: { mood?: AntoineMood; size?: number; decorative?: boolean; animated?: boolean; className?: string }) {
   const height = Math.round((size * 250) / 224);
   const arm = arms[mood];
+  // When waving and animated, the raised right arm is its own group so it can swing from the shoulder.
+  const splitWave = animated && mood === "wave";
+  const staticArm = splitWave ? "M82 157 Q66 167 64 182" : arm.path;
+  const staticHands = splitWave ? arm.hands.slice(0, 1) : arm.hands;
   const sparkle = mood === "cheer" || mood === "proud";
   return (
     <svg
-      className={className}
+      className={[className, animated ? "antoine--alive" : ""].filter(Boolean).join(" ") || undefined}
       width={size}
       height={height}
       viewBox="-12 -14 224 250"
@@ -53,9 +57,15 @@ export function Antoine({ mood = "wave", size = 160, decorative = false, classNa
         <ellipse cx={100} cy={180} rx={47} ry={37} stroke="none" />
         <circle cx={100} cy={84} r={67} stroke="none" />
         <path d="M58 134 Q100 158 142 134 L144 150 Q100 172 56 150 Z" strokeWidth={10} />
-        <path d={arm.path} fill="none" strokeWidth={23} />
-        {arm.hands.map(([x, y]) => <circle key={`u${x}`} cx={x} cy={y} r={13} stroke="none" />)}
+        <path d={staticArm} fill="none" strokeWidth={23} />
+        {staticHands.map(([x, y]) => <circle key={`u${x}`} cx={x} cy={y} r={13} stroke="none" />)}
       </g>
+      {splitWave && (
+        <g className="antoine__wave" fill="#fff" stroke="#fff">
+          <path d="M118 157 Q142 147 152 121" fill="none" strokeWidth={23} />
+          <circle cx={153} cy={117} r={13} stroke="none" />
+        </g>
+      )}
 
       {/* body */}
       <path d="M84 36 C78 16 64 8 52 12 M116 36 C122 16 136 8 148 12" stroke={INK} strokeWidth={7} />
@@ -83,8 +93,14 @@ export function Antoine({ mood = "wave", size = 160, decorative = false, classNa
       <circle cx={118} cy={151} r={6.5} fill="#d99a12" stroke={INK} strokeWidth={3} />
 
       {/* arms */}
-      <path d={arm.path} stroke={INK} strokeWidth={9} />
-      {arm.hands.map(([x, y]) => <circle key={`h${x}`} cx={x} cy={y} r={8} fill={INK} />)}
+      <path d={staticArm} stroke={INK} strokeWidth={9} />
+      {staticHands.map(([x, y]) => <circle key={`h${x}`} cx={x} cy={y} r={8} fill={INK} />)}
+      {splitWave && (
+        <g className="antoine__wave">
+          <path d="M118 157 Q142 147 152 121" stroke={INK} strokeWidth={9} />
+          <circle cx={153} cy={117} r={8} fill={INK} />
+        </g>
+      )}
 
       {/* head */}
       <circle cx={100} cy={84} r={58} fill={RED} stroke={INK} strokeWidth={5} />
@@ -108,7 +124,7 @@ function OpenEyes({ lookDown = false }: { lookDown?: boolean }) {
   const py = lookDown ? 102 : 97;
   const hy = lookDown ? 96 : 90;
   return (
-    <>
+    <g className="antoine__eyes">
       <ellipse cx={78} cy={92} rx={16.5} ry={20.5} fill="#fff" stroke={INK} strokeWidth={3.5} />
       <ellipse cx={122} cy={92} rx={16.5} ry={20.5} fill="#fff" stroke={INK} strokeWidth={3.5} />
       <circle cx={lookDown ? 79 : 81} cy={py} r={lookDown ? 10 : 11} fill={INK} />
@@ -116,7 +132,7 @@ function OpenEyes({ lookDown = false }: { lookDown?: boolean }) {
       <circle cx={lookDown ? 83 : 86} cy={hy} r={lookDown ? 4 : 4.6} fill="#fff" />
       <circle cx={lookDown ? 127 : 130} cy={hy} r={lookDown ? 4 : 4.6} fill="#fff" />
       {!lookDown && <><circle cx={76} cy={103} r={2.1} fill="#fff" /><circle cx={120} cy={103} r={2.1} fill="#fff" /></>}
-    </>
+    </g>
   );
 }
 

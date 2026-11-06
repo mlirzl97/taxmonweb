@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Antoine } from "@/components/Antoine";
-import { me } from "@/lib/sample-data";
+import { useGame } from "@/components/GameProvider";
+import { shortDate } from "@/lib/game/calendar";
+import { baselines, ME, people } from "@/lib/game/world";
+
+const me = { name: people[ME]!.name, classes: "Forager · Sentinel", title: "Blocker Buster", streak: baselines.streak, freezes: baselines.freezes, cleanRate: baselines.cleanRate };
 
 const heat = [0,1,2,1,3, 2,2,0,1,2, 3,2,3,1,0, 1,2,2,3,3, 0,1,0,2,1, 2,3,3,2,2, 1,0,2,3,1, 3,3,2,1,2, 2,2,3,0,1, 1,3,2,0,0];
 const heatFill = ["var(--paper)", "var(--honey-soft)", "var(--honey)", "var(--honey-text)"];
@@ -22,9 +26,14 @@ const badges = [
 
 export function Profile() {
   const [sassy, setSassy] = useState(false);
-  const { rank } = me;
-  const toNext = rank.ceiling - rank.lifetimeXp;
-  const pct = ((rank.lifetimeXp - rank.floor) / (rank.ceiling - rank.floor)) * 100;
+  const game = useGame();
+  const { state } = game;
+  const rank = { ...game.me.rank, lifetimeXp: game.me.lifetimeXp };
+  const toNext = Math.max(0, rank.ceiling - rank.lifetimeXp);
+  const pct = rank.ceiling > rank.floor ? ((rank.lifetimeXp - rank.floor) / (rank.ceiling - rank.floor)) * 100 : 100;
+  const myHits = 4 + new Set(state.awards.filter((a) => a.code === "ANAY_HIT" && a.person === ME).map((a) => a.taskId)).size;
+  const misses = state.awards.filter((a) => a.person === ME && (a.code === "MISSED_D1" || a.code === "MISSED_STATUTORY"));
+  const freezesOwned = me.freezes + state.purchases.filter((p) => p.itemId === "freeze").length;
   return (
     <main className="app">
       <header style={{ background: "var(--ink)", color: "var(--paper)", padding: "22px 18px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
@@ -57,10 +66,10 @@ export function Profile() {
 
       <div className="page">
         <div className="grid-2" style={{ gap: 10 }}>
-          <Tile label="Clean streak" value={`${me.streak} cycles`} note={`${me.freezes} streak freeze owned`} noteColor="var(--sky)" />
-          <Tile href="/store" label="Ants" value={me.ants.toLocaleString("en-US")} note="Open store →" bg="var(--honey)" />
+          <Tile label="XP this cycle" value={`${game.me.xpThisCycle >= 0 ? "+" : ""}${game.me.xpThisCycle}`} valueColor={game.me.xpThisCycle < 0 ? "var(--danger)" : undefined} note={`${me.streak}-cycle clean streak · ${freezesOwned} freeze${freezesOwned === 1 ? "" : "s"}`} noteColor="var(--sky)" />
+          <Tile href="/store" label="Ants" value={game.me.ants.available.toLocaleString("en-US")} note="Open store →" bg="var(--honey)" />
           <Tile label="Clean rate" value={`${me.cleanRate}%`} valueColor="var(--leaf)" note="on time · evidenced · QA ok" />
-          <Tile href="/anay" label="Anay hits" value={String(me.anayHits)} valueColor="var(--honey)" note="#3 this raid →" bg="var(--soil)" dark />
+          <Tile href="/anay" label="Anay hits" value={String(myHits)} valueColor="var(--honey)" note="See the raid →" bg="var(--soil)" dark />
         </div>
 
         <section className="card card--pad" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -89,14 +98,16 @@ export function Profile() {
 
         <section className="card card--pad" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div className="section-head"><h2 className="display-m" style={{ fontSize: 19 }}>Misses &amp; waivers</h2><span className="small muted">Private</span></div>
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <span style={{ flex: "none", fontSize: 12, fontWeight: 800, color: "var(--leaf)", border: "2px solid var(--leaf)", borderRadius: 4, padding: "1px 6px", textDecoration: "line-through" }}>−10</span>
-            <span style={{ display: "flex", flexDirection: "column", gap: 2 }}><b style={{ fontSize: 13 }}>Missed D-1 · Lawin Shipping (sample)</b><span className="small" style={{ color: "var(--leaf)", fontWeight: 700 }}>Waived: client data blocker logged 3 Nov</span></span>
-          </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-start", borderTop: "1px solid var(--rule)", paddingTop: 10 }}>
-            <span style={{ flex: "none", fontSize: 12, fontWeight: 800, color: "var(--danger)", border: "2px solid var(--danger)", borderRadius: 4, padding: "1px 6px" }}>−5</span>
-            <span style={{ display: "flex", flexDirection: "column", gap: 2 }}><b style={{ fontSize: 13 }}>Shared miss · Daan Builders (sample)</b><span className="small muted">You prepared it; the full demerit went to the most senior person on it</span></span>
-          </div>
+          {misses.length === 0 && <p className="small muted" style={{ margin: 0 }}>No misses this cycle. Keep it that way.</p>}
+          {misses.map((miss) => (
+            <div key={miss.key} style={{ display: "flex", gap: 10, alignItems: "flex-start", borderTop: "1px solid var(--rule)", paddingTop: 10 }}>
+              <span style={{ flex: "none", fontSize: 12, fontWeight: 800, color: miss.waivedBy ? "var(--leaf)" : "var(--danger)", border: `2px solid ${miss.waivedBy ? "var(--leaf)" : "var(--danger)"}`, borderRadius: 4, padding: "1px 6px", textDecoration: miss.waivedBy ? "line-through" : undefined }}>{miss.waivedBy ? (miss.code === "MISSED_D1" ? "−10" : "−100") : miss.xp}</span>
+              <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <b style={{ fontSize: 13 }}>{miss.note} · {state.tasks.find((t) => t.id === miss.taskId)?.client} (sample)</b>
+                <span className="small" style={{ color: miss.waivedBy ? "var(--leaf)" : "var(--earth)", fontWeight: miss.waivedBy ? 700 : 500 }}>{miss.waivedBy ? `Waived: ${miss.waivedBy}` : "Chain of command: the most senior person on it takes the full demerit"}</span>
+              </span>
+            </div>
+          ))}
         </section>
 
         <section className="card" style={{ overflow: "hidden" }}>
@@ -112,6 +123,15 @@ export function Profile() {
               <p style={{ margin: "0 0 4px", background: "var(--paper)", border: "2px solid var(--ink)", borderRadius: "12px 12px 12px 4px", padding: "8px 10px", fontSize: 13, fontWeight: 600, lineHeight: 1.35 }}>Ay, sassy na tayo? Sige. {me.streak} clean cycles… sayang naman kung masisira, &apos;di ba?</p>
             </div>
           )}
+        </section>
+
+        <section className="sample-act" aria-label="Sample controls">
+          <span className="eyebrow">Sample controls · {shortDate(state.today)}</span>
+          <span className="small">Move the sample clock one working day to see D-1, misses and waivers play out. Real Antoine follows the real calendar.</span>
+          <div className="btn-row">
+            <button className="btn" type="button" onClick={() => { if (window.confirm("Reset the sample game to the start?")) game.reset(); }}>Reset sample</button>
+            <button className="btn btn--honey" type="button" onClick={() => game.dispatch({ type: "advance_day" })}>Next working day →</button>
+          </div>
         </section>
 
         <p className="small muted" style={{ textAlign: "center", margin: 0 }}>Clients, BIR Center and Team open in TaxMonWeb.</p>

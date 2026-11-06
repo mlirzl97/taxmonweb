@@ -1,8 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter } from "next/font/google";
 
+import { GameProvider } from "@/components/GameProvider";
 import { TabBar } from "@/components/TabBar";
-import { needsYou, SAMPLE } from "@/lib/sample-data";
+import { SAMPLE } from "@/lib/sample-data";
 
 import "./globals.css";
 
@@ -29,8 +30,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`${fraunces.variable} ${inter.variable}`}>
       <body>
         {SAMPLE && <div className="sample-ribbon" role="note">Sample data · fictional clients and people</div>}
-        {children}
-        <TabBar nowCount={needsYou.length} />
+        <GameProvider>
+          {children}
+          <TabBar />
+        </GameProvider>
       </body>
     </html>
   );

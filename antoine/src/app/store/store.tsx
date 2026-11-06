@@ -3,23 +3,25 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { useGame } from "@/components/GameProvider";
 import { AntCoin, BackIcon } from "@/components/StatusIcon";
-import { me, pendingOrder, storeItems, storeManager, storeName, type StoreItem } from "@/lib/sample-data";
+import { ME } from "@/lib/game/world";
+import { pendingOrder, storeItems, storeManager, storeName, type StoreItem } from "@/lib/sample-data";
 
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
 const GOAL = 10_000;
 
-/** Sample-only: purchases live in this page's memory and vanish on reload. */
+/** Sample-only: purchases are saved in this browser with the rest of the sample game. */
 export function Store() {
+  const { state, me, dispatch } = useGame();
   const [filter, setFilter] = useState<"all" | "digital" | "real">("all");
-  const [orders, setOrders] = useState<StoreItem[]>([]);
   const [selected, setSelected] = useState<StoreItem | null>(null);
   const [bought, setBought] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const spent = orders.reduce((sum, item) => sum + item.price, 0);
-  const balance = me.ants - spent;
-  const held = me.antsOnHold + orders.filter((item) => item.kind === "real").reduce((sum, item) => sum + item.price, 0);
-  const pendingCount = 1 + orders.filter((item) => item.kind === "real").length;
+  const balance = me.ants.available;
+  const held = 1000 + me.ants.held;
+  const pendingCount = 1 + state.purchases.filter((p) => p.status === "held").length;
   const items = storeItems.filter((item) => filter === "all" || item.kind === filter);
 
   useEffect(() => {
@@ -71,7 +73,7 @@ export function Store() {
           </div>
           <div className="grid-2">
             {items.map((item) => (
-              <button key={item.id} className="item" type="button" onClick={() => { setSelected(item); setBought(false); }}>
+              <button key={item.id} className="item" type="button" onClick={() => { setSelected(item); setBought(false); setError(null); }}>
                 <span className="item__art" style={{ background: item.tint }}>
                   <ItemArt id={item.id} />
                   <span className="item__kind" style={{ background: item.kind === "digital" ? "var(--card)" : "var(--ink)", color: item.kind === "digital" ? "var(--ink)" : "var(--honey)" }}>{item.kind === "digital" ? "Instant" : "Real item"}</span>
@@ -104,9 +106,10 @@ export function Store() {
               <div><dt>After buying</dt><dd style={{ color: short > 0 && !bought ? "var(--danger)" : undefined }}>{bought ? fmt(balance) : short > 0 ? `${fmt(short)} short` : fmt(balance - selected.price)}</dd></div>
             </dl>
             <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45 }}>{selected.kind === "digital" ? "It lands in your inventory straight away. Ants go back to the colony treasury." : `Your Ants move to the store and stay on hold until ${storeManager} hands you the item. You can cancel any time before then for a full refund.`}</p>
+            {error && <div className="form-error" role="alert">{error}</div>}
             {bought
               ? <div className="notice" role="status">✓ {selected.kind === "digital" ? "Added to your inventory. Equip it from Me." : `Order placed. ${storeManager} will hand it over; your Ants are on hold until then.`}</div>
-              : <button className="btn btn--primary btn--block" type="button" disabled={short > 0} onClick={() => { setOrders((current) => [...current, selected]); setBought(true); }}>{short > 0 ? "Not enough Ants yet" : `Buy for ${fmt(selected.price)} Ants`}</button>}
+              : <button className="btn btn--primary btn--block" type="button" disabled={short > 0} onClick={() => { const result = dispatch({ type: "buy", actor: ME, itemId: selected.id, price: selected.price, kind: selected.kind, balance }); if (result.ok) setBought(true); else setError(result.error); }}>{short > 0 ? "Not enough Ants yet" : `Buy for ${fmt(selected.price)} Ants`}</button>}
           </section>
         </div>
       )}
