@@ -44,7 +44,7 @@ Spine position: `… → Completion → Independent QA → (Colony projection)`.
 | Intake 7 | HOD answer | Mascot: **Tonyo** |
 | Intake 8 | HOD answer | **Anay** pushes filing **one day before** the deadline (D-1) |
 | Intake 9 | HOD answer | **Sassy mode** is opt-in, off by default |
-| Intake 10 | HOD answer | Adopt the recommended features from the game study (§4.9) |
+| Intake 10 | HOD answer | Adopt the recommended features from the game study (§4.10) |
 | Intake 11 | HOD answer | Approve the design language after seeing the mockup |
 | Follow-up 1 | HOD answer | **D-1 = one working day** before the adjusted statutory deadline (weekends and `holiday_master` holidays skipped) |
 | Follow-up 2 | HOD answer | A miss gives the demerit to **every staff member who touched that work item** |
