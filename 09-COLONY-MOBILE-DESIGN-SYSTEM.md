@@ -1,6 +1,6 @@
 # 09 — Colony Mobile Design System
 
-Status: **PROPOSAL — pending HOD approval** (see `08-COLONY-GAME-PROPOSAL.md` §2).
+Status: **APPROVED by HOD 2026-11-06** (decision L-110; mobile "Tower" tab label L-111).
 Scope: TaxMonWeb mobile surfaces and all Colony (game) surfaces. Desktop keeps
 `DESIGN.md` / `05-UX-DESIGN-SYSTEM.md` unless separately amended.
 
