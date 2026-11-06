@@ -53,6 +53,8 @@ Spine position: `… → Completion → Independent QA → (Colony projection)`.
 | Follow-up 5 | HOD answer | Store Managers compete on the boards |
 | Final 1 | HOD answer | Merit allowance 300 XP per leader per cycle, 10–100 per award |
 | Final 2 | HOD answer | No co-approval for HOD seed grants for now |
+| Arcade 1 | HOD answer | **Two spendable currencies:** **Ants** for the Team Store (real items) and **Sugar** for the Colony Arcade. Arcade is skill-only; it never pays out Ants or real items |
+| Arcade 2 | HOD answer | Arcade daily limit: **5 plays per player per day** |
 | Final 3 | HOD answer | Shared demerit follows **chain of command**: the most senior person who touched the item takes the full demerit; everyone else who touched it takes a share |
 | Pending | Needs HOD sign-off | Mobile design language (amends "corporate and controlled" in `05` for mobile/game surfaces) |
 
@@ -251,6 +253,31 @@ ever created or destroyed off the books.
 Because Ants never expire, this liability only grows unless spent. The
 committee should watch it each quarter.
 
+### 4.7a Sugar and the Colony Arcade
+
+**Two currencies, two worlds:**
+
+| | **Ants** | **Sugar** |
+|---|---|---|
+| Spent in | Team Store (real items, premium cosmetics) | Colony Arcade (plays, arcade cosmetics) |
+| Earned from | Verified work (1 Ant per positive XP), merit, HOD seed | Verified work (proposal: 1 Sugar per 2 positive XP), arcade wins, daily missions |
+| Real-world value | Yes, via the committee's store | **None, ever** |
+| Converts | Ants → Sugar allowed one-way (proposal: 1 Ant = 5 Sugar) | **Sugar → Ants never** |
+| Demerits | Burn Ants | Don't touch Sugar |
+
+Because Sugar can never become Ants or a real item, arcade wins are pure fun and
+can never become gambling with real-value prizes.
+
+**Colony Arcade rules:**
+
+- **Skill, not chance.** Outcomes depend on timing, aim or reaction. No random payouts, no spinning wheels, no loot boxes.
+- **Entry costs Sugar** (proposal: 20 Sugar per play). Wins pay Sugar back by score, capped per play, plus weekly high-score boards.
+- **5 plays per player per day.** The counter resets at midnight Manila time.
+- **Arcade counter:** arcade-only cosmetics (ant skins, frames, titles) bought with Sugar.
+- **Launch games (solo):** *Anay Smash* (whack termites popping out of tunnels), *Leaf Catch* (timing game in the style of fishing machines), *Tunnel Run* (steer an ant, dodge Anay).
+- **Later (live 1-v-1):** *Colony Battleship*. Both players pay a Sugar entry; the winner takes a cosmetic trophy and the pot, minus a burn.
+- **Every click must advance work** stays true for work screens. The Arcade is a separate, capped reward space (decision L-109).
+
 ### 4.8 Personality
 
 - **Tonyo** is the mascot. He's warm, cheeky and proud of the colony. Character guide goes in `09`.
@@ -325,7 +352,7 @@ requester, and show as "Adjusted" in history.
 ### 5.5 Ant ledger (double-entry, append-only)
 
 - **`colony_economy_settings`**: effective-dated, one live row. `transfers_enabled` (default false), `transfer_allowed_capability` (who may send), `transfer_max_per_txn`, `transfer_max_per_day`, `transfer_reason_required`, `seed_coapproval_threshold` (nullable = off), `reference_peso_per_10k_ants` (default 100), `changed_by`, `changed_at`, `change_reason`.
-- **`colony_wallets`**: `id`, `kind` (`player` / `store` / `treasury`), `user_id` (player), `store_id` (store). Exactly one treasury.
+- **`colony_wallets`**: `id`, `currency` (`ants` / `sugar`), `kind` (`player` / `store` / `treasury` / `arcade`), `user_id` (player), `store_id` (store). Exactly one treasury.
 - **`colony_ant_transactions`**: `id`, `kind` (`mint` / `burn` / `seed` / `transfer` / `purchase_hold` / `purchase_retire` / `purchase_refund` / `adjust`), `initiated_by`, `coapproved_by`, `xp_event_id`, `order_id`, `idempotency_key` unique, `reason`, `created_by`, `created_at`.
 - **`colony_ant_entries`**: `transaction_id`, `wallet_id`, `amount` (±). A deferred constraint ensures each transaction sums to zero.
 - **Views:** `colony_wallet_balances`, `colony_economy_summary` (minted, burned, retired, circulating, liability).
@@ -342,6 +369,13 @@ requester, and show as "Adjusted" in history.
 
 - **`colony_merit_allowances`**: `leader_user_id`, `season_id`, `allowance_xp`, `set_by`. Unique per leader and season.
 - Merit awards are rows in `colony_xp_events` with `award_code = LEADER_MERIT`, `source_kind = merit`, plus `merit_category` and `given_by`. Remaining allowance is a derived view.
+
+### 5.6b Arcade
+
+- Sugar uses the same double-entry tables, with `currency = sugar` (a transaction never mixes currencies except the one-way `convert` kind: Ants burned, Sugar minted).
+- **`colony_arcade_games`**: `code`, `label`, `entry_sugar`, `max_payout_sugar`, `active`, `effective_from/to`.
+- **`colony_arcade_plays`**: `id`, `user_id`, `game_code`, `played_on` (Manila date), `score`, `entry_txn_id`, `payout_txn_id`, `client_build`, `created_at`. A unique index caps plays at 5 per user per day. Scores are checked server-side for plausibility (min duration, max score rate).
+- **`colony_arcade_highscores`**: derived view per game per week.
 
 ### 5.7 Later-Lego tables (reserved, not built now)
 
@@ -375,6 +409,7 @@ heals), `colony_wallet_balances`, `colony_economy_summary`.
 13. **Real items stay inside the committee's budget and process.** The app records orders and handovers; it never stores gift-card codes or PINs.
 14. **Transfers stay locked** unless deliberately enabled with caps; seed grants always carry a reason.
 15. **Merit is capped, reasoned and reported.** It never offsets a demerit and can't be self-given.
+16. **The Arcade never pays Ants or real items, and never uses chance-based payouts.** Sugar never converts to Ants.
 
 ---
 
@@ -419,7 +454,8 @@ on sanitized data.
 | **G3 Seasons + ranks** | Season close, final standings, Colony Cup, Hall, lifetime and seasonal ranks, streaks, MVP and medals |
 | **G4 Ant wallet** | Double-entry ledger, minting and burning, seed grants, locked transfers + economy settings, leader merit, committee economy view |
 | **G5 Stores** | Store Manager capability, stores, items, orders, fulfilment, digital inventory (cosmetics, streak freeze) |
-| **G6 Live-ops** | Forage Missions, Colony Pass, Rush Events, Badge Album, kudos, Tower TV mode |
+| **G6 Colony Arcade** | Sugar currency, conversion, arcade counter, Anay Smash / Leaf Catch / Tunnel Run, daily cap, weekly high scores |
+| **G7 Live-ops** | Forage Missions, Colony Pass, Rush Events, Badge Album, kudos, Tower TV mode |
 
 Tests for every Lego, positive and negative: idempotent re-projection;
 duplicate commands; no XP for self-review or override; demerit waiver only

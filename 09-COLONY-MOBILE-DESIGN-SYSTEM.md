@@ -250,3 +250,36 @@ Rules:
 | Keep one stamp card per screen | Stack framed cards inside framed cards |
 | Explain every disabled action | Hide why something can't be done |
 | Use Taglish warmly in the game voice | Use humor in control facts or errors |
+
+---
+
+## 8. Mascot construction rules (Tonyo and Anay)
+
+Basis: long-established character-design practice and what the most recognisable
+mascots have in common (e.g. Mickey Mouse, Pikachu, Kirby, Duolingo's owl, Jollibee).
+These are general design principles, not claims about how those characters were made.
+
+### 8.1 The winning combination
+
+| # | Principle | Why it works | Tonyo rule |
+|---|---|---|---|
+| 1 | **Silhouette first** | Great characters are recognisable as a solid black shape | Tonyo must read in pure black at 48px. Antennae + big round head + bean body is the silhouette |
+| 2 | **Built from primitives** | Circles and ellipses are friendly, consistent and redrawable by anyone | Every body part is a circle, ellipse or round-capped line. No freehand blobs |
+| 3 | **Baby proportions** (big head, big low eyes, small body, short limbs) | People instinctively read these as friendly and trustworthy | Head ≈ 50% of total height. Eyes sit on or below the head's centre line |
+| 4 | **Eyes carry the emotion** | Expression comes from eyes and lids, not extra detail | Large whites, big pupils, one big + one small highlight. Moods change lids, pupils and mouth only |
+| 5 | **One signature colour or accessory** | Instant brand recall | Tonyo is **TaxMonWeb red** (or wears the red scarf). Nothing else on him competes |
+| 6 | **Tiny palette** | Clean at every size, prints well, animates well | Max 3 body colours + white + one accent |
+| 7 | **One line system** | Mixed outlines look amateur | Pick one: no outlines (soft) or one consistent outline weight (sticker) |
+| 8 | **Round terminals** | Rounded = safe; sharp = threat | All line ends round. Only Anay gets angles (mandibles, brows) |
+| 9 | **Small-size test** | App icons, avatars and badges are 24–48px | Details that vanish at 32px are removed |
+| 10 | **Line of action** | Asymmetric, leaning poses feel alive; straight ones feel stiff | Every pose leans, tilts the head or raises a limb |
+| 11 | **Simplify the animal** | Accuracy kills charm | 3 body segments stay (it's an ant). Show 4 limbs front-on (2 arms, 2 legs); 6 only in side view |
+| 12 | **Villain by contrast** | The hero/villain pair must read at a glance | Anay: pale, angular, narrow eyes, big mandibles. Cartoon, never scary or gross |
+
+### 8.2 Production rules
+
+- Characters are drawn as layered SVG parts (head, eyes, mouth, arms, body) so they can be animated later without a redraw.
+- One master file per character; moods are part swaps, never redraws.
+- Minimum display size 32px. Below that, use the TaxMonWeb ant mark instead.
+- Never place Tonyo on a control fact or over a status; he sits beside content.
+- Reduced motion: poses switch without animation.
