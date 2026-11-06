@@ -117,7 +117,7 @@ Values are starting proposals, calibrated in shadow mode (§9, G1).
 | `STEWARD_ALL_CLEAR` | Steward | Every item on their clients this cycle filed by D-1 | 50 |
 | `ANAY_DEFEATED` | Every competing player | Colony beats Anay this cycle (§4.5) | 50 |
 | `CLEAN_STREAK` | Person | Consecutive cycles with zero misses and zero QA demerits | 50 × streak (cap 5) |
-| `LEADER_MERIT` | Any player | A leader gives merit from their allowance, with a category and reason (§4.10) | 10–100 per award |
+| `LEADER_MERIT` | Any player | A leader gives merit from their allowance, with a category and reason (§4.9) | 10–100 per award |
 
 Nothing is awarded for submission alone (Submitted ≠ Accepted), filing without
 required payment (Filed ≠ Paid), payment initiation (initiated ≠ confirmed),
@@ -252,7 +252,7 @@ committee should watch it each quarter.
 - **Sassy mode:** Duolingo-style teasing reminders. Each player opts in themselves; off by default.
 - **Anay** is the shared villain (§4.5). No real person is ever a character or villain.
 
-### 4.10 Leader merit points
+### 4.9 Leader merit points
 
 Leaders (`role_key = leader`, capability `colony.merit_give`) can recognise things the system can't see: helping a teammate, client praise, mentoring, going beyond.
 
@@ -262,7 +262,7 @@ Leaders (`role_key = leader`, capability `colony.merit_give`) can recognise thin
 - **Visibility:** the recipient sees who gave it and why. Merits show in the Colony Feed as "Recognised by {leader}" (opt-out respected). The HOD gets a monthly merit report per leader and recipient, to spot favoritism.
 - Merit is never used to cancel a demerit. Recognition and accountability stay separate.
 
-### 4.9 Adopted features (from `10` §6)
+### 4.10 Adopted features (from `10` §6)
 
 Role classes and boards · Anay raid · Cycle MVP + rare medals ("Perfect Cycle",
 "Blocker Buster") · seasonal ranks with stars and soft reset · streak freeze
