@@ -51,6 +51,9 @@ Spine position: `… → Completion → Independent QA → (Colony projection)`.
 | Follow-up 3 | HOD answer | **One store**, run by **Lourdes** as first Store Manager. **Leaders can give merit points** |
 | Follow-up 4 | HOD answer | **HOD can seed Ants.** Player transfers are built, but **locked for most players** by a background setting |
 | Follow-up 5 | HOD answer | Store Managers compete on the boards |
+| Final 1 | HOD answer | Merit allowance 300 XP per leader per cycle, 10–100 per award |
+| Final 2 | HOD answer | No co-approval for HOD seed grants for now |
+| Final 3 | HOD answer | Shared demerit follows **chain of command**: the most senior person who touched the item takes the full demerit; everyone else who touched it takes a share |
 | Pending | Needs HOD sign-off | Mobile design language (amends "corporate and controlled" in `05` for mobile/game surfaces) |
 
 ---
@@ -127,12 +130,14 @@ raw item count without a quality condition, or overrides (§6).
 
 | Code | Who | Trigger | XP |
 |---|---|---|---|
-| `MISSED_D1` | **Everyone who touched the item** | Not filed by D-1 | −10 each |
-| `MISSED_STATUTORY` | **Everyone who touched the item** | `statutory_deadline_missed` becomes true | −100 each |
+| `MISSED_D1` | **Everyone who touched the item** (chain of command) | Not filed by D-1 | −10 most senior · −5 each other |
+| `MISSED_STATUTORY` | **Everyone who touched the item** (chain of command) | `statutory_deadline_missed` becomes true | −100 most senior · −50 each other |
 | `QA_LOW` / `QA_MEDIUM` / `QA_HIGH` / `QA_MATERIAL` | Accountable user on the QA finding | Finding recorded | −10 / −30 / −60 / −150 |
 | `STREAK_BROKEN` | Person | No XP loss; the streak resets | 0 |
 
 **"Touched"** = anyone recorded as actor on that work item's gate attempts, evidence or work events during the cycle (actual-actor history, not assignment). Shared demerits make the item everyone's problem: a preparer has a reason to chase a slow reviewer and vice versa.
+
+**Chain of command:** the **most senior** person who touched the item takes the full demerit; everyone else who touched it takes the **share** (proposal 50%, configurable in the rule set). Seniority is read from the effective-dated reporting hierarchy (Team org chart) on the miss date. If touchers aren't in one reporting line, the work role order decides: Reviewer > Checker > Preparer. If seniority still can't be determined, everyone takes the full demerit and the case is flagged for HOD review. Seniority is never typed in by hand for scoring.
 
 **Waiver (fairness):** a miss demerit is **waived** if an external blocker
 (client data, client approval, payment funding or BIR system) was logged
@@ -293,7 +298,7 @@ New capability keys in `capabilities`: `colony.rules_draft`, `colony.rules_appro
 
 ### 5.2 Configuration (effective-dated, maker-checker)
 
-- **`colony_rule_set_versions`**: `id`, `version_no`, `effective_from/to`, `status` (`draft` / `approved` / `retired`), `mint_rate` (default 1), `blocker_early_days`, `streak_cap`, `drafted_by`, `approved_by` (≠ drafter), `approved_at`, `change_reason`.
+- **`colony_rule_set_versions`**: `id`, `version_no`, `effective_from/to`, `status` (`draft` / `approved` / `retired`), `mint_rate` (default 1), `shared_demerit_pct` (default 50), `blocker_early_days`, `streak_cap`, `drafted_by`, `approved_by` (≠ drafter), `approved_at`, `change_reason`.
 - **`colony_award_rules`**: `rule_set_version_id`, `award_code`, `earner_class`, `xp` (negative for demerits), `active`, `description`. A lookup table, not a rules DSL. Trigger logic per code is reviewed code.
 - **`colony_rank_tiers`**: `rule_set_version_id`, `tier_no`, `code`, `label`, `min_lifetime_xp`, `insignia_key`.
 
@@ -419,7 +424,7 @@ on sanitized data.
 Tests for every Lego, positive and negative: idempotent re-projection;
 duplicate commands; no XP for self-review or override; demerit waiver only
 with a prior external blocker; double-entry balance always zero; purchase
-blocked on negative balance; transfer refused while locked or over cap; merit over allowance or to self refused; D-1 skips weekends and holidays; shared demerit reaches every actor; Store Manager can't fulfil own order; refunds on
+blocked on negative balance; transfer refused while locked or over cap; merit over allowance or to self refused; D-1 skips weekends and holidays; shared demerit reaches every actor with full amount on the most senior; Store Manager can't fulfil own order; refunds on
 rejection; RLS denial of others' detail; final standings immutable; Colony
 outage doesn't affect work commands.
 
@@ -427,6 +432,4 @@ outage doesn't affect work commands.
 
 ## 10. Open questions for the HOD
 
-1. **Merit allowance:** 300 XP per leader per cycle, 10–100 per award, to start?
-2. **Seed co-approval:** keep off, or require a committee member above a set amount?
-3. **Shared demerit size:** everyone gets the full −10 / −100 (current), or the person holding the open step gets the full amount and others a smaller share?
+None open. Values marked "proposal" are calibrated in shadow mode (G1) before staff see them.
