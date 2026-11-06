@@ -1,6 +1,6 @@
 # 08 — Colony: Gamification, Leaderboard and Ant Rewards
 
-Status: **PROPOSAL — pending HOD approval.** Nothing in this document is approved
+Status: **PROPOSAL — L-107 (individual leaderboards) and L-108 (rewards governance) approved 2026-11-06; detailed rules still pending HOD approval.** Nothing in this document is approved
 until the HOD signs off the decision amendments in §2. No migration has been
 written. This document amends, but does not silently override, `00A-DECISION-REGISTER.md`.
 
@@ -35,12 +35,12 @@ Colony is downstream of everything and upstream of nothing.
 
 | Ref | Current | Proposed |
 |---|---|---|
-| **L-069 (amend)** | Team/Tower "Race to All Clear"; no public individual leaderboard in V1. | Individual leaderboards are permitted, both realtime (current filing cycle) and historical (settled seasons). The guardrails in §6 are mandatory. Race to All Clear stays as the Tower-level goal. Tax Run Completion, RAG, QA Completion, QA Pass Rate and RCA stay separate measures and are never merged into XP. |
-| **New: Ant rewards** | — | Ants are a points currency backed by real rewards from an HOD-approved catalog. The redemption rate is configuration (HOD example: 10,000 Ants = one ₱100 gift certificate). **Go-live of real-value redemption requires written HR/Finance sign-off and tax-treatment confirmation.** TaxMonWeb does not decide how employee rewards are taxed. |
+| **L-069 → L-107 ✅ approved 2026-11-06** | Team/Tower "Race to All Clear"; no public individual leaderboard in V1. | Individual leaderboards are permitted, both realtime (current filing cycle) and historical (settled seasons). The guardrails in §6 are mandatory. Race to All Clear stays as the Tower-level goal. Tax Run Completion, RAG, QA Completion, QA Pass Rate and RCA stay separate measures and are never merged into XP. |
+| **L-108 ✅ approved 2026-11-06: Ant rewards** | — | Ants are a points currency backed by real rewards. The **Culture and Values Committee** governs the catalog, budget, approvals, fulfilment and any HR/payroll/tax treatment. The rate is configuration (HOD example: 10,000 Ants = one ₱100 gift certificate). TaxMonWeb keeps the ledger and redemption record only. |
 | **New: Mobile design language** | `05-UX-DESIGN-SYSTEM.md`: "corporate and controlled". | Mobile and game surfaces use the bolder Colony design language (`09-COLONY-MOBILE-DESIGN-SYSTEM.md`). Control facts keep their precise, plain-language presentation inside it. Desktop keeps the existing system unless separately amended. |
 | **Build plan note** | `07` People Lego: "No HR, payroll, ranking, or gamification data." | That stays true for the People Lego. Colony is its own later set of Legos (§9), built after the work lifecycle produces real facts. |
 
-Until these are signed, Colony work is limited to documentation and calibration.
+L-107 and L-108 are recorded in the decision register. The mobile design language row is still pending; until it is approved, Colony work is limited to documentation, calibration and mockups.
 
 ---
 
@@ -290,7 +290,7 @@ and badge and season).
 9. **No self-awarding.** Adjusters and reward approvers cannot target themselves, and default to `observer`.
 10. **History is append-only.** Corrections are reversal entries. Finalized standings never change.
 11. **Leaderboards show work outcomes, not people's worth.** No "worst performer" view, no public bottom ranking. The live board shows the top 10 and your own position.
-12. **Real rewards stay inside the approved budget**, and redemption stays off until HR/Finance and tax treatment are confirmed.
+12. **Real rewards stay inside the committee's approved budget**, and redemption stays off until the Culture and Values Committee gives the go-ahead.
 
 ---
 
@@ -314,9 +314,9 @@ and badge and season).
 | Approve rule set | A different HOD / Super Admin from the drafter |
 | Finalize season | HOD, Super Admin (audited) |
 | Manual XP or Ant adjustment | Request: HOD / Super Admin; approve: a second authorized person; never self-targeted |
-| Manage reward catalog | HOD / Super Admin (maker-checker) |
-| Approve redemption | Authorized approver ≠ requester |
-| Mark redemption fulfilled | Authorized fulfiller (Finance/Admin) |
+| Manage reward catalog | Culture and Values Committee members (maker-checker) |
+| Approve redemption | Culture and Values Committee member ≠ requester |
+| Mark redemption fulfilled | Culture and Values Committee fulfiller |
 
 Enforced server-side and by RLS. UI visibility is never the control.
 
@@ -334,7 +334,7 @@ facts on sanitized data.
 | **G3 Seasons and history** | Settlement, final standings, Colony Cup, Hall of the Colony | Yes |
 | **G4 Ranks and badges** | Rank tiers, progress, insignia, badges | Yes |
 | **G5 Ant wallet** | Ant ledger and balances, earning only, no redemption | Yes |
-| **G6 Rewards** | Catalog, redemption workflow, budget view. **Gated on HR/Finance and tax sign-off** | Yes |
+| **G6 Rewards** | Catalog, redemption workflow, budget view. **Gated on Culture and Values Committee go-ahead** (they own HR/payroll/tax treatment) | Yes |
 
 Each Lego ships with positive and negative tests: idempotent re-projection,
 duplicate commands, no award for self-review or override, clawback on QA
@@ -347,9 +347,9 @@ standings immutable.
 ## 10. Open questions for the HOD
 
 1. **Load fairness:** rank by raw XP (recommended to start), or normalize by client load or complexity? Raw XP rewards people carrying more clients. Normalizing is fairer but harder to explain.
-2. **Real-reward budget:** monthly ₱ budget for Ants? This sets the issuance cap.
+2. **Real-reward budget:** set by the Culture and Values Committee. It becomes the issuance cap.
 3. **Who competes:** should portfolio owners and reviewers compete alongside preparers, or have their own board?
 4. **QA window length:** how many days after cycle end before a season can be finalized?
 5. **Ant expiry:** never (recommended), or expire after N months?
 6. **Leaderboard names:** real display names (recommended for a small team), or optional aliases?
-7. **Reward approver and fulfiller:** which roles (e.g. HOD approves, Admin/Finance fulfils)?
+7. **Committee in the system:** which staff accounts act for the Culture and Values Committee?
