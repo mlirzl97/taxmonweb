@@ -210,6 +210,7 @@ The HOD (domain owner) made these decisions from 2026-10-22, while reviewing the
 | F-015 | Technical choices | Final technology stack, physical schema, indexes, deployment architecture, backup design, and production security implementation. |
 | F-016 | Visual details | Exact TMF colors and final production design tokens until approved references are available. |
 | F-017 | Future scope | Broader BIR, registration, notice, assessment, onboarding, AI, and analytics modules. |
+| F-018 | Client app | Client-facing experience ("Grab customer app"): clients see their own filing status and deadlines, what the firm needs from them, approve returns, and provide requested data. Same app and database, separate client entrance and Client role with own-data-only access. Deferred to Phase 2: requires production environment, security review, and HOD approval to use real client data. Must not become a DMS, filing or payment platform. |
 
 ## Decision-register invariants
 

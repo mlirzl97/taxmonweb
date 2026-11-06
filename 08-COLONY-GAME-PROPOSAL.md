@@ -58,6 +58,7 @@ Spine position: `… → Completion → Independent QA → (Colony projection)`.
 | Final 2 | HOD answer | No co-approval for HOD seed grants for now |
 | Arcade 1 | HOD answer | **Two spendable currencies:** **Ants** for the Team Store (real items) and **Sugar** for the Colony Arcade. Arcade is skill-only; it never pays out Ants or real items |
 | Arcade 2 | HOD answer | Arcade daily limit: **5 plays per player per day** |
+| Approvals | HOD answer | **Second approver for two-person controls: Lourdes** (rule sets, catalog, manual adjustments). She can never approve her own draft or a change that targets her |
 | Final 3 | HOD answer | Shared demerit follows **chain of command**: the most senior person who touched the item takes the full demerit; everyone else who touched it takes a share |
 | Pending | Needs HOD sign-off | Mobile design language (amends "corporate and controlled" in `05` for mobile/game surfaces) |
 
