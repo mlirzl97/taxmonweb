@@ -13,7 +13,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 
 export const metadata: Metadata = {
   title: { default: "Antoine", template: "%s · Antoine" },
-  description: "Antoine — the TaxMon Colony game. Wag kang pahuhuli!",
+  description: "Antoine — the TaxMon Colony game. Don't fall behind!",
   applicationName: "Antoine",
   appleWebApp: { capable: true, title: "Antoine", statusBarStyle: "default" },
   robots: { index: false, follow: false },

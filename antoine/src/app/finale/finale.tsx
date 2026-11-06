@@ -67,7 +67,7 @@ export function Finale() {
             <div style={{ textAlign: "left" }}>
               <span className="eyebrow">Your finish</span>
               <div className="display-l">#{meIndex + 1} of {standings.length}</div>
-              <span className="small">{meIndex < 3 ? "Podium! Ang galing mo." : meIndex === 3 ? "One spot off the podium. Next cycle 'yan!" : `${fmt(standings[meIndex - 1]!.xp - standings[meIndex]!.xp)} XP from #${meIndex}. Laban!`}</span>
+              <span className="small">{meIndex < 3 ? "Podium finish. Great work!" : meIndex === 3 ? "One spot off the podium. Next cycle is yours!" : `${fmt(standings[meIndex - 1]!.xp - standings[meIndex]!.xp)} XP from #${meIndex}. Go get it!`}</span>
             </div>
           </section>
         )}

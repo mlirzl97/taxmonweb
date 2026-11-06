@@ -124,7 +124,7 @@ export function Profile() {
           {sassy && (
             <div style={{ display: "flex", alignItems: "flex-end", gap: 6, padding: "0 14px 14px" }} aria-live="polite">
               <Antoine mood="cheer" size={48} decorative />
-              <p style={{ margin: "0 0 4px", background: "var(--paper)", border: "2px solid var(--ink)", borderRadius: "12px 12px 12px 4px", padding: "8px 10px", fontSize: 13, fontWeight: 600, lineHeight: 1.35 }}>Ay, sassy na tayo? Sige. {me.streak} clean cycles… sayang naman kung masisira, &apos;di ba?</p>
+              <p style={{ margin: "0 0 4px", background: "var(--paper)", border: "2px solid var(--ink)", borderRadius: "12px 12px 12px 4px", padding: "8px 10px", fontSize: 13, fontWeight: 600, lineHeight: 1.35 }}>Oh, feeling sassy? Fine. {me.streak} clean cycles in a row… it would be a shame to break that now, wouldn&apos;t it?</p>
             </div>
           )}
           <SoundSetting />

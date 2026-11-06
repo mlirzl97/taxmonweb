@@ -7,9 +7,9 @@ import { Antoine } from "@/components/Antoine";
 import { useGame } from "@/components/GameProvider";
 
 const slides = [
-  { art: <Antoine mood="wave" size={150} animated />, title: "Ako si Antoine!", body: "Tonyo sa mga kaibigan. This is your colony. Every filing you finish digs the anthill deeper." },
+  { art: <Antoine mood="wave" size={150} animated />, title: "Hi, I'm Antoine!", body: "My friends call me Tonyo. This is your colony. Every filing you finish digs the anthill deeper." },
   { art: <Antoine mood="calm" size={150} />, title: "Tap Now for your next match", body: "Each task is a match. XP only lands when the work is verified: accepted, evidenced, paid." },
-  { art: <Anay mood="smug" size={170} />, title: "Beat Anay by D-1", body: "File one working day early to hit Anay. Clear his health together for All Clear. Wag kang pahuhuli!" },
+  { art: <Anay mood="smug" size={170} />, title: "Beat Anay by D-1", body: "File one working day early to hit Anay. Clear his health together for All Clear. Don't fall behind!" },
 ];
 
 /** First-run welcome. Three cards, skippable, never shown again once finished. */
@@ -28,7 +28,7 @@ export function Coach() {
         <div className="coach__dots" aria-hidden>{slides.map((_, i) => <i key={i} data-on={i === step} />)}</div>
         <div className="btn-row">
           <button className="btn" type="button" onClick={finishOnboarding}>Skip</button>
-          <button className="btn btn--primary" type="button" onClick={() => (last ? finishOnboarding() : setStep(step + 1))}>{last ? "Laban na!" : "Next"}</button>
+          <button className="btn btn--primary" type="button" onClick={() => (last ? finishOnboarding() : setStep(step + 1))}>{last ? "Let's go!" : "Next"}</button>
         </div>
       </div>
     </div>

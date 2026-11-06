@@ -82,11 +82,11 @@ test("reduced motion pauses animations, explains why, and can be turned back on"
 test("first-run welcome shows once and can be finished", async ({ page }) => {
   await page.goto("/");
   const coach = page.getByRole("dialog", { name: "Welcome to Antoine" });
-  await expect(coach).toContainText("Ako si Antoine!");
+  await expect(coach).toContainText("Hi, I'm Antoine!");
   await coach.getByRole("button", { name: "Next" }).click();
   await coach.getByRole("button", { name: "Next" }).click();
   await expect(coach).toContainText("Beat Anay by D-1");
-  await coach.getByRole("button", { name: "Laban na!" }).click();
+  await coach.getByRole("button", { name: "Let's go!" }).click();
   await expect(coach).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("dialog", { name: "Welcome to Antoine" })).toHaveCount(0);
@@ -315,7 +315,7 @@ test("All Clear: when Anay hits zero the colony wins together", async ({ page })
   const cinematic = page.getByRole("dialog", { name: "All Clear" });
   await expect(cinematic).toBeVisible();
   await expect(cinematic).toContainText("+50 XP for everyone");
-  await cinematic.getByRole("button", { name: "Tuloy ang laban" }).click();
+  await cinematic.getByRole("button", { name: "Keep going" }).click();
   await expect(cinematic).toHaveCount(0);
   await page.goto("/");
   await expect(page.locator(".boss")).toContainText("All Clear!");

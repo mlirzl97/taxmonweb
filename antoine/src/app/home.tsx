@@ -43,7 +43,7 @@ export function Home() {
   const rings = ringsFor(state, baselines.rings);
   const upcomingD1 = state.tasks.filter((t) => t.stage !== "complete" && d1(t) >= state.today).map(d1).sort()[0];
   const first = people[ME]!.first;
-  const greeting = "Magandang umaga"; // the sample clock always starts the working day
+  const greeting = "Good morning"; // the sample clock always starts the working day
 
   return (
     <main className="app">

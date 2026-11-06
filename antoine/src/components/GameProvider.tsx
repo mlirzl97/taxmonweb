@@ -204,7 +204,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     <Context.Provider value={value}>
       {children}
       {hydrated && anayFor(state, baselines.anay).hp === 0 && !state.allClearSeen && <AllClear animate={animate} onDone={() => dispatch({ type: "seen_all_clear" })} />}
-      {rankUp && <Link href="/rank-up" className="rankup-banner" onClick={() => setRankUp(null)}>Rank up! {rankUp} ka na <span aria-hidden>→</span></Link>}
+      {rankUp && <Link href="/rank-up" className="rankup-banner" onClick={() => setRankUp(null)}>Rank up! You&apos;re now a {rankUp} <span aria-hidden>→</span></Link>}
       <div className="toasts" aria-live="polite" aria-atomic="false">
         {toasts.map((toast) => (
           <div key={toast.id} className={`toast toast--${toast.tone}`} role="status">
@@ -228,7 +228,7 @@ function AllClear({ animate, onDone }: { animate: boolean; onDone: () => void })
       <div className="allclear__stamp">All Clear!</div>
       <p className="allclear__copy">Anay is down for the Nov cycle. <b>+50 XP for everyone</b> in the colony.</p>
       <div className="allclear__team"><Antoine mood="cheer" size={110} animated={animate} /></div>
-      <button className="btn btn--honey btn--block" type="button" onClick={onDone} style={{ maxWidth: 360, minHeight: 56, fontFamily: "var(--display)", fontSize: 20 }}>Tuloy ang laban</button>
+      <button className="btn btn--honey btn--block" type="button" onClick={onDone} style={{ maxWidth: 360, minHeight: 56, fontFamily: "var(--display)", fontSize: 20 }}>Keep going</button>
     </div>
   );
 }

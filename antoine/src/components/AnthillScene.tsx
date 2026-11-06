@@ -146,7 +146,7 @@ export function AnthillScene({ needCount, chambers, late }: { needCount: number;
       </svg>
 
       <div className="tonyo"><Antoine mood="wave" size={62} decorative animated={motion.animate} /></div>
-      <p className="speech" role="note">{needCount === 0 ? "Wala nang kailangan." : `${needCount} need you today.`}<strong>{needCount === 0 ? "Pahinga muna!" : "Kaya natin 'to!"}</strong></p>
+      <p className="speech" role="note">{needCount === 0 ? "You're all caught up." : `${needCount} ${needCount === 1 ? "task needs" : "tasks need"} you today.`}<strong>{needCount === 0 ? "Take a breather!" : "Let's get it done!"}</strong></p>
 
       <span className="tag" style={{ left: "15%", top: "50%" }}><Check />{chambers.done[0]} · CLEAR</span>
       <span className="tag" style={{ left: "72%", top: "49%" }}><Check />{chambers.done[1]} · CLEAR</span>

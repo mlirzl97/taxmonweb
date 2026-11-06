@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Antoine — TaxMon Colony",
     short_name: "Antoine",
-    description: "Wag kang pahuhuli! The TaxMon Colony game.",
+    description: "Don't fall behind! The TaxMon Colony game.",
     start_url: "/",
     scope: "/",
     display: "standalone",

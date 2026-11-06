@@ -33,14 +33,14 @@ export default function RankUpPage() {
         <div style={{ position: "relative", marginTop: -12 }}><Antoine mood="cheer" size={150} /></div>
         <span aria-hidden className="circle" style={{ position: "absolute", bottom: -6, left: "50%", transform: "translateX(-50%)", width: 54, height: 54, background: "var(--ant-red)", borderWidth: 3, boxShadow: "0 0 0 3px var(--honey)", fontFamily: "var(--display)", fontSize: 28, fontWeight: 900, color: "#fff" }}>5</span>
       </div>
-      <h1 className="display-xl" style={{ position: "relative", marginTop: 30, textAlign: "center" }}>Soldier Ant<br /><span style={{ color: "var(--honey)" }}>ka na!</span></h1>
+      <h1 className="display-xl" style={{ position: "relative", marginTop: 30, textAlign: "center" }}>You&apos;re a<br /><span style={{ color: "var(--honey)" }}>Soldier Ant!</span></h1>
       <p style={{ position: "relative", margin: "14px 32px 0", fontSize: 15, lineHeight: 1.5, textAlign: "center", color: "var(--sand)" }}>8,000 lifetime XP. Every point came from a filing that was accepted, evidenced and on time.</p>
       <div style={{ position: "relative", marginTop: 20, display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
         <span className="chip" style={{ borderColor: "var(--earth)", background: "var(--ink-2)", fontSize: 12 }}>Soldier insignia unlocked</span>
         <span className="chip" style={{ borderColor: "var(--earth)", background: "var(--ink-2)", fontSize: 12 }}>Soldier frame unlocked</span>
       </div>
       <div style={{ position: "relative", width: "calc(100% - 40px)", marginTop: 32, display: "flex", flexDirection: "column", gap: 10 }}>
-        <Link href="/" className="btn btn--honey btn--block" style={{ minHeight: 58, fontFamily: "var(--display)", fontSize: 20 }}>Tuloy ang laban</Link>
+        <Link href="/" className="btn btn--honey btn--block" style={{ minHeight: 58, fontFamily: "var(--display)", fontSize: 20 }}>Keep going</Link>
         <Link href="/colony" className="btn btn--ghost-light btn--block">Share to the Colony feed</Link>
       </div>
       <span className="small" style={{ position: "relative", marginTop: 14, color: "var(--sand)" }}>Preview · sample rank-up</span>
