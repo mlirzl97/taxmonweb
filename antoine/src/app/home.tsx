@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 
 import { Anay } from "@/components/Anay";
 import { AnthillScene } from "@/components/AnthillScene";
+import { CountUp } from "@/components/CountUp";
 import { useGame } from "@/components/GameProvider";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { StatusIcon } from "@/components/StatusIcon";
 import { shortDate } from "@/lib/game/calendar";
 import { d1 } from "@/lib/game/engine";
@@ -22,7 +25,20 @@ function Ring({ r, color, done, total }: { r: number; color: string; done: numbe
 }
 
 export function Home() {
-  const { state, me, anay, myTurn } = useGame();
+  const { state, me, anay, myTurn, motion, hydrated } = useGame();
+  const lastHp = useRef<number | null>(null);
+  const [hit, setHit] = useState(0);
+  useEffect(() => {
+    if (!hydrated) return;
+    // Remember HP across visits so a hit you just landed on the Work screen plays here.
+    let previous = lastHp.current;
+    if (previous === null) {
+      try { previous = Number(sessionStorage.getItem("antoine.lastHp") ?? anay.hp); } catch { previous = anay.hp; }
+    }
+    if (anay.hp < previous) setHit((n) => n + 1);
+    lastHp.current = anay.hp;
+    try { sessionStorage.setItem("antoine.lastHp", String(anay.hp)); } catch { /* private mode */ }
+  }, [anay.hp, hydrated]);
   const rings = ringsFor(state, baselines.rings);
   const upcomingD1 = state.tasks.filter((t) => t.stage !== "complete" && d1(t) >= state.today).map(d1).sort()[0];
   const first = people[ME]!.first;
@@ -36,20 +52,25 @@ export function Home() {
           <h1 className="display-l">{greeting}, {first}</h1>
           <span className="sync">Synced · sample</span>
         </div>
-        <Link href="/me" className="avatar" aria-label={`Your profile: ${people[ME]!.name}, ${me.rank.name}, rank ${me.rank.tier}`}>
-          BS<span className="shield" aria-hidden>{me.rank.tier}</span>
-        </Link>
+        <PlayerAvatar size={52} href="/me" rank={me.rank.tier} label={`Your profile: ${people[ME]!.name}, ${me.rank.name}, rank ${me.rank.tier}`} />
       </header>
 
+      {!motion.animate && motion.pref === "system" && (
+        <div className="motion-hint" role="note">
+          <span>Animations are paused because your phone asks for reduced motion.</span>
+          <button type="button" onClick={() => motion.setPref("on")}>Turn on</button>
+        </div>
+      )}
       <AnthillScene needCount={myTurn.length} chambers={{ done: ["SEP", "OCT"], digging: "NOV", progress: `${rings.filed[0]}/${rings.filed[1]}` }} late={anay.heals} />
 
       <div className="page" style={{ paddingTop: 4 }}>
-        <Link href="/anay" className="boss">
+        <Link href="/anay" className={`boss${hit ? " boss--hit" : ""}`} key={`boss-${hit}`}>
+          {hit > 0 && <span className="hit-float" aria-hidden>−1 HP</span>}
           <Anay mood={anay.hp === 0 ? "defeated" : "smug"} size={78} />
           <div className="boss__body">
             <span className="eyebrow eyebrow--honey">Boss · Anay · Nov cycle</span>
             <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-              <span className="display-m">{anay.hp === 0 ? "All Clear!" : `${anay.hp} HP left`}</span>
+              <span className="display-m">{anay.hp === 0 ? "All Clear!" : <><CountUp value={anay.hp} /> HP left</>}</span>
               <span className="small" style={{ color: "var(--sand)", fontWeight: 700 }}>of {anay.maxHp}</span>
             </span>
             <span className="hp" role="meter" aria-label="Anay health" aria-valuemin={0} aria-valuemax={anay.maxHp} aria-valuenow={anay.hp}>

@@ -34,15 +34,19 @@ export const players: Player[] = [
 export const rankTiers = ["Larva", "Worker Ant", "Forager", "Tunneler", "Soldier Ant", "Scout Captain", "Colony Elder", "Colony Keeper"] as const;
 export const rankFloors = [0, 500, 1500, 4000, 8000, 15000, 30000, 60000] as const;
 
-export type StoreItem = { id: "freeze" | "frame" | "barong" | "title" | "gc" | "perk"; label: string; price: number; kind: "digital" | "real"; tint: string };
+export type StoreItem = { id: string; label: string; price: number; kind: "digital" | "real"; tint: string; blurb?: string };
 
 export const storeItems: StoreItem[] = [
-  { id: "freeze", label: "Streak freeze", price: 300, kind: "digital", tint: "#dff1f7" },
-  { id: "frame", label: "Gold profile frame", price: 800, kind: "digital", tint: "#fbe9c4" },
-  { id: "barong", label: "Antoine homecoming barong", price: 1200, kind: "digital", tint: "#efe3c8" },
-  { id: "title", label: "Title · Deadline Slayer", price: 600, kind: "digital", tint: "#f6d5d2" },
-  { id: "gc", label: "Gift certificate ₱100", price: 10000, kind: "real", tint: "#e3f1e8" },
-  { id: "perk", label: "[Committee perk placeholder]", price: 25000, kind: "real", tint: "#ece6f2" },
+  { id: "freeze", label: "Streak freeze", price: 300, kind: "digital", tint: "#dff1f7", blurb: "Protects your clean streak through one leave week." },
+  { id: "balikbayan", label: "Balikbayan cap", price: 700, kind: "digital", tint: "#e8e2f4", blurb: "Straight from the New York days." },
+  { id: "shades", label: "Shades", price: 500, kind: "digital", tint: "#efe3c8", blurb: "For when the deadline is sunny-side up." },
+  { id: "salakot", label: "Salakot", price: 900, kind: "digital", tint: "#f2e6c9", blurb: "Classic. Shade for long filing seasons." },
+  { id: "barong", label: "Homecoming barong", price: 1200, kind: "digital", tint: "#fbf3dc", blurb: "Antoine's balikbayan best." },
+  { id: "golden", label: "Golden ant", price: 2000, kind: "digital", tint: "#fbe9c4", blurb: "A whole golden body. Rare." },
+  { id: "frame", label: "Gold profile frame", price: 800, kind: "digital", tint: "#fbe9c4", blurb: "A gold ring around your avatar." },
+  { id: "title", label: "Title · Deadline Slayer", price: 600, kind: "digital", tint: "#f6d5d2", blurb: "Shown under your name." },
+  { id: "gc", label: "Gift certificate ₱100", price: 10000, kind: "real", tint: "#e3f1e8", blurb: "Handed over by Lourdes." },
+  { id: "perk", label: "[Committee perk placeholder]", price: 25000, kind: "real", tint: "#ece6f2", blurb: "Waiting for the committee to approve." },
 ];
 
 export const pendingOrder = "Culture & Values mug · 1,000 Ants";

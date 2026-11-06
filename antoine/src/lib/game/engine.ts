@@ -8,6 +8,7 @@
  * can never double-award.
  */
 import { addDays, nextWorkingDay, workingDaysBefore, type IsoDate } from "./calendar";
+import { lookErrors, oneTimeItems, type Look } from "./cosmetics";
 import { BLOCKER_EARLY_DAYS, EXTERNAL_BLOCKERS, XP } from "./rules";
 
 export type PersonId = string;
@@ -62,6 +63,8 @@ export type GameState = {
   tasks: Task[];
   awards: Award[];
   purchases: Purchase[];
+  /** The player's ant. Missing on saves from before the wardrobe existed. */
+  look?: Look;
 };
 
 export type Action =
@@ -74,7 +77,8 @@ export type Action =
   | { type: "raise_blocker"; taskId: string; actor: PersonId; kind: BlockerKind; note: string }
   | { type: "resolve_blocker"; taskId: string; actor: PersonId }
   | { type: "advance_day" }
-  | { type: "buy"; actor: PersonId; itemId: string; price: number; kind: "digital" | "real"; balance: number };
+  | { type: "buy"; actor: PersonId; itemId: string; price: number; kind: "digital" | "real"; balance: number }
+  | { type: "equip"; actor: PersonId; look: Look };
 
 export type Result = { ok: true; state: GameState; awards: Award[] } | { ok: false; error: string };
 
@@ -146,7 +150,13 @@ export function apply(state: GameState, action: Action, seniority: Seniority): R
     const fresh = evaluateMisses(next, seniority);
     return { ok: true, state: { ...next, awards: [...next.awards, ...fresh] }, awards: fresh };
   }
+  if (action.type === "equip") {
+    const problem = lookErrors(action.look, ownedItems(state));
+    if (problem) return refuse(problem);
+    return { ok: true, state: { ...state, look: action.look }, awards: [] };
+  }
   if (action.type === "buy") {
+    if (oneTimeItems.has(action.itemId) && ownedItems(state).has(action.itemId)) return refuse("You already own this. Equip it from Me.");
     if (action.price > action.balance) return refuse("Not enough Ants yet.");
     const purchase: Purchase = { id: `${action.itemId}-${state.purchases.length + 1}`, itemId: action.itemId, price: action.price, kind: action.kind, on: state.today, status: action.kind === "digital" ? "delivered" : "held" };
     return { ok: true, state: { ...state, purchases: [...state.purchases, purchase] }, awards: [] };
@@ -285,6 +295,11 @@ export function evaluateMisses(state: GameState, seniority: Seniority): Award[] 
 }
 
 // ---------- Derived views (never stored) ----------
+
+/** Digital items the player has bought (cosmetics are kept forever). */
+export function ownedItems(state: GameState): Set<string> {
+  return new Set(state.purchases.filter((p) => p.kind === "digital").map((p) => p.itemId));
+}
 
 export function xpFor(state: GameState, person: PersonId) {
   return state.awards.filter((a) => a.person === person).reduce((sum, a) => sum + a.xp, 0);

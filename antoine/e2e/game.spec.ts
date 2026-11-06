@@ -2,6 +2,15 @@ import { expect, test, type Page } from "@playwright/test";
 
 const routes = ["/", "/work", "/colony", "/anay", "/store", "/me", "/rank-up"];
 
+// Returning players: skip the first-run welcome unless a test is about it.
+test.beforeEach(async ({ page }, info) => {
+  if (!info.title.includes("welcome")) await page.addInitScript(() => window.localStorage.setItem("antoine.onboarded", "yes"));
+});
+
+async function walkerPositions(page: Page) {
+  return page.locator(".walker").evaluateAll((els) => els.map((el) => el.getAttribute("transform")));
+}
+
 async function openTask(page: Page, id: string) {
   await page.goto(`/work?task=${id}`);
   await expect(page.getByRole("dialog")).toBeVisible();
@@ -32,18 +41,85 @@ test("installable: manifest and icons are served", async ({ request }) => {
   for (const icon of manifest.icons) expect((await request.get(icon.src)).status()).toBe(200);
   expect((await request.get("/apple-icon.png")).status()).toBe(200);
   expect((await request.get("/icon.svg")).status()).toBe(200);
+  expect((await request.get("/favicon.ico")).status()).toBe(200);
+  expect((await request.get("/icon.png")).status()).toBe(200);
 });
 
-test("the Tower is animated, and holds still for reduced motion", async ({ page, browser }) => {
+test("the Tower is animated: ants really move and Antoine waves", async ({ page }) => {
   await page.goto("/");
-  expect(await page.locator("animateMotion").count()).toBeGreaterThan(4);
-  const wave = await page.locator(".antoine__wave").first().evaluate((el) => getComputedStyle(el).animationName);
-  expect(wave).toBe("wave");
-  const calm = await browser.newPage({ reducedMotion: "reduce", viewport: { width: 390, height: 844 } });
-  await calm.goto("/");
-  expect(await calm.locator("animateMotion").count()).toBe(0);
-  expect(await calm.locator(".antoine__wave").first().evaluate((el) => getComputedStyle(el).animationName)).toBe("none");
-  await calm.close();
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "full");
+  const before = await walkerPositions(page);
+  await page.waitForTimeout(700);
+  const after = await walkerPositions(page);
+  expect(before.length).toBeGreaterThan(4);
+  expect(after.filter((t, i) => t !== before[i]).length).toBeGreaterThan(4);
+  expect(await page.locator(".antoine__wave").first().evaluate((el) => getComputedStyle(el).animationName)).toBe("wave");
+});
+
+test("reduced motion pauses animations, explains why, and can be turned back on", async ({ browser }) => {
+  const context = await browser.newContext({ reducedMotion: "reduce", viewport: { width: 390, height: 844 } });
+  await context.addInitScript(() => window.localStorage.setItem("antoine.onboarded", "yes"));
+  const page = await context.newPage();
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "reduced");
+  const still = await walkerPositions(page);
+  await page.waitForTimeout(500);
+  expect(await walkerPositions(page)).toEqual(still);
+  await expect(page.getByRole("note").filter({ hasText: "Animations are paused" })).toBeVisible();
+  await page.getByRole("button", { name: "Turn on" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "full");
+  const a = await walkerPositions(page);
+  await page.waitForTimeout(600);
+  expect(await walkerPositions(page)).not.toEqual(a);
+  await page.goto("/me");
+  await expect(page.getByRole("button", { name: "On", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Off", exact: true }).click();
+  await page.goto("/");
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "reduced");
+  await context.close();
+});
+
+test("first-run welcome shows once and can be finished", async ({ page }) => {
+  await page.goto("/");
+  const coach = page.getByRole("dialog", { name: "Welcome to Antoine" });
+  await expect(coach).toContainText("Ako si Antoine!");
+  await coach.getByRole("button", { name: "Next" }).click();
+  await coach.getByRole("button", { name: "Next" }).click();
+  await expect(coach).toContainText("Beat Anay by D-1");
+  await coach.getByRole("button", { name: "Laban na!" }).click();
+  await expect(coach).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("dialog", { name: "Welcome to Antoine" })).toHaveCount(0);
+});
+
+test("wardrobe: wear free parts, locked parts point to the store, bought parts can be worn", async ({ page }) => {
+  await page.goto("/me#wardrobe");
+  const wardrobe = page.getByRole("region", { name: "Your ant" });
+  await wardrobe.getByRole("button", { name: "Hat", exact: true }).click();
+  await wardrobe.getByRole("button", { name: "Office cap" }).click();
+  await wardrobe.getByRole("button", { name: "Wear this look" }).click();
+  await expect(wardrobe.getByRole("status")).toContainText("Looking good");
+  await wardrobe.getByRole("button", { name: "Eyes", exact: true }).click();
+  await wardrobe.getByRole("button", { name: /Shades, locked/ }).click();
+  await expect(wardrobe.getByRole("status")).toContainText("in the store for 500 Ants");
+
+  await page.goto("/store");
+  await page.getByRole("button", { name: /Shades/ }).first().click();
+  await page.getByRole("button", { name: "Buy for 500 Ants" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Added to your wardrobe" })).toBeVisible();
+  await page.getByRole("button", { name: "Close" }).first().click();
+  await page.getByRole("button", { name: /Shades/ }).first().click();
+  await expect(page.getByRole("link", { name: "Owned · wear it in your wardrobe" })).toBeVisible();
+
+  await page.goto("/me#wardrobe");
+  await wardrobe.getByRole("button", { name: "Eyes", exact: true }).click();
+  await wardrobe.getByRole("button", { name: "Shades", exact: true }).click();
+  await wardrobe.getByRole("button", { name: "Wear this look" }).click();
+  await expect(wardrobe.getByRole("status")).toContainText("Looking good");
+  await expect(page.getByRole("region", { name: "Inventory" })).toContainText("Shades");
+  await page.reload();
+  await wardrobe.getByRole("button", { name: "Eyes", exact: true }).click();
+  await expect(wardrobe.getByRole("button", { name: "Shades", exact: true })).toHaveAttribute("aria-pressed", "true");
 });
 
 test("the Now button opens the most urgent task", async ({ page }) => {

@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import { Antoine } from "@/components/Antoine";
+import { CountUp } from "@/components/CountUp";
 import { useGame } from "@/components/GameProvider";
+import { defaultLook, oneTimeItems, type Look } from "@/lib/game/cosmetics";
 import { AntCoin, BackIcon } from "@/components/StatusIcon";
 import { ME } from "@/lib/game/world";
 import { pendingOrder, storeItems, storeManager, storeName, type StoreItem } from "@/lib/sample-data";
@@ -13,7 +16,7 @@ const GOAL = 10_000;
 
 /** Sample-only: purchases are saved in this browser with the rest of the sample game. */
 export function Store() {
-  const { state, me, dispatch } = useGame();
+  const { state, me, dispatch, owned, look } = useGame();
   const [filter, setFilter] = useState<"all" | "digital" | "real">("all");
   const [selected, setSelected] = useState<StoreItem | null>(null);
   const [bought, setBought] = useState(false);
@@ -37,13 +40,13 @@ export function Store() {
       <div className="page">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Link href="/colony" className="back"><BackIcon />Colony</Link>
-          <span className="small muted" style={{ fontWeight: 700 }}>History · coming soon</span>
+          <Link href="/me#wardrobe" style={{ fontSize: 13, fontWeight: 800 }}>Wardrobe →</Link>
         </div>
 
         <section className="wallet" aria-label="Your Ant wallet">
           <CoinStack />
           <span className="eyebrow" style={{ position: "relative", color: "var(--ink)" }}>Ants available</span>
-          <div style={{ position: "relative", fontFamily: "var(--display)", fontSize: 52, fontWeight: 900, lineHeight: 1, marginTop: 4 }}>{fmt(balance)}</div>
+          <div style={{ position: "relative", fontFamily: "var(--display)", fontSize: 52, fontWeight: 900, lineHeight: 1, marginTop: 4 }}><CountUp value={balance} /></div>
           <div style={{ position: "relative", fontSize: 13, fontWeight: 700, marginTop: 6 }}>{fmt(held)} on hold · {pendingCount} pending {pendingCount === 1 ? "order" : "orders"}</div>
           <div style={{ position: "relative", marginTop: 14, display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 700 }}><span>Next real reward · Gift certificate ₱100</span><span>{balance >= GOAL ? "Ready!" : `${fmt(GOAL - balance)} to go`}</span></div>
@@ -75,7 +78,8 @@ export function Store() {
             {items.map((item) => (
               <button key={item.id} className="item" type="button" onClick={() => { setSelected(item); setBought(false); setError(null); }}>
                 <span className="item__art" style={{ background: item.tint }}>
-                  <ItemArt id={item.id} />
+                  <ItemArt id={item.id} look={look} />
+                  {oneTimeItems.has(item.id) && owned.has(item.id) && <span className="item__kind" style={{ left: "auto", right: 7, background: "var(--leaf)", color: "#fff" }}>Owned</span>}
                   <span className="item__kind" style={{ background: item.kind === "digital" ? "var(--card)" : "var(--ink)", color: item.kind === "digital" ? "var(--ink)" : "var(--honey)" }}>{item.kind === "digital" ? "Instant" : "Real item"}</span>
                 </span>
                 <span className="item__body">
@@ -105,11 +109,14 @@ export function Store() {
               <div><dt>Available now</dt><dd>{fmt(balance + (bought ? selected.price : 0))}</dd></div>
               <div><dt>After buying</dt><dd style={{ color: short > 0 && !bought ? "var(--danger)" : undefined }}>{bought ? fmt(balance) : short > 0 ? `${fmt(short)} short` : fmt(balance - selected.price)}</dd></div>
             </dl>
+            {selected.blurb && <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{selected.blurb}</p>}
             <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45 }}>{selected.kind === "digital" ? "It lands in your inventory straight away. Ants go back to the colony treasury." : `Your Ants move to the store and stay on hold until ${storeManager} hands you the item. You can cancel any time before then for a full refund.`}</p>
             {error && <div className="form-error" role="alert">{error}</div>}
             {bought
-              ? <div className="notice" role="status">✓ {selected.kind === "digital" ? "Added to your inventory. Equip it from Me." : `Order placed. ${storeManager} will hand it over; your Ants are on hold until then.`}</div>
-              : <button className="btn btn--primary btn--block" type="button" disabled={short > 0} onClick={() => { const result = dispatch({ type: "buy", actor: ME, itemId: selected.id, price: selected.price, kind: selected.kind, balance }); if (result.ok) setBought(true); else setError(result.error); }}>{short > 0 ? "Not enough Ants yet" : `Buy for ${fmt(selected.price)} Ants`}</button>}
+              ? <div className="notice" role="status">✓ {selected.kind === "digital" ? (oneTimeItems.has(selected.id) ? "Added to your wardrobe. Wear it from Me." : "Added to your inventory.") : `Order placed. ${storeManager} will hand it over; your Ants are on hold until then.`}</div>
+              : oneTimeItems.has(selected.id) && owned.has(selected.id)
+                ? <Link href="/me#wardrobe" className="btn btn--honey btn--block">Owned · wear it in your wardrobe</Link>
+                : <button className="btn btn--primary btn--block" type="button" disabled={short > 0} onClick={() => { const result = dispatch({ type: "buy", actor: ME, itemId: selected.id, price: selected.price, kind: selected.kind, balance }); if (result.ok) setBought(true); else setError(result.error); }}>{short > 0 ? "Not enough Ants yet" : `Buy for ${fmt(selected.price)} Ants`}</button>}
           </section>
         </div>
       )}
@@ -131,15 +138,22 @@ function CoinStack() {
   );
 }
 
-function ItemArt({ id }: { id: StoreItem["id"] }) {
+const wearing: Record<string, Partial<Look>> = {
+  balikbayan: { hat: "balikbayan" },
+  shades: { eyes: "shades" },
+  salakot: { hat: "salakot" },
+  barong: { outfit: "barong" },
+  golden: { body: "gold" },
+};
+
+function ItemArt({ id, look }: { id: string; look: Look }) {
   const common = { fill: "none", stroke: "#1d1d1b", strokeWidth: 2.2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
+  if (wearing[id]) return <span style={{ marginBottom: -6 }}><Antoine mood="proud" size={66} decorative look={{ ...defaultLook, ...look, frame: "none", ...wearing[id] }} /></span>;
   switch (id) {
     case "freeze":
       return <svg width={58} height={58} viewBox="0 0 58 58" {...common}><path d="M12 18 L29 9 L46 18 L46 40 L29 49 L12 40 Z" fill="#dff1f7" /><path d="M12 18 L29 27 L46 18 M29 27 L29 49" /><path d="M29 31 V45 M23 34 L35 42 M35 34 L23 42" stroke="#2f638d" /></svg>;
     case "frame":
       return <svg width={60} height={60} viewBox="0 0 60 60" {...common}><rect x={8} y={8} width={44} height={44} rx={3} fill="#f0b429" /><rect x={16} y={16} width={28} height={28} rx={2} fill="#fffaf0" /><circle cx={30} cy={27} r={5} fill="#1d1d1b" /><path d="M21 42 C22 35 38 35 39 42" fill="#1d1d1b" /><path d="M8 8 L16 16 M52 8 L44 16 M8 52 L16 44 M52 52 L44 44" /></svg>;
-    case "barong":
-      return <svg width={62} height={60} viewBox="0 0 62 60" {...common}><path d="M22 8 L31 13 L40 8 L54 16 L48 28 L44 26 L44 54 L18 54 L18 26 L14 28 L8 16 Z" fill="#fbf3dc" /><path d="M22 8 L31 20 L40 8" /><path d="M31 20 V54" strokeDasharray="1 4" /><path d="M24 30 C27 34 27 38 24 42 M38 30 C35 34 35 38 38 42" stroke="#8a5a00" strokeWidth={1.6} /></svg>;
     case "title":
       return <svg width={70} height={50} viewBox="0 0 70 50" {...common}><path d="M4 16 L14 16 L14 34 L4 34 L9 25 Z" fill="#b8191e" /><path d="M66 16 L56 16 L56 34 L66 34 L61 25 Z" fill="#b8191e" /><rect x={12} y={11} width={46} height={22} fill="#e31e24" /><path d="M20 22 H50" stroke="#fffaf0" strokeWidth={3} /></svg>;
     case "gc":

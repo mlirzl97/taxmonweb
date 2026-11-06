@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { useGame } from "@/components/GameProvider";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
 import { xpByClass } from "@/lib/game/engine";
 import { players, rankFloors, rankTiers, type Player } from "@/lib/sample-data";
 
@@ -88,8 +89,8 @@ export function Leaderboard() {
             const style = podiumStyle[place]!;
             return (
               <div className="podium__slot" key={entry.player.name} style={{ order: style.order }}>
-                <div className="podium__avatar" style={{ width: style.avatar, height: style.avatar, background: avatarTints[entry.index % 4] }}>
-                  {entry.player.initials}
+                <div className="podium__avatar" style={{ width: style.avatar, height: style.avatar, background: avatarTints[entry.index % 4], overflow: entry.player.me ? "visible" : undefined }}>
+                  {entry.player.me ? <PlayerAvatar size={style.avatar - 4} label="You" /> : entry.player.initials}
                   {place === 0 && <svg width={26} height={26} viewBox="0 0 24 24" aria-hidden style={{ position: "absolute", top: -14, left: "50%", marginLeft: -13 }}><path d="M12 2l2.6 6.2 6.7.6-5.1 4.4 1.6 6.6L12 16.3 6.2 19.8l1.6-6.6L2.7 8.8l6.7-.6z" fill="#f0b429" stroke="#1d1d1b" strokeWidth={1.6} strokeLinejoin="round" /></svg>}
                   {entry.player.me && <span className="you-tag" style={{ position: "absolute", bottom: -6, left: "50%", transform: "translateX(-50%)" }}>YOU</span>}
                 </div>
@@ -111,7 +112,7 @@ export function Leaderboard() {
                 <li key={entry.player.name} className={entry.player.me ? "me" : undefined}>
                   <span className="board__pos">{i + 4}</span>
                   <span className="board__move" style={{ color: move > 0 ? "var(--leaf)" : move < 0 ? "var(--danger)" : "var(--earth)" }} aria-label={move > 0 ? `up ${move}` : move < 0 ? `down ${-move}` : "no change"}>{move > 0 ? `▲${move}` : move < 0 ? `▼${-move}` : "–"}</span>
-                  <span className="circle" style={{ width: 36, height: 36, fontSize: 12, background: avatarTints[entry.index % 4] }}>{entry.player.initials}</span>
+                  {entry.player.me ? <PlayerAvatar size={36} label="You" /> : <span className="circle" style={{ width: 36, height: 36, fontSize: 12, background: avatarTints[entry.index % 4] }}>{entry.player.initials}</span>}
                   <span className="board__who">
                     <span className="board__name">{entry.player.name}{entry.player.me && <span className="you-tag">YOU</span>}</span>
                     <span className="small muted" style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -133,7 +134,7 @@ export function Leaderboard() {
       {showPin && (
         <div className="pin">
           <span style={{ fontFamily: "var(--display)", fontSize: 17, fontWeight: 800, minWidth: 30, textAlign: "center" }}>{myIndex === -1 ? "–" : `#${myIndex + 1}`}</span>
-          <span className="circle" style={{ width: 34, height: 34, fontSize: 12, background: "var(--honey)", color: "var(--ink)", borderColor: "var(--paper)" }}>BS</span>
+          <PlayerAvatar size={34} label="You" />
           <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 1 }}>
             <span style={{ fontSize: 14, fontWeight: 800 }}>You · Bea Santos</span>
             <span className="small" style={{ color: "var(--sand)" }}>{myIndex === -1 ? "Not on this board yet. Act in this role to join." : `${fmt(ranked[myIndex - 1]!.xp - ranked[myIndex]!.xp)} XP to pass ${ranked[myIndex - 1]!.player.name.split(" ")[0]}`}</span>

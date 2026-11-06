@@ -33,7 +33,7 @@ export function TabBar() {
       <Tab tab={tabs[0]} path={path} />
       <Tab tab={tabs[1]} path={path} />
       <div className="tabbar__now-wrap">
-        <Link href="/work?next=1" className="tabbar__now" aria-label={`Now: ${nowCount} need you`}>
+        <Link href="/work?next=1" className={`tabbar__now${nowCount > 0 ? " tabbar__now--busy" : ""}`} aria-label={`Now: ${nowCount} need you`}>
           <AntoineHead />
           <b>Now</b>
         </Link>

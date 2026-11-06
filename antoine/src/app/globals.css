@@ -192,10 +192,8 @@ button { font: inherit; color: inherit; }
 .spin { animation: spin 60s linear infinite; }
 .pop { animation: pop .7s cubic-bezier(.32,.72,0,1) both; }
 .live-dot { width: 9px; height: 9px; border-radius: 999px; background: var(--ant-red); display: inline-block; animation: livepulse 1.6s ease-out infinite; }
-@media (prefers-reduced-motion: reduce) {
-  .bob, .spin, .pop, .live-dot { animation: none !important; }
-  .btn { transition: none; }
-}
+html[data-motion="reduced"] .bob, html[data-motion="reduced"] .spin, html[data-motion="reduced"] .pop, html[data-motion="reduced"] .live-dot { animation: none !important; }
+html[data-motion="reduced"] .btn { transition: none; }
 
 /* ---------- Living Tower (all motion is decorative; state is always in text) ---------- */
 @keyframes wave { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(-16deg); } 75% { transform: rotate(10deg); } }
@@ -257,7 +255,57 @@ button { font: inherit; color: inherit; }
 .sample-act { border: 2px dashed var(--dusk); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .sample-act .eyebrow { color: var(--dusk); }
 
-@media (prefers-reduced-motion: reduce) {
-  .antoine--alive .antoine__wave, .antoine--alive .antoine__eyes, .anthill .grass, .anthill .sun__halo, .anthill .dig, .anthill .digger, .anthill .termite, .anthill .termite__jaws,
-  .speech, .hp > span, .progress > span, .ring-arc, .toast, .rankup-banner { animation: none !important; transition: none !important; }
-}
+html[data-motion="reduced"] *, html[data-motion="reduced"] *::before, html[data-motion="reduced"] *::after { animation: none !important; transition: none !important; }
+
+
+/* ---------- Juice: entrances, presses, wins ---------- */
+@keyframes enter { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes pulseRing { 0% { box-shadow: 0 0 0 2px var(--ink), 3px 4px 0 2px var(--ink), 0 0 0 0 rgba(227,30,36,.55); } 70% { box-shadow: 0 0 0 2px var(--ink), 3px 4px 0 2px var(--ink), 0 0 0 16px rgba(227,30,36,0); } 100% { box-shadow: 0 0 0 2px var(--ink), 3px 4px 0 2px var(--ink), 0 0 0 0 rgba(227,30,36,0); } }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-7px) rotate(-1deg); } 40% { transform: translateX(6px) rotate(1deg); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+@keyframes floatUp { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(-36px) scale(1.3); } }
+@keyframes burst { from { opacity: 1; transform: translate(0, 0) rotate(0deg); } to { opacity: 0; transform: translate(calc(cos(var(--a)) * 90px), calc(sin(var(--a)) * 70px + 40px)) rotate(540deg); } }
+@keyframes popIn { from { transform: scale(.7); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.page > *, .home-head, .anthill { animation: enter .45s cubic-bezier(.32,.72,0,1) both; }
+.page > *:nth-child(2) { animation-delay: .05s; } .page > *:nth-child(3) { animation-delay: .1s; } .page > *:nth-child(4) { animation-delay: .15s; } .page > *:nth-child(5) { animation-delay: .2s; } .page > *:nth-child(n+6) { animation-delay: .25s; }
+.card.row-link, .task-row, .item, .boss, .pill, .seg button, .wardrobe__option { transition: transform 90ms ease-out, box-shadow 90ms ease-out; }
+.card.row-link:active, .task-row:active, .item:active, .boss:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+.pill:active, .seg button:active, .wardrobe__option:active { transform: scale(.95); }
+.tabbar__now--busy { animation: pulseRing 2.2s ease-out infinite; }
+.tabbar a { transition: color .2s ease; }
+.boss--hit { animation: shake .5s ease both; }
+.boss { position: relative; }
+.hit-float { position: absolute; right: 22px; top: 44px; font-family: var(--display); font-weight: 900; font-size: 26px; color: var(--honey); animation: floatUp 1.1s ease-out both; pointer-events: none; }
+.toast { position: relative; overflow: visible; }
+.confetti { position: absolute; left: 34px; top: 50%; width: 0; height: 0; pointer-events: none; }
+.confetti i { position: absolute; width: 8px; height: 12px; border: 1.5px solid var(--ink); border-radius: 2px; --a: calc(var(--i) * 25.7deg); animation: burst 1s cubic-bezier(.2,.7,.3,1) both; }
+.confetti i:nth-child(3n) { background: var(--ant-red); } .confetti i:nth-child(3n+1) { background: var(--paper); } .confetti i:nth-child(3n+2) { background: var(--leaf); }
+.count { display: inline-block; }
+
+/* ---------- Avatar & wardrobe ---------- */
+.player-avatar { position: relative; flex: none; border-radius: 999px; background: var(--card); border: 2px solid var(--ink); display: grid; place-items: end center; overflow: hidden; text-decoration: none; }
+.player-avatar--gold { border-color: var(--honey); box-shadow: 0 0 0 2px var(--ink), 0 0 0 5px var(--honey); }
+.player-avatar__badge { position: absolute; right: -6px; bottom: -6px; width: 22px; height: 24px; background: var(--soil); color: var(--honey); font-size: 11px; }
+.avatar-wrap { position: relative; flex: none; text-decoration: none; }
+.wardrobe { display: flex; flex-direction: column; gap: 12px; }
+.wardrobe__stage { display: flex; align-items: flex-end; justify-content: center; height: 210px; border: 2px solid var(--ink); border-radius: 10px; background: radial-gradient(circle at 50% 85%, #efe3c8 0 30%, transparent 31%), var(--card); box-shadow: var(--shadow); position: relative; overflow: hidden; }
+.wardrobe__stage .ground { position: absolute; left: 0; right: 0; bottom: 0; height: 34px; background: #dcbd84; border-top: 2px solid var(--ink); }
+.wardrobe__stage svg { position: relative; animation: popIn .35s cubic-bezier(.32,.72,0,1) both; }
+.wardrobe__options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.wardrobe__option { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 6px; min-height: 44px; border: 2px solid var(--ink); border-radius: 8px; background: var(--card); cursor: pointer; font-size: 12px; font-weight: 700; text-align: center; }
+.wardrobe__option[aria-pressed="true"] { background: var(--honey); box-shadow: var(--shadow-sm); }
+.wardrobe__option[data-locked="true"] { background: var(--paper); border-style: dashed; color: var(--earth); }
+.wardrobe__swatch { width: 26px; height: 26px; border-radius: 999px; border: 2px solid var(--ink); }
+.wardrobe__lock { position: absolute; top: 6px; right: 6px; }
+.inventory-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--rule); font-size: 14px; }
+.inventory-item:first-child { border-top: 0; }
+.motion-hint { display: flex; align-items: center; gap: 10px; justify-content: space-between; margin: 6px 16px 0; padding: 8px 10px; border: 2px dashed var(--dusk); border-radius: 8px; font-size: 12px; font-weight: 600; color: var(--dusk); background: var(--card); }
+.motion-hint button { flex: none; min-height: 32px; border: 2px solid var(--ink); border-radius: 999px; background: var(--honey); font-weight: 800; font-size: 12px; padding: 0 12px; cursor: pointer; }
+
+/* ---------- Onboarding ---------- */
+.coach { position: fixed; inset: 0; z-index: 70; background: rgba(29,29,27,.6); display: flex; align-items: flex-end; justify-content: center; }
+.coach__card { width: 100%; max-width: 480px; background: var(--paper); border-top: 4px solid var(--ink); border-radius: 22px 22px 0 0; padding: 22px 20px calc(26px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 14px; animation: toastIn .4s cubic-bezier(.32,.72,0,1) both; }
+.coach__art { display: flex; justify-content: center; align-items: flex-end; height: 170px; border: 2px solid var(--ink); border-radius: 12px; background: var(--honey); box-shadow: var(--shadow); overflow: hidden; }
+.coach__dots { display: flex; gap: 6px; justify-content: center; }
+.coach__dots i { width: 8px; height: 8px; border-radius: 999px; background: var(--rule); }
+.coach__dots i[data-on="true"] { width: 22px; background: var(--ant-red); }

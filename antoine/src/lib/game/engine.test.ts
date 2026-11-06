@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { workingDaysBefore } from "./calendar";
+import { defaultLook } from "./cosmetics";
 import { anayFor, antsFor, apply, availableActions, d1, needsMe, positiveXpFor, xpFor, type GameState, type Result } from "./engine";
 import { rankFor } from "./rules";
 import { baselines, initialState, ME, seniority } from "./world";
@@ -174,5 +175,29 @@ describe("economy and ranks", () => {
   it("lists only work where it is my turn", () => {
     const mine = needsMe(initialState(), ME).map((t) => t.id).sort();
     expect(mine).toEqual(["alon", "kalye", "mabini", "sampaguita", "tala"]);
+  });
+});
+
+describe("wardrobe", () => {
+  it("cosmetics are bought once; consumables can be bought again", () => {
+    let s = ok(apply(initialState(), { type: "buy", actor: ME, itemId: "shades", price: 500, kind: "digital", balance: 5000 }, seniority));
+    expect(apply(s, { type: "buy", actor: ME, itemId: "shades", price: 500, kind: "digital", balance: 5000 }, seniority).ok).toBe(false);
+    s = ok(apply(s, { type: "buy", actor: ME, itemId: "freeze", price: 300, kind: "digital", balance: 5000 }, seniority));
+    s = ok(apply(s, { type: "buy", actor: ME, itemId: "freeze", price: 300, kind: "digital", balance: 5000 }, seniority));
+    expect(s.purchases.filter((p) => p.itemId === "freeze")).toHaveLength(2);
+  });
+
+  it("free parts can be worn; locked parts can't until bought", () => {
+    const s = initialState();
+    expect(apply(s, { type: "equip", actor: ME, look: { ...defaultLook, hat: "cap", eyes: "glasses", body: "ink" } }, seniority).ok).toBe(true);
+    const locked = apply(s, { type: "equip", actor: ME, look: { ...defaultLook, eyes: "shades" } }, seniority);
+    expect(locked.ok).toBe(false);
+    if (!locked.ok) expect(locked.error).toMatch(/locked/);
+    const owned = ok(apply(s, { type: "buy", actor: ME, itemId: "shades", price: 500, kind: "digital", balance: 5000 }, seniority));
+    expect(ok(apply(owned, { type: "equip", actor: ME, look: { ...defaultLook, eyes: "shades" } }, seniority)).look?.eyes).toBe("shades");
+  });
+
+  it("refuses parts that don't exist", () => {
+    expect(apply(initialState(), { type: "equip", actor: ME, look: { ...defaultLook, hat: "crown" } }, seniority).ok).toBe(false);
   });
 });

@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef } from "react";
 
 import { Antoine } from "@/components/Antoine";
+import { useGame } from "@/components/GameProvider";
 
 const INK = "#1d1d1b";
 const TUNNELS = {
@@ -13,32 +14,66 @@ const TUNNELS = {
   surface: "M404 123 C340 123 290 123 262 116 C240 108 222 92 202 79",
 };
 
-function subscribeMotion(callback: () => void) {
-  const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-  query.addEventListener("change", callback);
-  return () => query.removeEventListener("change", callback);
-}
+type WalkerSpec = { path: keyof typeof TUNNELS; dur: number; offset: number; carry?: boolean; still: string };
 
-/** True when the viewer asked for less motion; false during server render. */
-export function useReducedMotion() {
-  return useSyncExternalStore(subscribeMotion, () => window.matchMedia("(prefers-reduced-motion: reduce)").matches, () => false);
-}
+const WALKERS: WalkerSpec[] = [
+  { path: "surface", dur: 11, offset: 0, carry: true, still: "translate(338 122) scale(-1 1)" },
+  { path: "surface", dur: 11, offset: 0.45, carry: true, still: "translate(362 122) scale(-1 1)" },
+  { path: "left", dur: 7, offset: 0, carry: true, still: "translate(152 184) rotate(160)" },
+  { path: "left", dur: 7, offset: 0.5, still: "translate(195 104) rotate(90)" },
+  { path: "right", dur: 8, offset: 0.15, carry: true, still: "translate(246 179) rotate(14)" },
+  { path: "down", dur: 6, offset: 0.1, carry: true, still: "translate(195 212) rotate(90)" },
+  { path: "down", dur: 6, offset: 0.6, still: "translate(195 132) rotate(-90)" },
+];
 
-/** A worker ant walking a tunnel and back; static when motion is reduced. */
-function Walker({ path, dur, begin, carry = false, there = true, still }: { path: keyof typeof TUNNELS; dur: number; begin: number; carry?: boolean; there?: boolean; still: string }) {
-  const reduced = useReducedMotion();
-  if (reduced) return <use href={carry ? "#antc" : "#ant"} transform={still} />;
+/**
+ * Worker ants walking the tunnels there and back. Driven by requestAnimationFrame
+ * along the real tunnel paths so it behaves the same in every browser.
+ */
+function Walkers({ animate }: { animate: boolean }) {
+  const pathRefs = useRef<Record<string, SVGPathElement | null>>({});
+  const antRefs = useRef<Array<SVGUseElement | null>>([]);
+
+  useEffect(() => {
+    if (!animate) return;
+    let frame = 0;
+    const lengths: Record<string, number> = {};
+    for (const [key, el] of Object.entries(pathRefs.current)) if (el) lengths[key] = el.getTotalLength();
+    const tick = (now: number) => {
+      WALKERS.forEach((w, i) => {
+        const el = pathRefs.current[w.path];
+        const ant = antRefs.current[i];
+        if (!el || !ant) return;
+        const t = ((now / 1000 / w.dur) + w.offset) % 1;
+        const back = t >= 0.5;
+        const u = t < 0.45 ? t / 0.45 : t < 0.5 ? 1 : t < 0.95 ? 1 - (t - 0.5) / 0.45 : 0;
+        const len = lengths[w.path] ?? 0;
+        const at = el.getPointAtLength(u * len);
+        const ahead = el.getPointAtLength(Math.min(len, u * len + 1));
+        const behind = el.getPointAtLength(Math.max(0, u * len - 1));
+        let angle = (Math.atan2(ahead.y - behind.y, ahead.x - behind.x) * 180) / Math.PI;
+        if (back) angle += 180;
+        ant.setAttribute("transform", `translate(${at.x.toFixed(1)} ${at.y.toFixed(1)}) rotate(${angle.toFixed(1)})`);
+      });
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [animate]);
+
   return (
-    <use href={carry ? "#antc" : "#ant"}>
-      <animateMotion dur={`${dur}s`} begin={`${-begin}s`} repeatCount="indefinite" rotate="auto" keyPoints={there ? "0;1;1;0;0" : "1;0;0;1;1"} keyTimes="0;0.45;0.5;0.95;1" calcMode="linear">
-        <mpath href={`#tunnel-${path}`} />
-      </animateMotion>
-    </use>
+    <g data-walkers={animate ? "moving" : "still"}>
+      {Object.entries(TUNNELS).map(([key, d]) => <path key={key} ref={(el) => { pathRefs.current[key] = el; }} d={d} stroke="none" fill="none" />)}
+      {WALKERS.map((w, i) => (
+        <use key={i} ref={(el) => { antRefs.current[i] = el; }} href={w.carry ? "#antc" : "#ant"} transform={w.still} className="walker" />
+      ))}
+    </g>
   );
 }
 
 /** Every label links to a real record class; the picture only ever reflects tracked facts. */
 export function AnthillScene({ needCount, chambers, late }: { needCount: number; chambers: { done: string[]; digging: string; progress: string }; late: number }) {
+  const { motion } = useGame();
   return (
     <section className="anthill" aria-label="Your colony this cycle">
       <svg className="scene" viewBox="0 0 390 330" fill="none" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label={`Anthill: ${chambers.done.join(" and ")} chambers cleared, ${chambers.digging} being dug, Anay tunnelling in from the right`}>
@@ -54,7 +89,6 @@ export function AnthillScene({ needCount, chambers, late }: { needCount: number;
             <use href="#ant" />
             <rect x={6} y={-9.5} width={7} height={5.5} rx={1} fill="#fffaf0" stroke={INK} strokeWidth={1.1} />
           </g>
-          {Object.entries(TUNNELS).map(([key, d]) => <path key={key} id={`tunnel-${key}`} d={d} />)}
         </defs>
 
         <g className="sun">
@@ -94,13 +128,7 @@ export function AnthillScene({ needCount, chambers, late }: { needCount: number;
         </g>
 
         {/* the colony at work */}
-        <Walker path="surface" dur={11} begin={0} carry still="translate(338 122) scale(-1 1)" />
-        <Walker path="surface" dur={11} begin={4.2} carry still="translate(362 122) scale(-1 1)" />
-        <Walker path="left" dur={7} begin={0} carry still="translate(152 184) rotate(160)" />
-        <Walker path="left" dur={7} begin={3.5} still="translate(195 104) rotate(90)" />
-        <Walker path="right" dur={8} begin={1.2} carry still="translate(246 179) rotate(14)" />
-        <Walker path="down" dur={6} begin={0.6} carry still="translate(195 212) rotate(90)" />
-        <Walker path="down" dur={6} begin={3.6} still="translate(195 132) rotate(-90)" />
+        <Walkers animate={motion.animate} />
         <use href="#antc" transform="translate(172 279) rotate(190)" className="digger" />
         <use href="#ant" transform="translate(178 268) rotate(-30)" className="digger digger--b" />
 
@@ -117,11 +145,11 @@ export function AnthillScene({ needCount, chambers, late }: { needCount: number;
         <path d="M0 330 L0 322 Q12 314 24 322 T48 322 T72 322 T96 322 T120 322 T144 322 T168 322 T192 322 T216 322 T240 322 T264 322 T288 322 T312 322 T336 322 T360 322 T384 322 T408 322 L390 330 Z" fill="#f6efe0" />
       </svg>
 
-      <div className="tonyo"><Antoine mood="wave" size={62} decorative animated /></div>
+      <div className="tonyo"><Antoine mood="wave" size={62} decorative animated={motion.animate} /></div>
       <p className="speech" role="note">{needCount === 0 ? "Wala nang kailangan." : `${needCount} need you today.`}<strong>{needCount === 0 ? "Pahinga muna!" : "Kaya natin 'to!"}</strong></p>
 
-      <Link className="tag" href="/me" style={{ left: "15%", top: "50%" }}><Check />{chambers.done[0]} · CLEAR</Link>
-      <Link className="tag" href="/me" style={{ left: "72%", top: "49%" }}><Check />{chambers.done[1]} · CLEAR</Link>
+      <span className="tag" style={{ left: "15%", top: "50%" }}><Check />{chambers.done[0]} · CLEAR</span>
+      <span className="tag" style={{ left: "72%", top: "49%" }}><Check />{chambers.done[1]} · CLEAR</span>
       <Link className="tag tag--now" href="/work" style={{ left: "28%", top: "72.5%" }}>{chambers.digging} · DIGGING {chambers.progress}</Link>
       <Link className="tag tag--anay" href="/anay" style={{ left: "70%", top: "82%" }}>ANAY · {late} LATE</Link>
     </section>

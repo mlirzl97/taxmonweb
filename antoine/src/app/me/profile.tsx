@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { Antoine } from "@/components/Antoine";
+import { CountUp } from "@/components/CountUp";
 import { useGame } from "@/components/GameProvider";
+import { PlayerAvatar } from "@/components/PlayerAvatar";
+
+import { Inventory, MotionSetting, Wardrobe } from "./wardrobe";
 import { shortDate } from "@/lib/game/calendar";
 import { baselines, ME, people } from "@/lib/game/world";
 
@@ -38,15 +42,11 @@ export function Profile() {
     <main className="app">
       <header style={{ background: "var(--ink)", color: "var(--paper)", padding: "22px 18px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <div style={{ flex: "none", width: 84, height: 84, borderRadius: 999, background: "var(--honey)", padding: 4, boxShadow: "0 0 0 3px var(--ink), 0 0 0 6px var(--honey)" }}>
-            <div style={{ width: "100%", height: "100%", borderRadius: 999, background: "var(--card)", display: "flex", alignItems: "flex-end", justifyContent: "center", overflow: "hidden" }}>
-              <Antoine mood="proud" size={64} decorative />
-            </div>
-          </div>
+          <PlayerAvatar size={84} mood="proud" href="#wardrobe" label="Your ant. Change your look" />
           <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
             <h1 className="display-l">{me.name}</h1>
             <span style={{ fontSize: 13, color: "var(--sand)" }}>{me.classes} <span style={{ opacity: 0.7 }}>· sample persona</span></span>
-            <span className="chip chip--honey" style={{ alignSelf: "flex-start", border: 0 }}>Title · {me.title}</span>
+            <span className="chip chip--honey" style={{ alignSelf: "flex-start", border: 0 }}>Title · {game.owned.has("title") ? "Deadline Slayer" : me.title}</span>
           </div>
         </div>
         <div style={{ display: "flex", gap: 14, alignItems: "center", background: "var(--ink-2)", borderRadius: 8, padding: "12px 14px" }}>
@@ -67,10 +67,14 @@ export function Profile() {
       <div className="page">
         <div className="grid-2" style={{ gap: 10 }}>
           <Tile label="XP this cycle" value={`${game.me.xpThisCycle >= 0 ? "+" : ""}${game.me.xpThisCycle}`} valueColor={game.me.xpThisCycle < 0 ? "var(--danger)" : undefined} note={`${me.streak}-cycle clean streak · ${freezesOwned} freeze${freezesOwned === 1 ? "" : "s"}`} noteColor="var(--sky)" />
-          <Tile href="/store" label="Ants" value={game.me.ants.available.toLocaleString("en-US")} note="Open store →" bg="var(--honey)" />
+          <Tile href="/store" label="Ants" value={<CountUp value={game.me.ants.available} />} note="Open store →" bg="var(--honey)" />
           <Tile label="Clean rate" value={`${me.cleanRate}%`} valueColor="var(--leaf)" note="on time · evidenced · QA ok" />
           <Tile href="/anay" label="Anay hits" value={String(myHits)} valueColor="var(--honey)" note="See the raid →" bg="var(--soil)" dark />
         </div>
+
+        <Wardrobe />
+
+        <Inventory />
 
         <section className="card card--pad" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div className="section-head"><h2 className="display-m" style={{ fontSize: 19 }}>Work days</h2><span className="small muted">Only you see this</span></div>
@@ -123,6 +127,7 @@ export function Profile() {
               <p style={{ margin: "0 0 4px", background: "var(--paper)", border: "2px solid var(--ink)", borderRadius: "12px 12px 12px 4px", padding: "8px 10px", fontSize: 13, fontWeight: 600, lineHeight: 1.35 }}>Ay, sassy na tayo? Sige. {me.streak} clean cycles… sayang naman kung masisira, &apos;di ba?</p>
             </div>
           )}
+          <MotionSetting />
         </section>
 
         <section className="sample-act" aria-label="Sample controls">
@@ -140,7 +145,7 @@ export function Profile() {
   );
 }
 
-function Tile({ label, value, note, href, bg, dark, valueColor, noteColor }: { label: string; value: string; note: string; href?: string; bg?: string; dark?: boolean; valueColor?: string; noteColor?: string }) {
+function Tile({ label, value, note, href, bg, dark, valueColor, noteColor }: { label: string; value: React.ReactNode; note: string; href?: string; bg?: string; dark?: boolean; valueColor?: string; noteColor?: string }) {
   const body = (
     <>
       <span className="small" style={{ fontWeight: 700, color: dark ? "var(--sand)" : "var(--earth)" }}>{label}</span>

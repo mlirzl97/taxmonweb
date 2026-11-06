@@ -1,14 +1,33 @@
 "use client";
 
 import Link from "next/link";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { Antoine } from "@/components/Antoine";
-import { anayFor, antsFor, apply, needsMe, positiveXpFor, xpFor, type Action, type Award, type GameState } from "@/lib/game/engine";
+import { defaultLook, type Look } from "@/lib/game/cosmetics";
+import { anayFor, antsFor, apply, needsMe, ownedItems, positiveXpFor, xpFor, type Action, type Award, type GameState } from "@/lib/game/engine";
 import { rankFor } from "@/lib/game/rules";
 import { baselines, initialState, ME, seniority } from "@/lib/game/world";
 
 const STORAGE_KEY = "antoine.sample.v1";
+const MOTION_KEY = "antoine.motion";
+const ONBOARD_KEY = "antoine.onboarded";
+
+export type MotionPref = "system" | "on" | "off";
+
+function subscribeReduced(callback: () => void) {
+  const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+  query.addEventListener("change", callback);
+  return () => query.removeEventListener("change", callback);
+}
+
+function readPref<T extends string>(key: string, fallback: T): T {
+  try { return (window.localStorage.getItem(key) as T | null) ?? fallback; } catch { return fallback; }
+}
+
+function writePref(key: string, value: string) {
+  try { window.localStorage.setItem(key, value); } catch { /* private mode */ }
+}
 
 type Toast = { id: number; text: string; detail?: string; tone: "win" | "info" | "miss" };
 
@@ -27,6 +46,11 @@ type GameContext = {
   myTurn: GameState["tasks"];
   rankUp: string | null;
   clearRankUp: () => void;
+  look: Look;
+  owned: Set<string>;
+  motion: { pref: MotionPref; phoneReduced: boolean; animate: boolean; setPref: (pref: MotionPref) => void };
+  onboarded: boolean;
+  finishOnboarding: () => void;
 };
 
 const Context = createContext<GameContext | null>(null);
@@ -65,12 +89,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [rankUp, setRankUp] = useState<string | null>(null);
   const stateRef = useRef(state);
   const toastId = useRef(0);
+  const [motionPref, setMotionPref] = useState<MotionPref>("system");
+  const [onboarded, setOnboarded] = useState(true);
+  const phoneReduced = useSyncExternalStore(subscribeReduced, () => window.matchMedia("(prefers-reduced-motion: reduce)").matches, () => false);
+  const animate = motionPref === "on" || (motionPref === "system" && !phoneReduced);
+
+  useEffect(() => {
+    document.documentElement.dataset.motion = animate ? "full" : "reduced";
+  }, [animate]);
 
   useEffect(() => {
     const stored = load();
     // Browser-only sample save: read once after mount so server and client markup match.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (stored) { setState(stored); stateRef.current = stored; }
+    setMotionPref(readPref<MotionPref>(MOTION_KEY, "system"));
+    setOnboarded(readPref<string>(ONBOARD_KEY, "") === "yes");
     setHydrated(true);
   }, []);
 
@@ -91,6 +125,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const mine = result.awards.filter((a) => a.person === ME);
     const gained = mine.filter((a) => a.xp > 0).reduce((sum, a) => sum + a.xp, 0);
     if (gained > 0) {
+      try { navigator.vibrate?.(35); } catch { /* not supported */ }
       const labels = Array.from(new Set(mine.filter((a) => a.xp > 0).map((a) => codeLabel[a.code])));
       pushToast({ tone: "win", text: `+${gained} XP · +${gained} Ants`, detail: labels.join(" · ") });
     }
@@ -125,8 +160,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       myTurn: needsMe(state, ME),
       rankUp,
       clearRankUp: () => setRankUp(null),
+      look: state.look ?? defaultLook,
+      owned: ownedItems(state),
+      motion: { pref: motionPref, phoneReduced, animate, setPref: (pref: MotionPref) => { setMotionPref(pref); writePref(MOTION_KEY, pref); } },
+      onboarded,
+      finishOnboarding: () => { setOnboarded(true); writePref(ONBOARD_KEY, "yes"); },
     };
-  }, [state, hydrated, dispatch, reset, rankUp]);
+  }, [state, hydrated, dispatch, reset, rankUp, motionPref, phoneReduced, animate, onboarded]);
 
   return (
     <Context.Provider value={value}>
@@ -135,7 +175,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       <div className="toasts" aria-live="polite" aria-atomic="false">
         {toasts.map((toast) => (
           <div key={toast.id} className={`toast toast--${toast.tone}`} role="status">
-            {toast.tone === "win" && <Antoine mood="cheer" size={40} decorative />}
+            {toast.tone === "win" && <Antoine mood="cheer" size={40} decorative look={state.look ?? defaultLook} />}
+            {toast.tone === "win" && animate && <span className="confetti" aria-hidden>{Array.from({ length: 14 }, (_, i) => <i key={i} style={{ ["--i" as string]: i } as React.CSSProperties} />)}</span>}
             <span><strong>{toast.text}</strong>{toast.detail && <small>{toast.detail}</small>}</span>
           </div>
         ))}

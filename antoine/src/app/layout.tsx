@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Fraunces, Inter } from "next/font/google";
 
+import { Coach } from "@/components/Coach";
 import { GameProvider } from "@/components/GameProvider";
 import { TabBar } from "@/components/TabBar";
 import { SAMPLE } from "@/lib/sample-data";
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <GameProvider>
           {children}
           <TabBar />
+          <Coach />
         </GameProvider>
       </body>
     </html>

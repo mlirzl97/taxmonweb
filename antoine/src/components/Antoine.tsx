@@ -1,3 +1,5 @@
+import { bodyColors, defaultLook, scarfColors, type Look } from "@/lib/game/cosmetics";
+
 /**
  * Antoine, aka Tonyo — the colony's red ant (style B, bold sticker; 09 §8.3).
  * Built only from circles, ellipses and round-capped lines so moods are part
@@ -22,11 +24,13 @@ const arms: Record<AntoineMood, { path: string; hands: Array<[number, number]> }
 };
 
 const INK = "#1d1d1b";
-const RED = "#e31e24";
 const HONEY = "#f0b429";
 
-export function Antoine({ mood = "wave", size = 160, decorative = false, animated = false, className }: { mood?: AntoineMood; size?: number; decorative?: boolean; animated?: boolean; className?: string }) {
+export function Antoine({ mood = "wave", size = 160, decorative = false, animated = false, className, look = defaultLook }: { mood?: AntoineMood; size?: number; decorative?: boolean; animated?: boolean; className?: string; look?: Look }) {
   const height = Math.round((size * 250) / 224);
+  const body = bodyColors[look.body] ?? bodyColors.red!;
+  const scarf = scarfColors[look.scarf] ?? scarfColors.honey!;
+  const barong = look.outfit === "barong";
   const arm = arms[mood];
   // When waving and animated, the raised right arm is its own group so it can swing from the shoulder.
   const splitWave = animated && mood === "wave";
@@ -74,10 +78,11 @@ export function Antoine({ mood = "wave", size = 160, decorative = false, animate
       <path d="M86 198 L80 213 M114 198 L120 213" stroke={INK} strokeWidth={10} />
       <ellipse cx={75} cy={216} rx={11} ry={5.5} fill={INK} />
       <ellipse cx={125} cy={216} rx={11} ry={5.5} fill={INK} />
-      <ellipse cx={100} cy={180} rx={38} ry={28} fill={RED} stroke={INK} strokeWidth={5} />
-      <path d="M68 180 Q100 192 132 180 M76 195 Q100 204 124 195" stroke="#b8191e" strokeWidth={5} />
-      <ellipse cx={84} cy={166} rx={10} ry={4.5} fill="#ff7478" transform="rotate(-20 84 166)" />
-      <ellipse cx={100} cy={148} rx={20} ry={15} fill={RED} stroke={INK} strokeWidth={5} />
+      <ellipse cx={100} cy={180} rx={38} ry={28} fill={body.fill} stroke={INK} strokeWidth={5} />
+      <path d="M68 180 Q100 192 132 180 M76 195 Q100 204 124 195" stroke={body.shade} strokeWidth={5} />
+      <ellipse cx={84} cy={166} rx={10} ry={4.5} fill={body.light} transform="rotate(-20 84 166)" />
+      <ellipse cx={100} cy={148} rx={20} ry={15} fill={body.fill} stroke={INK} strokeWidth={5} />
+      {barong && <Barong />}
 
       {mood === "calm" && (
         <g transform="rotate(-6 100 178)">
@@ -88,9 +93,13 @@ export function Antoine({ mood = "wave", size = 160, decorative = false, animate
       )}
 
       {/* scarf */}
-      <path d="M66 134 Q100 152 134 134 L136 145 Q100 164 64 145 Z" fill={HONEY} stroke={INK} strokeWidth={4} />
-      <path d="M117 151 L130 173 L116 170 Z" fill={HONEY} stroke={INK} strokeWidth={4} />
-      <circle cx={118} cy={151} r={6.5} fill="#d99a12" stroke={INK} strokeWidth={3} />
+      {!barong && (
+        <>
+          <path d="M66 134 Q100 152 134 134 L136 145 Q100 164 64 145 Z" fill={scarf.fill} stroke={INK} strokeWidth={4} />
+          <path d="M117 151 L130 173 L116 170 Z" fill={scarf.fill} stroke={INK} strokeWidth={4} />
+          <circle cx={118} cy={151} r={6.5} fill={scarf.knot} stroke={INK} strokeWidth={3} />
+        </>
+      )}
 
       {/* arms */}
       <path d={staticArm} stroke={INK} strokeWidth={9} />
@@ -103,12 +112,14 @@ export function Antoine({ mood = "wave", size = 160, decorative = false, animate
       )}
 
       {/* head */}
-      <circle cx={100} cy={84} r={58} fill={RED} stroke={INK} strokeWidth={5} />
-      <ellipse cx={73} cy={50} rx={18} ry={8} fill="#ff7478" transform="rotate(-28 73 50)" />
-      <ellipse cx={57} cy={113} rx={10} ry={6} fill="#ffb0b2" />
-      <ellipse cx={143} cy={113} rx={10} ry={6} fill="#ffb0b2" />
+      <circle cx={100} cy={84} r={58} fill={body.fill} stroke={INK} strokeWidth={5} />
+      <ellipse cx={73} cy={50} rx={18} ry={8} fill={body.light} transform="rotate(-28 73 50)" />
+      <ellipse cx={57} cy={113} rx={10} ry={6} fill={body.cheek} />
+      <ellipse cx={143} cy={113} rx={10} ry={6} fill={body.cheek} />
 
       <Face mood={mood} />
+      {look.eyes !== "none" && mood !== "cheer" && mood !== "sleep" && <Eyewear kind={look.eyes} />}
+      {look.hat !== "none" && <Hat kind={look.hat} />}
 
       {sparkle && (
         <g fill={HONEY} stroke={INK}>
@@ -197,7 +208,7 @@ export function AntoineHead({ size = 31 }: { size?: number }) {
       <path d="M84 36 C78 16 64 8 52 12 M116 36 C122 16 136 8 148 12" stroke={INK} strokeWidth={7} />
       <circle cx={50} cy={12} r={9.5} fill={HONEY} stroke={INK} strokeWidth={4} />
       <circle cx={150} cy={12} r={9.5} fill={HONEY} stroke={INK} strokeWidth={4} />
-      <circle cx={100} cy={84} r={58} fill={RED} stroke={INK} strokeWidth={6} />
+      <circle cx={100} cy={84} r={58} fill="#e31e24" stroke={INK} strokeWidth={6} />
       <ellipse cx={78} cy={92} rx={16.5} ry={20.5} fill="#fff" stroke={INK} strokeWidth={4} />
       <ellipse cx={122} cy={92} rx={16.5} ry={20.5} fill="#fff" stroke={INK} strokeWidth={4} />
       <circle cx={81} cy={97} r={11} fill={INK} />
@@ -207,4 +218,78 @@ export function AntoineHead({ size = 31 }: { size?: number }) {
       <path d="M88 117 Q100 130 112 117" stroke={INK} strokeWidth={6} />
     </svg>
   );
+}
+
+function Barong() {
+  return (
+    <g>
+      <path d="M62 140 Q100 156 138 140 L144 196 Q100 214 56 196 Z" fill="#fbf3dc" stroke={INK} strokeWidth={4.5} />
+      <path d="M86 156 C92 170 92 184 86 198 M114 156 C108 170 108 184 114 198" stroke="#8a5a00" strokeWidth={2.5} />
+      <path d="M78 168 C82 172 82 178 78 182 M122 168 C118 172 118 178 122 182" stroke="#8a5a00" strokeWidth={2} />
+      <path d="M82 140 L100 158 L118 140" stroke={INK} strokeWidth={4} />
+      {[168, 182, 196].map((y) => <circle key={y} cx={100} cy={y} r={2.6} fill={INK} />)}
+    </g>
+  );
+}
+
+function Eyewear({ kind }: { kind: string }) {
+  if (kind === "shades") {
+    return (
+      <g>
+        <path d="M56 80 H96 Q99 80 99 84 V97 Q99 110 85 110 H70 Q56 110 56 96 Z" fill={INK} stroke={INK} strokeWidth={3} />
+        <path d="M101 84 Q101 80 104 80 H144 V96 Q144 110 130 110 H115 Q101 110 101 97 Z" fill={INK} stroke={INK} strokeWidth={3} />
+        <path d="M96 84 Q100 80 104 84" stroke={INK} strokeWidth={4} />
+        <path d="M64 88 L76 86 M109 88 L121 86" stroke="#fff" strokeWidth={3} opacity={0.6} />
+        <path d="M56 86 L44 80 M144 86 L156 80" stroke={INK} strokeWidth={4} />
+      </g>
+    );
+  }
+  return (
+    <g fill="none" stroke={INK}>
+      <circle cx={78} cy={92} r={23} strokeWidth={4.5} />
+      <circle cx={122} cy={92} r={23} strokeWidth={4.5} />
+      <path d="M100 88 Q100 84 100 88 M99 90 Q100 86 101 90" strokeWidth={4} />
+      <path d="M55 88 L44 82 M145 88 L156 82" strokeWidth={4} />
+    </g>
+  );
+}
+
+function Hat({ kind }: { kind: string }) {
+  switch (kind) {
+    case "hardhat":
+      return (
+        <g strokeLinejoin="round">
+          <path d="M46 66 C46 12 154 12 154 66 Z M28 64 H172 Q176 76 164 78 H36 Q24 76 28 64 Z" fill="#fff" stroke="#fff" strokeWidth={12} />
+          <path d="M46 66 C46 12 154 12 154 66 Z" fill={HONEY} stroke={INK} strokeWidth={5} />
+          <path d="M100 16 V62 M72 26 Q66 44 66 62 M128 26 Q134 44 134 62" stroke="#c98e0f" strokeWidth={4} />
+          <path d="M28 64 H172 Q176 76 164 78 H36 Q24 76 28 64 Z" fill={HONEY} stroke={INK} strokeWidth={5} />
+        </g>
+      );
+    case "salakot":
+      return (
+        <g strokeLinejoin="round">
+          <path d="M12 70 L100 2 L188 70 Q100 88 12 70 Z" fill="#fff" stroke="#fff" strokeWidth={12} />
+          <path d="M12 70 L100 2 L188 70 Q100 88 12 70 Z" fill="#d9b77c" stroke={INK} strokeWidth={5} />
+          <path d="M100 4 L56 76 M100 4 L144 76 M100 4 L100 82 M100 4 L32 72 M100 4 L168 72" stroke="#b88b52" strokeWidth={2.6} />
+          <path d="M14 70 Q100 88 186 70" stroke="#8a5a00" strokeWidth={4} />
+          <circle cx={100} cy={6} r={6.5} fill="#8a5a00" stroke={INK} strokeWidth={3} />
+        </g>
+      );
+    default: {
+      const balikbayan = kind === "balikbayan";
+      const crown = balikbayan ? INK : "#2f638d";
+      const brim = balikbayan ? "#3b2a1e" : "#244f73";
+      return (
+        <g strokeLinejoin="round">
+          <path d="M42 66 C40 16 160 16 158 66 Q100 54 42 66 Z M100 62 Q150 56 186 70 Q178 82 150 78 Q120 74 100 70 Z" fill="#fff" stroke="#fff" strokeWidth={12} />
+          <path d="M42 66 C40 16 160 16 158 66 Q100 54 42 66 Z" fill={crown} stroke={INK} strokeWidth={5} />
+          <path d="M100 62 Q150 56 186 70 Q178 82 150 78 Q120 74 100 70 Z" fill={brim} stroke={INK} strokeWidth={5} />
+          <circle cx={100} cy={22} r={4.5} fill={balikbayan ? HONEY : "#fffaf0"} stroke={INK} strokeWidth={2.5} />
+          {balikbayan
+            ? <path d="M100 30 L104.7 39.5 L115 41 L107.5 48.3 L109.3 58.6 L100 53.7 L90.7 58.6 L92.5 48.3 L85 41 L95.3 39.5 Z" fill={HONEY} stroke={INK} strokeWidth={2} />
+            : <path d="M70 40 Q100 30 130 40" stroke="#fffaf0" strokeWidth={4} opacity={0.5} />}
+        </g>
+      );
+    }
+  }
 }
