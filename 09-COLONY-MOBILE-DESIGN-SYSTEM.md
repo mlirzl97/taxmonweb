@@ -19,7 +19,7 @@ like a well-run colony, while every compliance fact stays exact.
 ### 1.1 Principles
 
 1. **Two layers, one truth.** The **Control layer** (work, deadlines, evidence, status) is precise and plain. The **Game layer** (XP, Ants, ranks, boards) is playful and celebratory. The game layer may decorate around control facts. It may never restate, soften or overrule them.
-2. **Celebrate verified outcomes only.** Confetti, sounds and level-ups fire on *settled* or *verified* facts (accepted filing, confirmed payment, QA clean). Never on a click, a submission or an intention.
+2. **Celebrate verified outcomes only.** Confetti, sounds and level-ups fire on *verified* facts (accepted filing, confirmed payment, QA clean). Never on a click, a submission or an intention.
 3. **Next safe action first.** Each screen answers in the first viewport: what needs me, what's urgent, how I'm doing.
 4. **Bold, not loud.** Strong color blocks, heavy display type and framed cards. One focal point per screen. Brand red stays a signal.
 5. **Thumb-first.** Primary actions sit in the bottom half. Nothing important needs two hands.
@@ -165,7 +165,7 @@ Rules:
 
 ### 4.10 XP bar (Game layer)
 - 10px tall, `honey` fill on `card` with a 2px `ink` border, rank insignia on the left, "XP to next rank" text on the right.
-- Provisional XP shows as a striped `honey` segment labelled "Pending QA".
+- Demerits show in the player's own history in `danger` with the reason and, where applicable, "Waived — blocker logged". Never on public boards.
 
 ### 4.11 Ant coin
 - Circle with a `honey` fill, `ink` border and an ant glyph. Number in Inter 800 tabular.
@@ -191,7 +191,7 @@ Rules:
 - **Podium** for places 1–3: offset-shadow blocks of different heights, with avatar, name, XP and the place number (1/2/3) printed on the block, not just gold/silver/bronze color.
 - **Rows** 4–10: position · avatar · name + rank insignia · XP (right, tabular) · clean rate % under the XP.
 - **Your row** is pinned at the bottom if you're outside the top 10, highlighted with an `ink` border and a "You" label.
-- Live board shows "Includes pending QA" under the title. Cup and Hall show "Settled".
+- Each board shows its window under the title ("This cycle", "Q4 Colony Cup", "All-time") and role tabs: Overall · Forager · Sentinel · Elder · Steward.
 - Position changes show ▲/▼ with a number, never color alone.
 - **No bottom-ranked list, no "last place" label, anywhere.**
 

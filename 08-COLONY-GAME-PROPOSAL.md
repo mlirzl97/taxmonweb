@@ -1,131 +1,168 @@
-# 08 — Colony: Gamification, Leaderboard and Ant Rewards
+# 08 — Colony: Gamification, Leaderboards and the Ant Economy
 
-Status: **PROPOSAL — L-107 (individual leaderboards) and L-108 (rewards governance) approved 2026-11-06; detailed rules still pending HOD approval.** Nothing in this document is approved
-until the HOD signs off the decision amendments in §2. No migration has been
-written. This document amends, but does not silently override, `00A-DECISION-REGISTER.md`.
-
-Working name: **Colony**. It is the game layer over TaxMonWeb's single
-operational truth.
+Status: **PROPOSAL v2.** L-107 (individual leaderboards) and L-108 (rewards
+governed by the Culture and Values Committee) are approved and recorded in
+`00A-DECISION-REGISTER.md`. The detailed rules below reflect the HOD's
+2026-11-06 intake answers and are pending final HOD sign-off. No migration
+has been written. Design language: `09-COLONY-MOBILE-DESIGN-SYSTEM.md`
+(pending mockup). Research basis: `10-GAME-MECHANICS-STUDY.md`.
 
 ---
 
 ## 1. Purpose and boundary
 
-Colony makes clean, on-time, evidenced compliance work visible and rewarding.
-It does this through:
+Colony turns clean, on-time, evidenced compliance work into a game:
 
-- XP earned from verified work facts;
-- individual leaderboards, both realtime and historical;
-- ant colony ranks;
-- **Ants**, a currency that can be redeemed for real rewards.
+- XP, demerits and ant colony ranks;
+- individual leaderboards, realtime and historical;
+- **Anay**, a co-op boss beaten by filing one day early;
+- **Ants**, an in-app currency spent in in-app stores, some of which hand out real items.
 
-Colony is a **read-only projection plus an append-only ledger**. It:
+Colony is a **read-only projection plus append-only ledgers**. It:
 
 - never writes to operational tables (work, gates, evidence, QA, deadlines, profiles);
 - never blocks, speeds up or changes a compliance command;
-- never creates a second tracker. Every award points to the operational record that earned it;
+- never creates a second tracker. Every XP event and Ant movement points to the operational record or order behind it;
 - if Colony fails, compliance work continues unaffected.
 
 Spine position: `… → Completion → Independent QA → (Colony projection)`.
-Colony is downstream of everything and upstream of nothing.
 
 ---
 
-## 2. Decision amendments required (HOD sign-off)
+## 2. Decisions
 
-| Ref | Current | Proposed |
+| Ref | Status | Decision |
 |---|---|---|
-| **L-069 → L-107 ✅ approved 2026-11-06** | Team/Tower "Race to All Clear"; no public individual leaderboard in V1. | Individual leaderboards are permitted, both realtime (current filing cycle) and historical (settled seasons). The guardrails in §6 are mandatory. Race to All Clear stays as the Tower-level goal. Tax Run Completion, RAG, QA Completion, QA Pass Rate and RCA stay separate measures and are never merged into XP. |
-| **L-108 ✅ approved 2026-11-06: Ant rewards** | — | Ants are a points currency backed by real rewards. The **Culture and Values Committee** governs the catalog, budget, approvals, fulfilment and any HR/payroll/tax treatment. The rate is configuration (HOD example: 10,000 Ants = one ₱100 gift certificate). TaxMonWeb keeps the ledger and redemption record only. |
-| **New: Mobile design language** | `05-UX-DESIGN-SYSTEM.md`: "corporate and controlled". | Mobile and game surfaces use the bolder Colony design language (`09-COLONY-MOBILE-DESIGN-SYSTEM.md`). Control facts keep their precise, plain-language presentation inside it. Desktop keeps the existing system unless separately amended. |
-| **Build plan note** | `07` People Lego: "No HR, payroll, ranking, or gamification data." | That stays true for the People Lego. Colony is its own later set of Legos (§9), built after the work lifecycle produces real facts. |
-
-L-107 and L-108 are recorded in the decision register. The mobile design language row is still pending; until it is approved, Colony work is limited to documentation, calibration and mockups.
+| L-107 | ✅ Approved 2026-11-06 | Individual leaderboards permitted (supersedes L-069) |
+| L-108 | ✅ Approved 2026-11-06 | Culture and Values Committee governs real-value rewards |
+| Intake 1 | HOD answer | Rank by **raw XP**, with **demerits for misses** |
+| Intake 2 | HOD answer | Everyone competes on **role boards**. HOD is an **observer** |
+| Intake 3 | HOD answer | **Colony never waits for QA.** XP is final when earned. QA later adds **bonus or demerit only** |
+| Intake 4 | HOD answer | Ants **never expire** |
+| Intake 5 | HOD answer | **Real names** on boards |
+| Intake 6 | HOD answer | An **in-app economy**: a **Store Manager** role runs stores. Players pay Ants into a store. Real items are handed over outside the app, and the handover is tracked inside it |
+| Intake 7 | HOD answer | Mascot: **Tonyo** |
+| Intake 8 | HOD answer | **Anay** pushes filing **one day before** the deadline (D-1) |
+| Intake 9 | HOD answer | **Sassy mode** is opt-in, off by default |
+| Intake 10 | HOD answer | Adopt the recommended features from the game study (§4.9) |
+| Intake 11 | HOD answer | Approve the design language after seeing the mockup |
+| Pending | Needs HOD sign-off | Mobile design language (amends "corporate and controlled" in `05` for mobile/game surfaces) |
 
 ---
 
-## 3. Users: start basic (reuse, do not rebuild)
+## 3. Players: start basic (reuse, do not rebuild)
 
 No new user model. Colony reads what already exists:
 
 | Need | Existing source |
 |---|---|
-| Who the person is | `app_users` (`display_name`, `is_active`) |
-| Role label, active dates | `team_member_profiles` (`role_key`, `effective_from/to`) |
-| Client assignment | `client_team_assignments` (`portfolio_owner / preparer / checker / reviewer`, effective-dated) |
+| Person | `app_users` |
+| Role label, active dates | `team_member_profiles` |
+| Client assignment | `client_team_assignments` (portfolio owner / preparer / checker / reviewer) |
 | Unit-level assignment | `registration_unit_team_assignments` |
 | Who actually did the work | `generated_work_gate_attempts.actor_id`, `generated_work_evidence.actor_id`, `generated_compliance_work_events.actor_id` |
+| Permissions (Store Manager etc.) | `capabilities` + `user_capability_assignments` (new capability keys only) |
 
 Rules:
 
-- **No clustering yet.** No teams, pods or org-unit competitions. `organization_units` and `client_groups` are ignored by Colony for now. They exist, so team leagues can be added later without a schema change.
-- **Points follow the actual actor, not the assignee.** Assignment decides whose list the work appears on. Actor history decides who earns from it. This mirrors the SoD rule.
-- **Client assignment is used for scope only**, e.g. "leaderboard among people on my clients". It is never used as a multiplier.
+- **No clustering yet.** No teams or org-unit leagues. The existing structures allow them later.
+- **Points follow the actual actor, not the assignee.** Assignment decides whose list it's on. Actor history decides who earns.
+- **Client assignment is for scope only** ("people on my clients"), never a multiplier.
 
-The only new per-user record is `colony_player_profiles` (§5.1), for game-specific settings.
+### 3.1 Role classes
+
+| Operational role | Colony class | Board |
+|---|---|---|
+| Preparer | **Forager** | Forager board |
+| Checker | **Sentinel** | Sentinel board |
+| Reviewer | **Elder** | Elder board |
+| Portfolio owner | **Steward** | Steward board |
+
+A person earns in every class they actually act in. There's also an **Overall**
+board (all XP), plus one board per class, so a checker is never ranked against
+a preparer's volume unless they choose the Overall view.
 
 ---
 
-## 4. Game rules (recommended)
+## 4. Game rules
 
-### 4.1 Two numbers, not one
+### 4.1 XP and Ants: final when earned
 
-| | **XP** | **Ants** |
+- **XP** is reputation. It drives leaderboards and ranks. Never spent.
+- **Ants** are currency. Minted **1:1 with positive XP**, at the same moment.
+- **Demerits** subtract XP and burn the same number of Ants.
+- Nothing waits for QA. QA outcomes arrive later as their own bonus or demerit events.
+- An Ant balance can go negative after a demerit. **Purchases are blocked while negative.**
+
+### 4.2 What earns XP
+
+Values are starting proposals, calibrated in shadow mode (§9, G1).
+
+| Code | Class | Trigger (existing facts) | XP |
+|---|---|---|---|
+| `FIRST_PASS` | Forager | Work passes checking and review with no `return` in `generated_work_gate_attempts` | 30 |
+| `CHECK_ON_TIME` | Sentinel | Checker `approve` recorded by D-2 | 15 |
+| `REVIEW_ON_TIME` | Elder | Reviewer `approve` recorded by D-2 | 15 |
+| `FILED_ACCEPTED` | Forager / Sentinel / Elder | Filing evidence with `result_status` `accepted` or `validated`, `external_date` ≤ adjusted statutory deadline | 40 / 15 / 15 |
+| `ANAY_HIT` | Forager / Sentinel / Elder | Same as above, but filed **by D-1** (§4.5) | +20 each, on top |
+| `PAID_CONFIRMED` | Payment step owner | Payment evidence with proof, ≤ deadline | 20 |
+| `BLOCKER_RAISED_EARLY` | Whoever logged it | Blocker logged ≥ 3 days before D-1 and later resolved. Max one per work item | 10 |
+| `QA_CLEAN` | All three actors | QA status `cleared` on sampled work | 25 each |
+| `REMEDIATION_VALIDATED` | Accountable user | QA finding reaches `validated` | 15 |
+| `STEWARD_ALL_CLEAR` | Steward | Every item on their clients this cycle filed by D-1 | 50 |
+| `ANAY_DEFEATED` | Every competing player | Colony beats Anay this cycle (§4.5) | 50 |
+| `CLEAN_STREAK` | Person | Consecutive cycles with zero misses and zero QA demerits | 50 × streak (cap 5) |
+
+Nothing is awarded for submission alone (Submitted ≠ Accepted), filing without
+required payment (Filed ≠ Paid), payment initiation (initiated ≠ confirmed),
+raw item count without a quality condition, or overrides (§6).
+
+### 4.3 Demerits
+
+| Code | Who | Trigger | XP |
+|---|---|---|---|
+| `MISSED_D1` | Holder of the open step at D-1 | Not filed by D-1 | −10 |
+| `MISSED_STATUTORY` | Holder of the open step at the deadline | `statutory_deadline_missed` becomes true | −100 |
+| `QA_LOW` / `QA_MEDIUM` / `QA_HIGH` / `QA_MATERIAL` | Accountable user on the QA finding | Finding recorded | −10 / −30 / −60 / −150 |
+| `STREAK_BROKEN` | Person | No XP loss; the streak resets | 0 |
+
+**Waiver (fairness):** a miss demerit is **waived** if an external blocker
+(client data, client approval, payment funding or BIR system) was logged
+**before** the missed date and was still open at that date. This also rewards
+raising blockers early. Waivers are automatic from the record, are visible on
+the player's history, and cannot be granted by hand.
+
+**Never demerited:** raising a blocker or exception, or self-disclosing an
+error before QA finds it (self-disclosure cancels any QA demerit for that issue).
+
+### 4.4 Leaderboards and seasons
+
+| Board | Window | Notes |
 |---|---|---|
-| Meaning | Reputation and progress | Spendable currency |
-| Drives | Leaderboards, colony rank | Reward redemption |
-| Earned | Realtime, as *provisional*; becomes *settled* at season close | Only from **settled** XP |
-| Goes down? | Only by QA clawback or a reversed source fact | By clawback, by redemption, and by expiry if expiry is enabled |
-| Spent? | Never | Yes |
+| **Live** | Current monthly filing cycle | Updates as facts land |
+| **Colony Cup** | Quarter | Main competitive season, with seasonal ranks and stars |
+| **Hall of the Colony** | All-time and annual | End-to-end history |
 
-Keeping them separate means a realtime leaderboard can be exciting without
-paying real money for work that QA later finds wrong.
+- Each board has Overall plus Forager / Sentinel / Elder / Steward tabs.
+- Rows show **XP and clean rate** (% of the person's items on time, evidenced and with no QA demerit).
+- **Ties:** same XP → higher clean rate → earlier last award.
+- **Season end:** standings are snapshotted at the season's end date and never change. Later QA bonuses or demerits count in the season in which they're recorded.
+- **Promotion only:** no demotion leagues, no bottom list, no "last place" anywhere. Boards show the top 10 plus your own pinned position.
 
-### 4.2 What earns XP (all derived from existing facts)
+### 4.5 Anay, the co-op boss
 
-Point values are **starting proposals, to be calibrated in shadow mode (§9, G1)**.
+Anay is a fictional termite that eats the colony's foundations, standing for
+late filings and penalties.
 
-| Award code | Earned by | Trigger (existing source) | XP |
-|---|---|---|---|
-| `PREP_FIRST_PASS` | Preparer | Work passes checking **and** review with no `return` decision in `generated_work_gate_attempts` | 30 |
-| `CHECK_DONE_ON_TIME` | Checker | Checker `approve` recorded before `tmf_package_target` | 15 |
-| `REVIEW_DONE_ON_TIME` | Reviewer | Reviewer `approve` recorded before `tmf_package_target` | 15 |
-| `FILED_ACCEPTED_ON_TIME` | Preparer, checker, reviewer | Filing evidence with `result_status` in (`accepted`, `validated`) and `external_date` ≤ `adjusted_statutory_deadline` | 40 / 15 / 15 |
-| `PACKAGE_TARGET_MET` | Preparer | Filing evidence dated ≤ `tmf_package_target` | 20 |
-| `PAID_CONFIRMED_ON_TIME` | Payment step owner | Payment evidence with proof, dated ≤ deadline | 20 |
-| `EARLY_BLOCKER_RAISED` | Raiser | Data-readiness or other blocker logged ≥ *N* days before package target and later resolved (one per work item) | 10 |
-| `QA_CLEAN` | All three actors | QA finding status `cleared` on sampled work | 25 each |
-| `REMEDIATION_VALIDATED` | Accountable user | QA finding moves to `validated` | 15 |
-| `CLEAN_CYCLE_STREAK` | Person | A cycle with zero late items and zero QA findings, consecutive | 50 × streak (capped at 5) |
+- **Each cycle Anay has HP** equal to the number of in-scope work items due that cycle.
+- **A hit** = an item filed and accepted **by D-1** (one day before its adjusted statutory deadline). One HP per item.
+- Items filed on time but after D-1 do no damage. Late items **heal Anay by 1**.
+- **Victory:** HP reaches 0 by the cycle's last D-1 → **All Clear**, `ANAY_DEFEATED` for every competing player, and a podium of top hitters.
+- **Defeat:** Anay "survives" the cycle. No group penalty. Next cycle is a new fight.
+- The Anay bar is shown on the Anthill home screen, on the Tower and in Tower TV mode.
+- **D-1 definition:** see open question Q1 (calendar day vs. working day).
 
-**Nothing is awarded for:** submission alone (Submitted ≠ Accepted), filing
-without payment where payment applies (Filed ≠ Paid), payment initiation
-(initiated ≠ confirmed), raw item count with no quality condition, or speed
-beyond meeting the target.
-
-### 4.3 What takes XP away
-
-| Event | Effect |
-|---|---|
-| QA finding `low` / `medium` | Clawback: that work's awards to its actors are reversed |
-| QA finding `high` / `material` | Clawback, plus a deduction of 50 / 150 XP from the accountable user |
-| Statutory deadline missed | That work earns nothing. Streak broken. No extra deduction |
-| Source fact reversed or superseded (e.g. evidence corrected) | Matching award reversed automatically |
-| **Self-disclosed error before QA** | Award reversed, **no deduction**. People should never be punished for reporting their own mistakes |
-
-### 4.4 Seasons and leaderboards
-
-| Board | Window | Counts | Purpose |
-|---|---|---|---|
-| **Live: This filing cycle** | Current monthly cycle | Provisional + settled XP | Realtime excitement during deadlines |
-| **Colony Cup** | Quarter | Settled XP only | Main competitive season |
-| **Hall of the Colony** | All-time / annual | Settled XP only | End-to-end historical record |
-
-- **Settlement:** a monthly season is finalized after its QA window closes (a configurable number of days after cycle end). Final standings are snapshotted and never change. A later clawback is a new entry in the *current* season, not an edit to history.
-- **Fairness display:** each row shows XP **and clean rate** (% of the person's items that were on time, evidenced and free of QA findings). Ranking is by XP; clean rate keeps volume from looking like quality. Normalizing by client load is an open calibration question (§10).
-- **Ties:** same XP → higher clean rate → earlier time of last settled award.
-
-### 4.5 Ant colony ranks (lifetime settled XP)
+### 4.6 Ant colony ranks (lifetime XP)
 
 | # | Rank | Lifetime XP (proposal) |
 |---|---|---|
@@ -138,168 +175,177 @@ beyond meeting the target.
 | 7 | Colony Elder | 30,000 |
 | 8 | Colony Keeper | 60,000 |
 
-Ranks never go down from a clawback, because they are milestones. The
-leaderboard reflects the clawback instead. The thresholds are effective-dated
-configuration.
+Lifetime rank uses **lifetime positive XP**. Ranks are milestones and never
+drop. Demerits affect leaderboards and Ants, not milestones. **Seasonal ranks**
+(Colony Cup) use stars within each rank and soft-reset each quarter.
 
-### 4.6 Ants and rewards
+### 4.7 The Ant economy
 
-- **Issuance:** when an award settles, Ants = XP × issuance rate (proposal 1:1). Deductions debit Ants too.
-- **Rate is configuration:** the HOD example of 10,000 Ants = ₱100 gift certificate implies 1 Ant = ₱0.01. Catalog items carry their own Ant cost, so the rate can change per item without rewriting history.
-- **Budget control:** each season has an **issuance cap** (₱ budget ÷ value per Ant). If the cap is reached, XP still counts but Ants issue at a reduced, visibly stated rate. Real money never exceeds the approved budget.
-- **Redemption:** player requests → approver (≠ player, maker-checker) approves → fulfiller records that it was handed over outside TaxMonWeb. Rejected or cancelled requests release the hold.
-- **Negative balance:** a post-settlement clawback can push Ants below zero. Redemption is blocked until the balance is positive again.
-- **No transfers, gifting or trading** between players.
-- **Expiry:** off by default. If enabled, it is announced and configured per season.
+An in-game economy, like the stores in MLBB or PUBG, except some items are real.
+
+**Wallets (double-entry):**
+
+| Wallet | Owner | Purpose |
+|---|---|---|
+| Player wallet | Each player | Earn and spend |
+| Store wallet | Each store (not a person) | Receives payments. Cannot buy anything |
+| Colony Treasury | System | Mints Ants (faucet) and receives burned or retired Ants (sink) |
+
+Every movement is one transaction with balanced entries, so the sum across all
+wallets is always zero. **Ants in circulation = −Treasury balance.** Nothing is
+ever created or destroyed off the books.
+
+**Flows:**
+
+| Flow | Entries |
+|---|---|
+| Earn (positive XP) | Treasury −X → Player +X |
+| Demerit | Player −X → Treasury +X |
+| Purchase (pending) | Player −price → Store +price, held until fulfilled |
+| Fulfilled | Store −price → Treasury +price (Ants retired) |
+| Rejected / cancelled | Store −price → Player +price (refund) |
+
+**Stores and the Store Manager:**
+
+- A **Store Manager** (new capability `colony.store_manage`) creates and runs stores, such as a "Culture & Values Store". Store Managers are staff picked by the committee.
+- **Items** are either:
+  - **digital**: ant skins, frames, titles, streak freezes. Delivered instantly by the app; the Treasury is the store.
+  - **real**: gift certificates, merch, perks. Handed over **outside** the app by the store's manager.
+- Each real item carries an Ant price, and optionally a **peso value**, recorded for the committee's budget reporting.
+- **Buying a real item:** player buys → Ants move to the store (pending) → the Store Manager hands over the item in real life → marks the order **fulfilled** with a handover note → Ants are retired. Rejected or cancelled orders refund automatically.
+- **Separation:** a Store Manager can't buy from a store they manage or fulfil their own order. Another manager or a committee member must act.
+- **Conversion to real value happens outside the app** (committee decision). Inside the app it is always tracked as an order with a peso snapshot.
+
+**Transfers:**
+
+- **No player-to-player transfers** in this version. That prevents points-for-cash side deals, pressure on juniors and collusion.
+- **Kudos** (free, positive, no XP) is the social gesture instead.
+- The only way Ants leave a player is a demerit or a purchase.
+
+**Committee economy view:**
+
+- Ants minted, burned, spent and in circulation.
+- Outstanding **liability** in pesos = Ants in circulation × the committee's reference rate (HOD example: 10,000 Ants ≈ ₱100).
+- Per-store sales and pending orders.
+
+Because Ants never expire, this liability only grows unless spent. The
+committee should watch it each quarter.
+
+### 4.8 Personality
+
+- **Tonyo** is the mascot. He's warm, cheeky and proud of the colony. Character guide goes in `09`.
+- **Sassy mode:** Duolingo-style teasing reminders. Each player opts in themselves; off by default.
+- **Anay** is the shared villain (§4.5). No real person is ever a character or villain.
+
+### 4.9 Adopted features (from `10` §6)
+
+Role classes and boards · Anay raid · Cycle MVP + rare medals ("Perfect Cycle",
+"Blocker Buster") · seasonal ranks with stars and soft reset · streak freeze
+(a digital store item) · Forage Missions (pick 3 of 5 weekly) · Badge Album ·
+cosmetics (ant skins, frames, titles) · free Colony Pass · budget-capped Rush
+Events · welcome-back boost and rookie bracket · Anthill home screen · three
+cycle rings (Filed on time · Evidence complete · QA clean) · Tower TV mode ·
+kudos.
 
 ---
 
 ## 5. Data model (new tables)
 
-All tables use the `colony_` prefix in `public`, matching the existing
-migration convention, and keep a clear module boundary. Every table has RLS
-enabled, deny-by-default. Writes go through `security definer` commands only.
-Balances, standings and ranks are **derived views, never editable columns**.
+`colony_` prefix in `public`. RLS on every table, deny-by-default. Writes only
+through `security definer` commands. Balances, standings, ranks and Anay HP are
+**derived views**, never editable columns.
 
-### 5.1 Players
+### 5.1 Players and permissions
 
-**`colony_player_profiles`**: one row per participating user.
+**`colony_player_profiles`**: `user_id` PK → `app_users`, `leaderboard_name`
+(defaults to `display_name`), `participation` (`competing` / `observer` / `excluded`),
+`excluded_reason`, `sassy_mode` (bool, default false), `feed_opt_out` (bool),
+`joined_at`, `updated_at`, `updated_by`.
 
-| Column | Type | Notes |
-|---|---|---|
-| `user_id` | uuid PK → `app_users` | |
-| `leaderboard_name` | text | Defaults to `display_name`. Editable by the player within naming rules |
-| `participation` | text | `competing`, `observer` (sees boards, not ranked), `excluded` |
-| `excluded_reason` | text | Required when `excluded` |
-| `joined_at`, `updated_at`, `updated_by` | | |
-
-Recommended default: the **HOD and anyone who approves rewards or adjusts
-scores is `observer`**, to avoid conflicts of interest. QA reviewers may compete,
-but can never earn from findings they raised (§6).
+New capability keys in `capabilities`: `colony.rules_draft`, `colony.rules_approve`,
+`colony.store_manage`, `colony.economy_view`, `colony.season_admin`.
 
 ### 5.2 Configuration (effective-dated, maker-checker)
 
-**`colony_rule_set_versions`**: `id`, `version_no`, `effective_from`,
-`effective_to`, `status` (`draft` / `approved` / `retired`), `issuance_rate`,
-`qa_window_days`, `streak_cap`, `drafted_by`, `approved_by` (≠ drafter),
-`approved_at`, `change_reason`.
+- **`colony_rule_set_versions`**: `id`, `version_no`, `effective_from/to`, `status` (`draft` / `approved` / `retired`), `mint_rate` (default 1), `blocker_early_days`, `streak_cap`, `drafted_by`, `approved_by` (≠ drafter), `approved_at`, `change_reason`.
+- **`colony_award_rules`**: `rule_set_version_id`, `award_code`, `earner_class`, `xp` (negative for demerits), `active`, `description`. A lookup table, not a rules DSL. Trigger logic per code is reviewed code.
+- **`colony_rank_tiers`**: `rule_set_version_id`, `tier_no`, `code`, `label`, `min_lifetime_xp`, `insignia_key`.
 
-**`colony_award_rules`**: `rule_set_version_id`, `award_code`,
-`earner_role` (`preparer` / `checker` / `reviewer` / `payment_owner` / `raiser` / `accountable`),
-`xp`, `active`, `description`. This is a plain lookup table, **not a rules DSL**.
-The trigger logic for each award code lives in reviewed SQL/TypeScript.
+### 5.3 Seasons and Anay
 
-**`colony_rank_tiers`**: `rule_set_version_id`, `tier_no`, `code`, `label`,
-`min_lifetime_xp`, `insignia_key`.
+- **`colony_seasons`**: `id`, `kind` (`filing_cycle` / `quarter` / `year`), `label`, `starts_on`, `ends_on`, `rule_set_version_id`, `status` (`scheduled` / `live` / `finalized`), `finalized_at`. No overlaps per kind.
+- **`colony_season_final_standings`**: immutable snapshot. `season_id`, `board` (`overall` / `forager` / `sentinel` / `elder` / `steward`), `user_id`, `position`, `xp`, `clean_rate`, `items_count`. Unique (`season_id`, `board`, `user_id`).
+- **`colony_anay_outcomes`**: per filing-cycle season. `season_id`, `starting_hp`, `final_hp`, `result` (`defeated` / `survived`), `decided_at`. HP during the cycle is a derived view.
 
-### 5.3 Seasons
+### 5.4 XP ledger (append-only)
 
-**`colony_seasons`**: `id`, `kind` (`filing_cycle` / `quarter` / `year`),
-`label`, `starts_on`, `ends_on`, `rule_set_version_id`,
-`status` (`scheduled` / `live` / `qa_window` / `finalized`),
-`ant_issuance_cap`, `finalized_by`, `finalized_at`.
-Constraint: no overlapping seasons of the same kind.
+**`colony_xp_events`**: `id`, `user_id` (actual actor), `season_id`,
+`award_code`, `earner_class`, `xp_delta` (±), `source_kind` (`gate_attempt` /
+`evidence` / `qa_finding` / `work_event` / `season_rollup` / `adjustment`),
+`source_id`, `generated_work_id`, `client_id`, `rule_set_version_id`,
+`waived_by_blocker_id` (set when a demerit was waived; such rows carry
+`xp_delta = 0`), `reverses_event_id` (only when the source fact itself is
+corrected), `idempotency_key` **unique**, `reason` (required for adjustments),
+`created_by` (null = projector), `created_at`.
 
-**`colony_season_final_standings`**: immutable snapshot written at finalize.
-`season_id`, `user_id`, `position`, `settled_xp`, `clean_rate`, `items_count`,
-`rank_tier_code`. Unique (`season_id`, `user_id`). No update or delete grants.
+Manual adjustments need a reason and a second approver, never target the
+requester, and show as "Adjusted" in history.
 
-### 5.4 The XP ledger (append-only)
+### 5.5 Ant ledger (double-entry, append-only)
 
-**`colony_xp_events`**
+- **`colony_wallets`**: `id`, `kind` (`player` / `store` / `treasury`), `user_id` (player), `store_id` (store). Exactly one treasury.
+- **`colony_ant_transactions`**: `id`, `kind` (`mint` / `burn` / `purchase_hold` / `purchase_retire` / `purchase_refund` / `adjust`), `xp_event_id`, `order_id`, `idempotency_key` unique, `reason`, `created_by`, `created_at`.
+- **`colony_ant_entries`**: `transaction_id`, `wallet_id`, `amount` (±). A deferred constraint ensures each transaction sums to zero.
+- **Views:** `colony_wallet_balances`, `colony_economy_summary` (minted, burned, retired, circulating, liability).
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | uuid PK | |
-| `user_id` | uuid → `app_users` | The **actual actor** |
-| `season_id` | uuid → `colony_seasons` | Monthly season the fact belongs to |
-| `award_code` | text | From `colony_award_rules`, or `CLAWBACK`, `DEDUCTION`, `ADJUSTMENT` |
-| `xp_delta` | integer | Positive or negative |
-| `state` | text | `provisional` → `settled` (via a settlement event row, not an update) |
-| `source_kind` | text | `gate_attempt` / `evidence` / `qa_finding` / `work_event` / `season_rollup` / `manual_adjustment` |
-| `source_id` | uuid | The operational row that earned it |
-| `generated_work_id` | uuid → `generated_compliance_work` | For drill-down |
-| `client_id` | uuid → `clients` | Denormalized for scoped boards |
-| `rule_set_version_id` | uuid | Rules in force when awarded |
-| `reverses_event_id` | uuid → self | Set on clawbacks and reversals |
-| `idempotency_key` | text **unique** | e.g. `award_code:source_id:user_id`, so re-projection never double-awards |
-| `reason` | text | Required for `ADJUSTMENT`, `DEDUCTION` and `CLAWBACK` |
-| `created_by` | uuid | `null` = projector; a person for adjustments |
-| `created_at` | timestamptz | |
+### 5.6 Stores and orders
 
-Settlement is recorded by `colony_xp_settlements` (`season_id`, `xp_event_id`,
-`settled_at`), so the event row itself never mutates.
+- **`colony_stores`**: `id`, `name`, `description`, `active`, `created_by`, `created_at`.
+- **`colony_store_managers`**: `store_id`, `user_id`, `effective_from/to`, `assigned_by`.
+- **`colony_store_items`**: `id`, `store_id` (null = Treasury digital store), `kind` (`digital` / `real`), `digital_item_code` (skins, frames, titles, `streak_freeze`), `label`, `ant_price`, `peso_value` (nullable), `stock` (nullable = unlimited), `effective_from/to`, `created_by`, `approved_by`. A price change supersedes the row instead of editing it.
+- **`colony_orders`**: `id`, `buyer_user_id`, `store_id`, `store_item_id`, `ant_price_snapshot`, `peso_value_snapshot`, `status` (`pending` / `fulfilled` / `rejected` / `cancelled`), `hold_transaction_id`, `settle_transaction_id`, `decided_by` (≠ buyer; not a manager of a store they bought from for their own order), `decided_at`, `handover_note` (never a gift-card code or PIN), `version` (optimistic concurrency), `created_at`. Status changes are also written to `audit_events`.
+- **`colony_inventory`**: `user_id`, `digital_item_code`, `order_id`, `acquired_at`, `equipped` (bool). Cosmetics a player owns.
 
-**Manual adjustments** need a reason and a second approver, can never target
-the requester, and show as "Adjusted" on the player's history.
+### 5.7 Later-Lego tables (reserved, not built now)
 
-### 5.5 The Ant wallet (append-only)
+`colony_missions` + `colony_mission_progress` (metric type + target + window +
+reward), `colony_events` (window + multiplier + Ant cap), `colony_pass_tiers` +
+`colony_pass_progress`, `colony_badge_definitions` + `colony_badge_awards`,
+`colony_medals`, `colony_kudos` (from, to, optional work link, daily cap, no XP).
 
-**`colony_ant_ledger`**: `id`, `user_id`,
-`entry_kind` (`earn` / `clawback` / `deduction` / `redeem_hold` / `redeem_release` / `redeem_settle` / `expire` / `adjust`),
-`amount` (signed integer), `xp_event_id`, `redemption_id`, `season_id`,
-`idempotency_key` unique, `reason`, `created_by`, `created_at`.
+### 5.8 Derived views
 
-The balance is the view `colony_ant_balances` = `sum(amount)` per user, with
-available vs. held split by `entry_kind`.
-
-### 5.6 Rewards
-
-**`colony_reward_items`**: `id`, `label` (configured by Admin, e.g. a
-gift-certificate denomination), `ant_cost`, `peso_value` (for budget
-reporting), `stock` (nullable = unlimited), `effective_from`, `effective_to`,
-`approved_by`, `created_by`. Supersede, don't edit: a price change is a new row.
-
-**`colony_redemptions`**: `id`, `user_id`, `reward_item_id`,
-`ant_cost_snapshot`, `peso_value_snapshot`,
-`status` (`requested` / `approved` / `rejected` / `cancelled` / `fulfilled`),
-`requested_at`, `decided_by` (≠ `user_id`), `decided_at`, `decision_note`,
-`fulfilled_by`, `fulfilled_at`, `fulfilment_reference` (internal handover
-note; never a gift-card code or PIN), `version` (optimistic concurrency).
-Status changes are also written to `audit_events`.
-
-### 5.7 Badges (later Lego, schema reserved)
-
-**`colony_badge_definitions`** (`code`, `label`, `criteria_description`,
-`insignia_key`, `active`) and **`colony_badge_awards`** (`user_id`,
-`badge_code`, `season_id`, `source_xp_event_id`, `awarded_at`, unique per user
-and badge and season).
-
-### 5.8 Derived views (never tables)
-
-| View | Purpose |
-|---|---|
-| `colony_live_standings` | Current filing cycle: provisional + settled XP, clean rate, position |
-| `colony_season_standings` | Any season: settled XP only, until finalized; then the snapshot is read |
-| `colony_player_progress` | Lifetime settled XP, current rank tier, XP to next rank, streak |
-| `colony_ant_balances` | Available, held, lifetime earned |
-| `colony_budget_usage` | Ants issued vs. cap per season, in Ants and ₱ |
+`colony_live_standings`, `colony_season_standings`, `colony_player_progress`
+(lifetime XP, rank, next rank, streak, rings), `colony_anay_live` (HP, hits,
+heals), `colony_wallet_balances`, `colony_economy_summary`.
 
 ---
 
-## 6. Guardrails: what must never be gamified (recommended, mandatory)
+## 6. Guardrails: what must never be gamified (mandatory)
 
-1. **No XP without verified facts.** Only accepted/validated results with evidence earn. Submitted ≠ Accepted, Filed ≠ Paid, initiated ≠ confirmed.
-2. **No speed contests.** Meeting the target earns; beating it by more earns nothing extra.
-3. **No SoD shortcuts.** Self-check and self-review are impossible in operations and earn nothing in Colony.
-4. **Elevated Override earns zero.** Any gate passed by override gives no XP to anyone for that gate, and the work shows as "Override" in its history.
-5. **RAG is never a personal score.** Locked in `04-RBAC.md`. Colony reads deadlines and evidence dates, not RAG.
-6. **No bounty on QA.** QA reviewers never earn from the number or severity of findings they raise.
+1. **No XP without verified facts.** Only accepted/validated results with evidence earn.
+2. **No speed contests beyond D-1.** Filing earlier than D-1 earns nothing extra.
+3. **No SoD shortcuts.** Self-check and self-review are impossible in operations and earn nothing.
+4. **Elevated Override earns zero** for any gate it passed, and the work's history shows "Override".
+5. **RAG is never a personal score** (locked in `04-RBAC.md`). Colony reads deadlines and evidence dates, not RAG.
+6. **No bounty on QA.** QA reviewers never earn from findings they raise.
 7. **No penalty for raising problems.** Blockers, exceptions and self-disclosed errors never cost XP.
-8. **Colony never blocks work.** A game failure cannot fail, delay or alter a compliance command.
-9. **No self-awarding.** Adjusters and reward approvers cannot target themselves, and default to `observer`.
-10. **History is append-only.** Corrections are reversal entries. Finalized standings never change.
-11. **Leaderboards show work outcomes, not people's worth.** No "worst performer" view, no public bottom ranking. The live board shows the top 10 and your own position.
-12. **Real rewards stay inside the committee's approved budget**, and redemption stays off until the Culture and Values Committee gives the go-ahead.
+8. **Colony never blocks work** and never waits on or alters compliance commands.
+9. **No self-dealing.** No self-adjustment, no buying from your own store, no fulfilling your own order.
+10. **History is append-only.** Corrections are reversal entries. Final standings never change.
+11. **No public bottom.** Top 10 plus your own position only. Demerits are visible to the player and authorized managers, never on a public board.
+12. **No real person as a character or villain.** No subjective ratings of BIR officers anywhere (existing rule).
+13. **Real items stay inside the committee's budget and process.** The app records orders and handovers; it never stores gift-card codes or PINs.
+14. **No player-to-player Ant transfers** in this version.
 
 ---
 
 ## 7. How awards are produced
 
-- **Projector:** a single idempotent function `colony_project_awards(since timestamptz)` reads new operational facts and inserts `colony_xp_events` keyed by `idempotency_key`. Re-running it is safe.
-- **When it runs:** (a) best-effort, right after a successful work command in the app server, outside the command's transaction; (b) a scheduled sweep as a backstop (Vercel Cron). **No database triggers on operational tables**, so a Colony bug cannot break a compliance write.
-- **Realtime:** first version refreshes the live board on screen focus and every 30–60 seconds. Supabase Realtime (already part of the managed stack) is a later enhancement. No Redis, queues or workers.
-- **Settlement job:** at `qa_window` end, the HOD (or an authorized role) runs *Finalize season*: write settlements → issue Ants up to the cap → snapshot standings → status `finalized`. Idempotent and audited.
+- **Projector:** an idempotent `colony_project_awards(since)` reads new operational facts and writes XP events plus their Ant transactions, keyed by `idempotency_key`. Safe to re-run.
+- **When it runs:** best-effort after successful work commands (outside their transaction), plus a scheduled sweep (Vercel Cron) as backstop. It also evaluates D-1 and deadline misses as dates pass. **No triggers on operational tables.**
+- **Realtime:** first version refreshes on screen focus and every 30–60 seconds. Supabase Realtime later. No Redis, queues or workers.
+- **Season close:** at `ends_on`, a scheduled, idempotent close writes the final standings and the Anay outcome.
 
 ---
 
@@ -307,49 +353,46 @@ and badge and season).
 
 | Action | Who |
 |---|---|
-| View live and historical boards | All authenticated staff |
-| View own XP, Ants and history | The player |
-| View another player's detailed history | HOD, Super Admin |
-| Draft rule set or rank tiers | HOD, Super Admin |
-| Approve rule set | A different HOD / Super Admin from the drafter |
-| Finalize season | HOD, Super Admin (audited) |
-| Manual XP or Ant adjustment | Request: HOD / Super Admin; approve: a second authorized person; never self-targeted |
-| Manage reward catalog | Culture and Values Committee members (maker-checker) |
-| Approve redemption | Culture and Values Committee member ≠ requester |
-| Mark redemption fulfilled | Culture and Values Committee fulfiller |
+| View boards, Anay, stores | All authenticated staff |
+| View own XP, demerits, Ants, orders | The player |
+| View another player's detail (incl. demerits) | HOD, Super Admin |
+| Draft / approve rule sets | `colony.rules_draft` / `colony.rules_approve` (different people) |
+| Season admin | `colony.season_admin` (HOD / Super Admin) |
+| Manual XP or Ant adjustment | Requested by HOD / Super Admin, approved by a second authorized person, never self-targeted |
+| Create and run stores, fulfil orders | `colony.store_manage`, assigned to the store, never for own orders |
+| Economy view | `colony.economy_view` (committee, HOD) |
 
 Enforced server-side and by RLS. UI visibility is never the control.
 
 ---
 
-## 9. Build sequence (Lego-sized, each with an HOD review gate)
+## 9. Build sequence (Lego-sized, HOD review gate after each)
 
-Colony starts only after the work lifecycle produces real gate, evidence and QA
-facts on sanitized data.
+Colony starts after the work lifecycle produces real gate, evidence and QA facts
+on sanitized data.
 
-| Lego | Delivers | Visible to staff? |
-|---|---|---|
-| **G1 Shadow scoring** | `colony_rule_set_versions`, `colony_award_rules`, `colony_seasons`, `colony_xp_events`, projector. HOD-only calibration report | No (HOD only) |
-| **G2 Live leaderboard** | `colony_player_profiles`, `colony_live_standings`, mobile Live board | Yes |
-| **G3 Seasons and history** | Settlement, final standings, Colony Cup, Hall of the Colony | Yes |
-| **G4 Ranks and badges** | Rank tiers, progress, insignia, badges | Yes |
-| **G5 Ant wallet** | Ant ledger and balances, earning only, no redemption | Yes |
-| **G6 Rewards** | Catalog, redemption workflow, budget view. **Gated on Culture and Values Committee go-ahead** (they own HR/payroll/tax treatment) | Yes |
+| Lego | Delivers |
+|---|---|
+| **G1 Shadow scoring** | Rule sets, award rules (incl. demerits and waivers), seasons, XP ledger, projector. HOD-only calibration report |
+| **G2 Live boards + Anay** | Player profiles, role classes, live standings, Anay live HP, Anthill home, Tonyo |
+| **G3 Seasons + ranks** | Season close, final standings, Colony Cup, Hall, lifetime and seasonal ranks, streaks, MVP and medals |
+| **G4 Ant wallet** | Double-entry ledger, minting and burning, balances, committee economy view |
+| **G5 Stores** | Store Manager capability, stores, items, orders, fulfilment, digital inventory (cosmetics, streak freeze) |
+| **G6 Live-ops** | Forage Missions, Colony Pass, Rush Events, Badge Album, kudos, Tower TV mode |
 
-Each Lego ships with positive and negative tests: idempotent re-projection,
-duplicate commands, no award for self-review or override, clawback on QA
-finding, no Ants from provisional XP, redemption self-approval denied,
-negative-balance block, RLS denial of other players' details, and finalized
-standings immutable.
+Tests for every Lego, positive and negative: idempotent re-projection;
+duplicate commands; no XP for self-review or override; demerit waiver only
+with a prior external blocker; double-entry balance always zero; purchase
+blocked on negative balance; Store Manager can't fulfil own order; refunds on
+rejection; RLS denial of others' detail; final standings immutable; Colony
+outage doesn't affect work commands.
 
 ---
 
 ## 10. Open questions for the HOD
 
-1. **Load fairness:** rank by raw XP (recommended to start), or normalize by client load or complexity? Raw XP rewards people carrying more clients. Normalizing is fairer but harder to explain.
-2. **Real-reward budget:** set by the Culture and Values Committee. It becomes the issuance cap.
-3. **Who competes:** should portfolio owners and reviewers compete alongside preparers, or have their own board?
-4. **QA window length:** how many days after cycle end before a season can be finalized?
-5. **Ant expiry:** never (recommended), or expire after N months?
-6. **Leaderboard names:** real display names (recommended for a small team), or optional aliases?
-7. **Committee in the system:** which staff accounts act for the Culture and Values Committee?
+1. **D-1:** one **calendar** day before the adjusted statutory deadline, or one **working** day before?
+2. **Demerit owner:** the holder of the open step when the miss happens (recommended), or the portfolio owner, or shared?
+3. **Who are the first Store Managers,** and is there one store (Culture & Values Store) or several?
+4. **Reference rate:** keep 10,000 Ants ≈ ₱100 for the committee's liability view, or let the committee set it?
+5. **Should Store Managers compete** on the boards? Recommended: yes, with the self-dealing rules above.
